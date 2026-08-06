@@ -27,7 +27,7 @@ from app.services.settings import (
     get_smtp_password,
     smtp_config_from_row,
 )
-from app.services.studies import SIGHTSAVERS_2030_ID, study_day_number
+from app.services.studies import study_day_number
 
 logger = logging.getLogger(__name__)
 
@@ -1072,7 +1072,9 @@ def generate_daily_dqa_report(
     run_ai: bool = True,
 ) -> Report:
     settings = get_or_create_settings(db)
-    sid = study_id or SIGHTSAVERS_2030_ID
+    if not study_id:
+        raise ValueError("study_id is required")
+    sid = study_id
     study = db.get(Study, sid)
     if not study:
         raise ValueError(f"Study not found: {sid}")

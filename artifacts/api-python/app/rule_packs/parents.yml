@@ -20,6 +20,7 @@ fields:
   aware_entitlements: P14a
   attended_pta: P17
   pta_issues: P18
+  reports_disability: P5
   start: start
   end: end
 thresholds:

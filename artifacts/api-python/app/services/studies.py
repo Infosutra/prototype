@@ -10,29 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Project, Study, StudyCredential, StudyTool
+from app.seeds import (
+    DEFAULT_STUDY_DESCRIPTION,
+    DEFAULT_STUDY_FORMS,
+    DEFAULT_STUDY_ID,
+    DEFAULT_STUDY_NAME,
+    DEFAULT_STUDY_START_DATE,
+    DEFAULT_STUDY_TARGETS,
+    DEFAULT_STUDY_TIMEZONE,
+)
 from app.services.settings import MASK, _iso
-
-# Known form UIDs for the seeded Sightsavers 2030 study (Kobo asset UIDs).
-SIGHTSAVERS_2030_ID = "study-sightsavers-2030"
-SIGHTSAVERS_2030_FORMS = [
-    {
-        "toolCode": "T1",
-        "projectUid": "ajHnaDiKywwDknGB3L2nLC",
-        "label": "Facility / School Assessment",
-    },
-    {
-        "toolCode": "T2",
-        "projectUid": "a5qKLPgxnHTaYbrDWeeg9v",
-        "label": "Teachers & Anganwadi Workers",
-    },
-    {
-        "toolCode": "T3",
-        "projectUid": "aN5bufzTGmh9SibWSDZBr8",
-        "label": "Parents & Caregivers",
-    },
-]
-# Placeholder planned counts from the DQA report sample — editable in UI.
-SIGHTSAVERS_2030_TARGETS = {"T1": 440, "T2": 960, "T3": 880}
 
 
 def _now() -> datetime:
@@ -154,7 +141,13 @@ def _sync_tools(db: Session, study: Study, tools_payload: list[dict[str, Any]]) 
         tool.code = code
         tool.label = str(entry.get("label") or "").strip()
         tool.target_count = int(entry.get("target_count") or entry.get("targetCount") or 0)
-        tool.sort_order = int(entry.get("sort_order") if entry.get("sort_order") is not None else entry.get("sortOrder") if entry.get("sortOrder") is not None else index)
+        tool.sort_order = int(
+            entry.get("sort_order")
+            if entry.get("sort_order") is not None
+            else entry.get("sortOrder")
+            if entry.get("sortOrder") is not None
+            else index
+        )
         keep_ids.add(tool.id)
     for tool in list(study.tools or []):
         if tool.id not in keep_ids:
@@ -165,29 +158,29 @@ def _sync_tools(db: Session, study: Study, tools_payload: list[dict[str, Any]]) 
 
 
 def seed_default_study(db: Session) -> Study:
-    """Ensure Sightsavers 2030 study exists with tools + empty credential."""
-    existing = _load_study(db, SIGHTSAVERS_2030_ID)
+    """Ensure the default demo study exists with tools, credential, and triangulation views."""
+    from app.services import triangulation as tri
+
+    existing = _load_study(db, DEFAULT_STUDY_ID)
     if existing:
         apply_seed_tool_links(db, existing)
+        tri.seed_triangulation_views(db, existing.id)
         return existing
 
     study = Study(
-        id=SIGHTSAVERS_2030_ID,
-        name="Sightsavers 2030",
-        description=(
-            "AKF Schools2030 Inclusive Education Baseline, Bihar — "
-            "T1 Facility/School · T2 Teacher & AWW KAP · T3 Parents/Caregivers"
-        ),
-        start_date="2026-07-20",
+        id=DEFAULT_STUDY_ID,
+        name=DEFAULT_STUDY_NAME,
+        description=DEFAULT_STUDY_DESCRIPTION,
+        start_date=DEFAULT_STUDY_START_DATE,
         end_date=None,
-        timezone="Asia/Kolkata",
+        timezone=DEFAULT_STUDY_TIMEZONE,
         created_at=_now(),
         updated_at=_now(),
     )
     db.add(study)
     db.flush()
 
-    for index, entry in enumerate(SIGHTSAVERS_2030_FORMS):
+    for index, entry in enumerate(DEFAULT_STUDY_FORMS):
         code = str(entry["toolCode"]).upper()
         db.add(
             StudyTool(
@@ -195,25 +188,26 @@ def seed_default_study(db: Session) -> Study:
                 study_id=study.id,
                 code=code,
                 label=str(entry.get("label") or code),
-                target_count=int(SIGHTSAVERS_2030_TARGETS.get(code) or 0),
+                target_count=int(DEFAULT_STUDY_TARGETS.get(code) or 0),
                 sort_order=index,
             )
         )
     db.add(StudyCredential(id=_new_id("cred"), study_id=study.id))
     db.commit()
-    study = _load_study(db, SIGHTSAVERS_2030_ID)
+    study = _load_study(db, DEFAULT_STUDY_ID)
     assert study is not None
     apply_seed_tool_links(db, study)
+    tri.seed_triangulation_views(db, study.id)
     return study
 
 
 def apply_seed_tool_links(db: Session, study: Study) -> int:
     """Assign known seed UIDs to this study's tools when projects exist locally."""
-    if study.id != SIGHTSAVERS_2030_ID:
+    if study.id != DEFAULT_STUDY_ID:
         return 0
     tools_by_code = {t.code.upper(): t for t in (study.tools or [])}
     assigned = 0
-    for entry in SIGHTSAVERS_2030_FORMS:
+    for entry in DEFAULT_STUDY_FORMS:
         uid = str(entry.get("projectUid") or "").strip()
         code = str(entry.get("toolCode") or "").strip().upper()
         tool = tools_by_code.get(code)
@@ -244,7 +238,6 @@ def apply_all_study_form_maps(db: Session) -> int:
     """Back-compat alias used at startup — links seed UIDs to StudyTools."""
     total = 0
     for study in db.scalars(select(Study)).all():
-        # Refresh with tools loaded
         loaded = _load_study(db, study.id)
         if loaded:
             total += apply_seed_tool_links(db, loaded)

@@ -42,6 +42,7 @@ import type {
   GetSubmissionTrendsParams,
   GetSubmissionsParams,
   GetTriangulationViewParams,
+  GetTriangulationViewsParams,
   HTTPValidationError,
   HealthStatus,
   InsightInput,
@@ -75,6 +76,9 @@ import type {
   SyncProjectsParams,
   SyncResult,
   TrendPoint,
+  TriangulationViewDefinitionCreate,
+  TriangulationViewDefinitionOut,
+  TriangulationViewDefinitionUpdate,
   TriangulationViewInfo,
   TriangulationViewOut
 } from './api.schemas';
@@ -1061,6 +1065,381 @@ export const useUnassignStudyProject = <TError = ErrorType<HTTPValidationError>,
         TContext
       > => {
       return useMutation(getUnassignStudyProjectMutationOptions(options));
+    }
+
+export const getListStudyTriangulationViewsUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/triangulation-views`
+}
+
+/**
+ * @summary List Study Triangulation Views
+ */
+export const listStudyTriangulationViews = async (studyId: string, options?: RequestInit): Promise<TriangulationViewDefinitionOut[]> => {
+
+  return customFetch<TriangulationViewDefinitionOut[]>(getListStudyTriangulationViewsUrl(studyId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStudyTriangulationViewsQueryKey = (studyId: string,) => {
+    return [
+    `/api/studies/${studyId}/triangulation-views`
+    ] as const;
+    }
+
+
+export const getListStudyTriangulationViewsQueryOptions = <TData = Awaited<ReturnType<typeof listStudyTriangulationViews>>, TError = ErrorType<HTTPValidationError>>(studyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStudyTriangulationViews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStudyTriangulationViewsQueryKey(studyId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStudyTriangulationViews>>> = ({ signal }) => listStudyTriangulationViews(studyId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: studyId !== null && studyId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStudyTriangulationViews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStudyTriangulationViewsQueryResult = NonNullable<Awaited<ReturnType<typeof listStudyTriangulationViews>>>
+export type ListStudyTriangulationViewsQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Study Triangulation Views
+ */
+
+export function useListStudyTriangulationViews<TData = Awaited<ReturnType<typeof listStudyTriangulationViews>>, TError = ErrorType<HTTPValidationError>>(
+ studyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStudyTriangulationViews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStudyTriangulationViewsQueryOptions(studyId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateStudyTriangulationViewUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/triangulation-views`
+}
+
+/**
+ * @summary Create Study Triangulation View
+ */
+export const createStudyTriangulationView = async (studyId: string,
+    triangulationViewDefinitionCreate: TriangulationViewDefinitionCreate, options?: RequestInit): Promise<TriangulationViewDefinitionOut> => {
+
+  return customFetch<TriangulationViewDefinitionOut>(getCreateStudyTriangulationViewUrl(studyId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(triangulationViewDefinitionCreate)
+  }
+);}
+
+
+
+
+export const getCreateStudyTriangulationViewMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStudyTriangulationView>>, TError,{studyId: string;data: BodyType<TriangulationViewDefinitionCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createStudyTriangulationView>>, TError,{studyId: string;data: BodyType<TriangulationViewDefinitionCreate>}, TContext> => {
+
+const mutationKey = ['createStudyTriangulationView'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createStudyTriangulationView>>, {studyId: string;data: BodyType<TriangulationViewDefinitionCreate>}> = (props) => {
+          const {studyId,data} = props ?? {};
+
+          return  createStudyTriangulationView(studyId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateStudyTriangulationViewMutationResult = NonNullable<Awaited<ReturnType<typeof createStudyTriangulationView>>>
+    export type CreateStudyTriangulationViewMutationBody = BodyType<TriangulationViewDefinitionCreate>
+    export type CreateStudyTriangulationViewMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Study Triangulation View
+ */
+export const useCreateStudyTriangulationView = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStudyTriangulationView>>, TError,{studyId: string;data: BodyType<TriangulationViewDefinitionCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createStudyTriangulationView>>,
+        TError,
+        {studyId: string;data: BodyType<TriangulationViewDefinitionCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateStudyTriangulationViewMutationOptions(options));
+    }
+
+export const getGetStudyTriangulationViewUrl = (studyId: string,
+    code: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/triangulation-views/${code}`
+}
+
+/**
+ * @summary Get Study Triangulation View
+ */
+export const getStudyTriangulationView = async (studyId: string,
+    code: string, options?: RequestInit): Promise<TriangulationViewDefinitionOut> => {
+
+  return customFetch<TriangulationViewDefinitionOut>(getGetStudyTriangulationViewUrl(studyId,code),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudyTriangulationViewQueryKey = (studyId: string,
+    code: string,) => {
+    return [
+    `/api/studies/${studyId}/triangulation-views/${code}`
+    ] as const;
+    }
+
+
+export const getGetStudyTriangulationViewQueryOptions = <TData = Awaited<ReturnType<typeof getStudyTriangulationView>>, TError = ErrorType<HTTPValidationError>>(studyId: string,
+    code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudyTriangulationView>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudyTriangulationViewQueryKey(studyId,code);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudyTriangulationView>>> = ({ signal }) => getStudyTriangulationView(studyId,code, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: studyId !== null && studyId !== undefined && code !== null && code !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudyTriangulationView>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudyTriangulationViewQueryResult = NonNullable<Awaited<ReturnType<typeof getStudyTriangulationView>>>
+export type GetStudyTriangulationViewQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Study Triangulation View
+ */
+
+export function useGetStudyTriangulationView<TData = Awaited<ReturnType<typeof getStudyTriangulationView>>, TError = ErrorType<HTTPValidationError>>(
+ studyId: string,
+    code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudyTriangulationView>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudyTriangulationViewQueryOptions(studyId,code,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateStudyTriangulationViewUrl = (studyId: string,
+    code: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/triangulation-views/${code}`
+}
+
+/**
+ * @summary Update Study Triangulation View
+ */
+export const updateStudyTriangulationView = async (studyId: string,
+    code: string,
+    triangulationViewDefinitionUpdate: TriangulationViewDefinitionUpdate, options?: RequestInit): Promise<TriangulationViewDefinitionOut> => {
+
+  return customFetch<TriangulationViewDefinitionOut>(getUpdateStudyTriangulationViewUrl(studyId,code),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(triangulationViewDefinitionUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateStudyTriangulationViewMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStudyTriangulationView>>, TError,{studyId: string;code: string;data: BodyType<TriangulationViewDefinitionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateStudyTriangulationView>>, TError,{studyId: string;code: string;data: BodyType<TriangulationViewDefinitionUpdate>}, TContext> => {
+
+const mutationKey = ['updateStudyTriangulationView'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateStudyTriangulationView>>, {studyId: string;code: string;data: BodyType<TriangulationViewDefinitionUpdate>}> = (props) => {
+          const {studyId,code,data} = props ?? {};
+
+          return  updateStudyTriangulationView(studyId,code,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateStudyTriangulationViewMutationResult = NonNullable<Awaited<ReturnType<typeof updateStudyTriangulationView>>>
+    export type UpdateStudyTriangulationViewMutationBody = BodyType<TriangulationViewDefinitionUpdate>
+    export type UpdateStudyTriangulationViewMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Study Triangulation View
+ */
+export const useUpdateStudyTriangulationView = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStudyTriangulationView>>, TError,{studyId: string;code: string;data: BodyType<TriangulationViewDefinitionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateStudyTriangulationView>>,
+        TError,
+        {studyId: string;code: string;data: BodyType<TriangulationViewDefinitionUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateStudyTriangulationViewMutationOptions(options));
+    }
+
+export const getDeleteStudyTriangulationViewUrl = (studyId: string,
+    code: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/triangulation-views/${code}`
+}
+
+/**
+ * @summary Delete Study Triangulation View
+ */
+export const deleteStudyTriangulationView = async (studyId: string,
+    code: string, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDeleteStudyTriangulationViewUrl(studyId,code),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteStudyTriangulationViewMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteStudyTriangulationView>>, TError,{studyId: string;code: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteStudyTriangulationView>>, TError,{studyId: string;code: string}, TContext> => {
+
+const mutationKey = ['deleteStudyTriangulationView'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteStudyTriangulationView>>, {studyId: string;code: string}> = (props) => {
+          const {studyId,code} = props ?? {};
+
+          return  deleteStudyTriangulationView(studyId,code,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteStudyTriangulationViewMutationResult = NonNullable<Awaited<ReturnType<typeof deleteStudyTriangulationView>>>
+
+    export type DeleteStudyTriangulationViewMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Delete Study Triangulation View
+ */
+export const useDeleteStudyTriangulationView = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteStudyTriangulationView>>, TError,{studyId: string;code: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteStudyTriangulationView>>,
+        TError,
+        {studyId: string;code: string},
+        TContext
+      > => {
+      return useMutation(getDeleteStudyTriangulationViewMutationOptions(options));
     }
 
 export const getGetProjectsUrl = (params?: GetProjectsParams,) => {
@@ -4117,20 +4496,28 @@ export const useRecomputeDqa = <TError = ErrorType<HTTPValidationError>,
       return useMutation(getRecomputeDqaMutationOptions(options));
     }
 
-export const getGetTriangulationViewsUrl = () => {
+export const getGetTriangulationViewsUrl = (params?: GetTriangulationViewsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/dqa/triangulation`
+  return stringifiedParams.length > 0 ? `/api/dqa/triangulation?${stringifiedParams}` : `/api/dqa/triangulation`
 }
 
 /**
+ * List triangulation views defined for a study. studyId is required.
  * @summary List Triangulation Views
  */
-export const getTriangulationViews = async ( options?: RequestInit): Promise<TriangulationViewInfo[]> => {
+export const getTriangulationViews = async (params?: GetTriangulationViewsParams, options?: RequestInit): Promise<TriangulationViewInfo[]> => {
 
-  return customFetch<TriangulationViewInfo[]>(getGetTriangulationViewsUrl(),
+  return customFetch<TriangulationViewInfo[]>(getGetTriangulationViewsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4143,23 +4530,23 @@ export const getTriangulationViews = async ( options?: RequestInit): Promise<Tri
 
 
 
-export const getGetTriangulationViewsQueryKey = () => {
+export const getGetTriangulationViewsQueryKey = (params?: GetTriangulationViewsParams,) => {
     return [
-    `/api/dqa/triangulation`
+    `/api/dqa/triangulation`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetTriangulationViewsQueryOptions = <TData = Awaited<ReturnType<typeof getTriangulationViews>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTriangulationViews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetTriangulationViewsQueryOptions = <TData = Awaited<ReturnType<typeof getTriangulationViews>>, TError = ErrorType<HTTPValidationError>>(params?: GetTriangulationViewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTriangulationViews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetTriangulationViewsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetTriangulationViewsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTriangulationViews>>> = ({ signal }) => getTriangulationViews({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTriangulationViews>>> = ({ signal }) => getTriangulationViews(params, { signal, ...requestOptions });
 
 
 
@@ -4169,19 +4556,19 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetTriangulationViewsQueryResult = NonNullable<Awaited<ReturnType<typeof getTriangulationViews>>>
-export type GetTriangulationViewsQueryError = ErrorType<unknown>
+export type GetTriangulationViewsQueryError = ErrorType<HTTPValidationError>
 
 
 /**
  * @summary List Triangulation Views
  */
 
-export function useGetTriangulationViews<TData = Awaited<ReturnType<typeof getTriangulationViews>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTriangulationViews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetTriangulationViews<TData = Awaited<ReturnType<typeof getTriangulationViews>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetTriangulationViewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTriangulationViews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetTriangulationViewsQueryOptions(options)
+  const queryOptions = getGetTriangulationViewsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -4211,7 +4598,7 @@ export const getGetTriangulationViewUrl = (viewId: string,
 }
 
 /**
- * UDISE-joined triangulation views: TR-1, TR-3, TR-5 (study-scoped when studyId set).
+ * Evaluate a study-defined triangulation view. studyId is required.
  * @summary Triangulation View
  */
 export const getTriangulationView = async (viewId: string,

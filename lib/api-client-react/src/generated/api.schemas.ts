@@ -554,6 +554,19 @@ export interface TrendPoint {
   projects: number;
 }
 
+export interface TriangulationCell {
+  key: string;
+  label: string;
+  value?: unknown;
+  kind?: string;
+}
+
+export interface TriangulationColumn {
+  key: string;
+  label: string;
+  kind?: string;
+}
+
 export interface TriangulationLink {
   submissionId?: string | null;
   koboId?: string | null;
@@ -574,23 +587,42 @@ export interface TriangulationPracticeStat {
   gapPct?: number;
 }
 
+export type TriangulationRowLinks = {[key: string]: TriangulationLink | null};
+
 export interface TriangulationRow {
-  udise: string;
-  schoolName?: string | null;
-  facility?: TriangulationLink | null;
-  teacher?: TriangulationLink | null;
-  parent?: TriangulationLink | null;
-  teacherHasCwd?: boolean | null;
-  parentReportsDisability?: boolean | null;
-  claimedPractices?: string[];
-  observedPractices?: string[];
-  practiceGap?: number | null;
-  schoolMeetings?: number | null;
-  schoolCwdDiscussed?: boolean | null;
-  schoolGovernanceActive?: boolean | null;
-  parentAttendedPta?: boolean | null;
-  parentCwdIssues?: boolean | null;
+  key: string;
+  cells?: TriangulationCell[];
+  links?: TriangulationRowLinks;
   mismatch?: boolean;
+}
+
+export type TriangulationViewDefinitionCreateDefinition = { [key: string]: unknown };
+
+export interface TriangulationViewDefinitionCreate {
+  code: string;
+  title: string;
+  description?: string | null;
+  definition: TriangulationViewDefinitionCreateDefinition;
+}
+
+export type TriangulationViewDefinitionOutDefinition = { [key: string]: unknown };
+
+export interface TriangulationViewDefinitionOut {
+  id: string;
+  studyId: string;
+  code: string;
+  title: string;
+  description?: string | null;
+  definition: TriangulationViewDefinitionOutDefinition;
+}
+
+export type TriangulationViewDefinitionUpdateDefinition = { [key: string]: unknown } | null;
+
+export interface TriangulationViewDefinitionUpdate {
+  title?: string | null;
+  description?: string | null;
+  definition?: TriangulationViewDefinitionUpdateDefinition;
+  code?: string | null;
 }
 
 export interface TriangulationViewInfo {
@@ -602,6 +634,7 @@ export interface TriangulationViewOut {
   id: string;
   title: string;
   description?: string | null;
+  columns?: TriangulationColumn[];
   rows: TriangulationRow[];
   mismatchCount: number;
   practices?: TriangulationPracticeStat[];
@@ -702,6 +735,10 @@ projectId?: string | null;
 
 export type RecomputeDqaParams = {
 projectId?: string | null;
+};
+
+export type GetTriangulationViewsParams = {
+studyId?: string | null;
 };
 
 export type GetTriangulationViewParams = {

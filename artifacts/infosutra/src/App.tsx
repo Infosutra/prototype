@@ -18,6 +18,7 @@ import Reports from './pages/reports/Reports';
 import Settings from './pages/settings/Settings';
 import DqaDashboard from './pages/dqa/DqaDashboard';
 import RulePackEditor from './pages/dqa/RulePackEditor';
+import TriangulationViewEditor from './pages/dqa/TriangulationViewEditor';
 import Studies from './pages/studies/Studies';
 
 const queryClient = new QueryClient({
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/submissions/:id" component={SubmissionDetail} />
       <Route path="/dqa" component={DqaDashboard} />
+      <Route path="/studies/:studyId/triangulation" component={TriangulationViewEditor} />
       <Route path="/data" component={DataExplorer} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/ai" component={AiInsights} />

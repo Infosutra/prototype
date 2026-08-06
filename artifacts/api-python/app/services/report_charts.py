@@ -242,10 +242,10 @@ def chart_tr1_claimed_vs_observed(
     concordance_pct: float | None = None,
     title: str | None = None,
 ) -> bytes:
-    """Figure 2: paired bars with gap annotations."""
+    """Paired bars with gap annotations for claim_vs_observation views."""
     if not practices:
         fig, ax = plt.subplots(figsize=(8, 3.5))
-        ax.text(0.5, 0.5, "No TR-1 practice data", ha="center", va="center", color=MUTED)
+        ax.text(0.5, 0.5, "No practice triangulation data", ha="center", va="center", color=MUTED)
         ax.axis("off")
         return _fig_to_png(fig)
 
@@ -254,11 +254,10 @@ def chart_tr1_claimed_vs_observed(
     observed = [float(p.get("observedPct") or 0) for p in practices]
     gaps = [round(c - o) for c, o in zip(claimed, observed)]
     if concordance_pct is None:
-        # mean of per-practice concordance if provided, else 100 - mean |gap|
         vals = [float(p.get("concordancePct")) for p in practices if p.get("concordancePct") is not None]
         concordance_pct = round(sum(vals) / len(vals), 0) if vals else round(100 - (sum(abs(g) for g in gaps) / max(1, len(gaps))), 0)
 
-    ttl = title or f"TR-1 Teacher practice: claimed vs observed · concordance {int(concordance_pct)}%"
+    ttl = title or f"Teacher practice: claimed vs observed · concordance {int(concordance_pct)}%"
     fig, ax = plt.subplots(figsize=(8.5, 3.8))
     x = range(len(labels))
     width = 0.36
@@ -290,7 +289,7 @@ def chart_tr1_claimed_vs_observed(
     return _fig_to_png(fig)
 
 
-def chart_governance_mismatch(rows: list[dict[str, Any]], *, title: str = "TR-3 Governance concordance") -> bytes:
+def chart_governance_mismatch(rows: list[dict[str, Any]], *, title: str = "Cross-form concordance") -> bytes:
     """Simple matched bars: % schools active vs % parents confirming."""
     total = len(rows) or 1
     school_active = sum(1 for r in rows if r.get("schoolGovernanceActive") or r.get("school_governance_active"))

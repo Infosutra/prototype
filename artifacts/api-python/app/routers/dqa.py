@@ -24,6 +24,7 @@ from app.schemas.dqa import (
     TriangulationViewInfo,
     TriangulationViewOut,
 )
+from app.services.triangulation import TriangulationError
 from app.services import dqa_engine
 from app.services.dqa_engine import list_form_fields
 
@@ -399,10 +400,17 @@ def recompute(
     response_model=list[TriangulationViewInfo],
     operation_id="getTriangulationViews",
 )
-def list_triangulation_views() -> list[TriangulationViewInfo]:
+def list_triangulation_views(
+    q: Annotated[StudyIdQuery, Query()],
+    db: Session = Depends(get_db),
+) -> list[TriangulationViewInfo]:
+    """List triangulation views defined for a study. studyId is required."""
     from app.services import triangulation as tri
 
-    return [TriangulationViewInfo.model_validate(v) for v in tri.list_triangulation_views()]
+    try:
+        return [TriangulationViewInfo.model_validate(v) for v in tri.list_views(db, q.study_id)]
+    except TriangulationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.get(
@@ -415,16 +423,13 @@ def triangulation_view(
     q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> TriangulationViewOut:
-    """UDISE-joined triangulation views: TR-1, TR-3, TR-5 (study-scoped when studyId set)."""
+    """Evaluate a study-defined triangulation view. studyId is required."""
     from app.services import triangulation as tri
 
     try:
         return tri.build_view(db, view_id, study_id=q.study_id)
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown triangulation view. Supported: {', '.join(tri.SUPPORTED_VIEWS)}.",
-        ) from exc
+    except TriangulationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 # Project-scoped pack / field endpoints mounted under /projects as well via include

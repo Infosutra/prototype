@@ -1,0 +1,36 @@
+kind: cross_form_join
+code: TR-3
+title: "Governance activity: school vs parents"
+description: >
+  Schools reporting PTA/SMC meetings with CWD discussion should have
+  parents who report attending and discussing CWD issues.
+participants:
+  - role: facility
+    tool: T1
+    pick: { then: latest }
+    derive:
+      school_name: { alias: institution_name, as: text }
+      meetings: { alias: meetings_held, as: int_or_zero }
+      cwd_discussed: { alias: cwd_discussed, as: bool }
+  - role: parent
+    tool: T3
+    pick: { then: latest }
+    reduce:
+      attended_pta: { alias: attended_pta, as: bool_any }
+      pta_issues: { alias: pta_issues, as: bool_any }
+computed:
+  facility.active:
+    all:
+      - { gt: [facility.meetings, 0] }
+      - { is_true: facility.cwd_discussed }
+mismatch:
+  all:
+    - { is_true: facility.active }
+    - { not: { all: [ { is_true: parent.attended_pta }, { is_true: parent.pta_issues } ] } }
+columns:
+  - { key: join_key, label: UDISE, as: text }
+  - { key: facility.school_name, label: School, as: text }
+  - { key: facility.meetings, label: School meetings, as: number }
+  - { key: facility.cwd_discussed, label: School CWD disc., as: yes_no }
+  - { key: parent.attended_pta, label: Parent attended, as: yes_no }
+  - { key: parent.pta_issues, label: Parent CWD issues, as: yes_no }

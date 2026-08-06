@@ -1,0 +1,24 @@
+kind: claim_vs_observation
+code: TR-1
+title: "Teacher practice: claimed vs observed"
+description: >
+  Compare teacher self-reported inclusive practices (D4) with classroom
+  observation (CO1–CO8). Expect observed ≤ claimed; large gaps flag over-reporting.
+tool: T2
+claim_alias: practice_d4
+observation:
+  observed_values: ["1", "2"]
+  no_opportunity_value: "4"
+  gap_value: "3"
+items:
+  - { id: front_seating, label: "Appropriate / front seating", claim_codes: [e], observe_alias: observe_front_seating }
+  - { id: differentiated, label: "Differentiated tasks / materials", claim_codes: [a], observe_alias: observe_differentiated }
+  - { id: multi_sensory_visual, label: "Visual supports / multi-sensory", claim_codes: [b, c], observe_alias: observe_multi_sensory }
+  - { id: peer_group, label: "Peer support / inclusive group work", claim_codes: [d, f], observe_alias: observe_peer_group }
+  - { id: adapted_materials, label: "Adapted materials / assistive use", claim_codes: [h], observe_alias: observe_adapted_materials }
+columns:
+  - { key: join_key, label: UDISE, as: text }
+  - { key: school_name, label: School, as: text }
+  - { key: claimed_practices, label: Claimed, as: list }
+  - { key: observed_practices, label: Observed, as: list }
+  - { key: practice_gap, label: Gap, as: number }

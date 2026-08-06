@@ -9,6 +9,11 @@ from app.db.session import get_db
 from app.integrations.kobo import KoboApiError
 from app.schemas.common import OkResponse
 from app.schemas.settings import ConnectionTestResult
+from app.schemas.dqa import (
+    TriangulationViewDefinitionCreate,
+    TriangulationViewDefinitionOut,
+    TriangulationViewDefinitionUpdate,
+)
 from app.schemas.studies import (
     StudyAssignProject,
     StudyCreate,
@@ -19,6 +24,7 @@ from app.schemas.studies import (
 )
 from app.services import settings as settings_service
 from app.services import studies as studies_service
+from app.services import triangulation as tri_service
 
 router = APIRouter(prefix="/studies", tags=["studies"])
 
@@ -158,4 +164,137 @@ def unassign_project(
     if project.study_id != study.id:
         raise HTTPException(status_code=400, detail="Project is not in this study")
     studies_service.unassign_project(db, project)
+    return OkResponse(success=True)
+
+
+def _view_def_out(row) -> TriangulationViewDefinitionOut:
+    return TriangulationViewDefinitionOut(
+        id=row.id,
+        study_id=row.study_id,
+        code=row.code,
+        title=row.title,
+        description=row.description,
+        definition=row.definition if isinstance(row.definition, dict) else {},
+    )
+
+
+@router.get(
+    "/{study_id}/triangulation-views",
+    response_model=list[TriangulationViewDefinitionOut],
+    operation_id="listStudyTriangulationViews",
+)
+def list_study_triangulation_views(
+    study_id: str, db: Session = Depends(get_db)
+) -> list[TriangulationViewDefinitionOut]:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    return [_view_def_out(r) for r in tri_service.list_definition_rows(db, study_id)]
+
+
+@router.post(
+    "/{study_id}/triangulation-views",
+    response_model=TriangulationViewDefinitionOut,
+    operation_id="createStudyTriangulationView",
+)
+def create_study_triangulation_view(
+    study_id: str,
+    payload: TriangulationViewDefinitionCreate,
+    db: Session = Depends(get_db),
+) -> TriangulationViewDefinitionOut:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    code = payload.code.strip()
+    if tri_service.get_view_row(db, study_id, code):
+        raise HTTPException(status_code=400, detail=f"View code already exists: {code}")
+    definition = dict(payload.definition or {})
+    definition.setdefault("code", code)
+    definition.setdefault("title", payload.title)
+    if payload.description is not None:
+        definition.setdefault("description", payload.description)
+    row = tri_service.upsert_view(
+        db,
+        study_id,
+        code=code,
+        title=payload.title,
+        description=payload.description,
+        definition=definition,
+    )
+    return _view_def_out(row)
+
+
+@router.get(
+    "/{study_id}/triangulation-views/{code}",
+    response_model=TriangulationViewDefinitionOut,
+    operation_id="getStudyTriangulationView",
+)
+def get_study_triangulation_view(
+    study_id: str, code: str, db: Session = Depends(get_db)
+) -> TriangulationViewDefinitionOut:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    row = tri_service.get_view_row(db, study_id, code)
+    if not row:
+        raise HTTPException(status_code=404, detail="Triangulation view not found")
+    return _view_def_out(row)
+
+
+@router.put(
+    "/{study_id}/triangulation-views/{code}",
+    response_model=TriangulationViewDefinitionOut,
+    operation_id="updateStudyTriangulationView",
+)
+def update_study_triangulation_view(
+    study_id: str,
+    code: str,
+    payload: TriangulationViewDefinitionUpdate,
+    db: Session = Depends(get_db),
+) -> TriangulationViewDefinitionOut:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    row = tri_service.get_view_row(db, study_id, code)
+    if not row:
+        raise HTTPException(status_code=404, detail="Triangulation view not found")
+    new_code = (payload.code or row.code).strip()
+    if new_code != row.code and tri_service.get_view_row(db, study_id, new_code):
+        raise HTTPException(status_code=400, detail=f"View code already exists: {new_code}")
+    definition = (
+        dict(payload.definition)
+        if payload.definition is not None
+        else (row.definition if isinstance(row.definition, dict) else {})
+    )
+    title = payload.title if payload.title is not None else row.title
+    description = (
+        payload.description if "description" in payload.model_fields_set else row.description
+    )
+    row = tri_service.upsert_view(
+        db,
+        study_id,
+        code=new_code,
+        title=title,
+        description=description,
+        definition=definition,
+        view_id=row.id,
+    )
+    return _view_def_out(row)
+
+
+@router.delete(
+    "/{study_id}/triangulation-views/{code}",
+    response_model=OkResponse,
+    operation_id="deleteStudyTriangulationView",
+)
+def delete_study_triangulation_view(
+    study_id: str, code: str, db: Session = Depends(get_db)
+) -> OkResponse:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    row = tri_service.get_view_row(db, study_id, code)
+    if not row:
+        raise HTTPException(status_code=404, detail="Triangulation view not found")
+    tri_service.delete_view(db, row)
     return OkResponse(success=True)

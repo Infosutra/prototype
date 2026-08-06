@@ -81,7 +81,7 @@ def _restore_settings(db: Session, snapshot: dict[str, Any] | None) -> None:
 
 
 def reset_local_database(*, database_path: str | None = None) -> dict[str, Any]:
-    """Wipe local SQLite (except settings), recreate schema, seed Sightsavers study.
+    """Wipe local SQLite (except settings), recreate schema, seed default study.
 
     Does not call Kobo or any remote API.
     """

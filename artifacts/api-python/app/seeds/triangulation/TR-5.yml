@@ -1,0 +1,31 @@
+kind: cross_form_join
+code: TR-5
+title: CWD identification consistency
+description: >
+  Where parents report a child with disability at an institution,
+  teachers there should report having CWD in class.
+participants:
+  - role: facility
+    tool: T1
+    pick: { then: latest }
+    derive:
+      school_name: { alias: institution_name, as: text }
+  - role: teacher
+    tool: T2
+    pick: { prefer: { alias: has_cwd, value: false }, then: latest }
+    reduce:
+      has_cwd: { alias: has_cwd, as: bool_any }
+  - role: parent
+    tool: T3
+    pick: { prefer: { alias: reports_disability, value: true }, then: latest }
+    reduce:
+      reports_disability: { alias: reports_disability, as: bool_any }
+mismatch:
+  all:
+    - { is_true: parent.reports_disability }
+    - { is_false: teacher.has_cwd }
+columns:
+  - { key: join_key, label: UDISE, as: text }
+  - { key: facility.school_name, label: School, as: text }
+  - { key: teacher.has_cwd, label: Teacher reports CWD, as: yes_no }
+  - { key: parent.reports_disability, label: Parent reports disability, as: yes_no }

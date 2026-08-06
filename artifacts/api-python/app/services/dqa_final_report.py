@@ -16,7 +16,7 @@ from app.db.models import Project, Report, ReportProject, Study
 from app.services import dqa_daily_report as daily
 from app.services import triangulation as tri
 from app.services.settings import get_or_create_settings
-from app.services.studies import SIGHTSAVERS_2030_ID
+from app.services.triangulation import TriangulationError
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def build_final_dqa_stats(
     *,
     run_ai: bool = True,
 ) -> dict[str, Any]:
-    """Cumulative study stats + TR-1/TR-3/TR-5 summaries for Final report."""
+    """Cumulative study stats + triangulation summaries for Final report."""
     settings = get_or_create_settings(db)
     report_date = (
         study.end_date
@@ -40,31 +40,37 @@ def build_final_dqa_stats(
     base["title"] = f"Final DQA — {study.name}"
 
     triangulation: dict[str, Any] = {}
-    for view_id in ("TR-1", "TR-3", "TR-5"):
+    view_infos = tri.list_views(db, study.id)
+    for info in view_infos:
+        view_id = info["id"]
         try:
             view = tri.build_view(db, view_id, study_id=study.id)
+            row = tri.get_view_row(db, study.id, view_id)
+            kind = None
+            if row and isinstance(row.definition, dict):
+                kind = row.definition.get("kind")
             triangulation[view_id] = {
                 "id": view.id,
                 "title": view.title,
                 "description": view.description,
+                "kind": kind,
                 "mismatchCount": view.mismatch_count,
                 "rowCount": len(view.rows),
                 "practices": [p.model_dump(by_alias=True) for p in view.practices],
                 "mismatchExamples": [
                     {
-                        "udise": r.udise,
-                        "schoolName": r.school_name,
-                        "detail": _mismatch_detail(view_id, r),
+                        "key": r.key,
+                        "detail": _mismatch_detail(r),
                     }
                     for r in view.rows
                     if r.mismatch
                 ][:12],
             }
-        except Exception:
+        except (TriangulationError, Exception):
             logger.exception("Triangulation %s failed for final report", view_id)
             triangulation[view_id] = {
                 "id": view_id,
-                "title": view_id,
+                "title": info.get("title") or view_id,
                 "mismatchCount": 0,
                 "rowCount": 0,
                 "practices": [],
@@ -98,23 +104,42 @@ def build_final_dqa_stats(
     return base
 
 
-def _mismatch_detail(view_id: str, row) -> str:
-    if view_id == "TR-5":
-        return (
-            f"teacher CWD={row.teacher_has_cwd} parent disability={row.parent_reports_disability}"
-        )
-    if view_id == "TR-1":
-        return f"gap={row.practice_gap} claimed={row.claimed_practices} observed={row.observed_practices}"
-    if view_id == "TR-3":
-        return (
-            f"school active={row.school_governance_active} "
-            f"parent attended={row.parent_attended_pta} issues={row.parent_cwd_issues}"
-        )
-    return "mismatch"
+def _mismatch_detail(row) -> str:
+    parts = []
+    for cell in row.cells or []:
+        if cell.key in {"join_key"}:
+            continue
+        parts.append(f"{cell.label}={cell.value}")
+    return ", ".join(parts) if parts else "mismatch"
+
+
+def _practice_views(stats: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    tri_data = stats.get("triangulation") or {}
+    out = []
+    for view_id, payload in tri_data.items():
+        if payload.get("practices"):
+            out.append((view_id, payload))
+    return out
+
+
+def _cross_join_views(stats: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    tri_data = stats.get("triangulation") or {}
+    practice_ids = {v for v, _ in _practice_views(stats)}
+    out = []
+    for view_id, payload in tri_data.items():
+        if view_id in practice_ids:
+            continue
+        if payload.get("kind") == "cross_form_join" or not payload.get("practices"):
+            out.append((view_id, payload))
+    return out
 
 
 def _tr1_summary(stats: dict[str, Any]) -> dict[str, Any]:
-    tri_data = (stats.get("triangulation") or {}).get("TR-1") or {}
+    """Practice-matrix summary from the first claim_vs_observation view (if any)."""
+    practice_views = _practice_views(stats)
+    if not practice_views:
+        return {"viewId": None, "title": None, "practices": [], "concordance": None, "widest": []}
+    view_id, tri_data = practice_views[0]
     practices = []
     for p in tri_data.get("practices") or []:
         practices.append(
@@ -138,7 +163,13 @@ def _tr1_summary(stats: dict[str, Any]) -> dict[str, Any]:
         key=lambda p: abs(float(p["gapPct"])),
         reverse=True,
     )[:3]
-    return {"practices": practices, "concordance": concordance, "widest": widest}
+    return {
+        "viewId": view_id,
+        "title": tri_data.get("title") or view_id,
+        "practices": practices,
+        "concordance": concordance,
+        "widest": widest,
+    }
 
 
 def _pass_rate(stats: dict[str, Any]) -> tuple[float, int, int]:
@@ -223,10 +254,10 @@ def _exhaustive_executive_summary(stats: dict[str, Any]) -> str:
         else f"Total submissions: {cumulative}."
     )
 
-    # Triangulation headline (TR-1 say–do)
+    # Triangulation headline (claim vs observation)
     tr1 = _tr1_summary(stats)
-    tri_data = stats.get("triangulation") or {}
     tr1_para = ""
+    view_label = tr1.get("viewId") or "practice check"
     if tr1["concordance"] is not None:
         widest_bits = []
         for p in tr1["widest"][:2]:
@@ -239,23 +270,16 @@ def _exhaustive_executive_summary(stats: dict[str, Any]) -> str:
         )
         tr1_para = (
             f"The main analytical finding is a {tr1['concordance']:.0f}% say–do concordance "
-            f"on TR-1 (teacher practice claimed vs observed): observed use is below self-report "
+            f"on {view_label} (teacher practice claimed vs observed): observed use is below self-report "
             f"on inclusive practices{widest_txt} — a re-training priority, not a data-entry error."
         )
-    tr3 = tri_data.get("TR-3") or {}
-    tr5 = tri_data.get("TR-5") or {}
     extra_tri = []
-    if tr3.get("mismatchCount"):
-        extra_tri.append(
-            f"TR-3 (governance, T1 × T3) flags {tr3['mismatchCount']} institution(s) "
-            "with school-reported PTA/SMC activity that sampled parents did not confirm"
-        )
-    if tr5.get("mismatchCount"):
-        extra_tri.append(
-            f"TR-5 (CWD identification, T2 × T3) flags {tr5['mismatchCount']} case(s) "
-            "where parents report a child with disability but teachers report none — "
-            "possible under-identification"
-        )
+    for view_id, payload in _cross_join_views(stats):
+        if payload.get("mismatchCount"):
+            title = payload.get("title") or view_id
+            extra_tri.append(
+                f"{view_id} ({title}) flags {payload['mismatchCount']} mismatch row(s)"
+            )
     if extra_tri:
         tr1_para = (tr1_para + " " if tr1_para else "") + (
             "Further cross-tool findings: " + "; ".join(extra_tri) + "."
@@ -309,6 +333,7 @@ def _section_prose(stats: dict[str, Any]) -> dict[str, str]:
     )
 
     tr1 = _tr1_summary(stats)
+    view_label = tr1.get("viewId") or "claim vs observation"
     if tr1["concordance"] is not None:
         widest_bits = []
         for p in tr1["widest"][:2]:
@@ -320,28 +345,28 @@ def _section_prose(stats: dict[str, Any]) -> dict[str, str]:
             f", widest on {' and '.join(widest_bits)}" if widest_bits else ""
         )
         tr1_prose = (
-            "TR-1 (teacher practice: claimed vs observed) is the headline validity check "
-            "joining Tool 2 self-report with Tool 2 classroom observation. "
+            f"{view_label} (teacher practice: claimed vs observed) is the headline validity check "
+            "joining self-report with classroom observation. "
             f"Concordance is {tr1['concordance']:.0f}%: observed use is below self-report "
             f"on every practice{widest_txt}."
         )
     else:
         tr1_prose = (
-            "TR-1 (teacher practice: claimed vs observed) joins Tool 2 self-report with "
+            f"{view_label} (teacher practice: claimed vs observed) joins self-report with "
             "classroom observation. Insufficient paired practice rows were available to "
             "compute concordance for this close-out."
         )
 
-    tri = stats.get("triangulation") or {}
-    tr3 = tri.get("TR-3") or {}
-    tr5 = tri.get("TR-5") or {}
+    further_bits = []
+    for view_id, payload in _cross_join_views(stats):
+        title = payload.get("title") or view_id
+        further_bits.append(
+            f"{view_id} ({title}) shows {payload.get('mismatchCount', 0)} mismatch(es)"
+        )
     further = (
-        f"Two further cross-tool findings: TR-3 (governance, T1 × T3) shows "
-        f"{tr3.get('mismatchCount', 0)} mismatch(es) — school-reported PTA/SMC activity "
-        f"that sampled parents did not experience; TR-5 (CWD identification, T2 × T3) "
-        f"flags {tr5.get('mismatchCount', 0)} case(s) where parents report a child with "
-        "disability but teachers report none — possible under-identification, a core "
-        "project concern."
+        "Further cross-tool findings: " + "; ".join(further_bits) + "."
+        if further_bits
+        else "No additional cross-form triangulation mismatches were flagged."
     )
 
     cov_bits = []
@@ -494,10 +519,11 @@ def _final_chart_pngs(stats: dict[str, Any]) -> dict[str, bytes]:
         else 0.0,
     }
     tr1 = _tr1_summary(stats)
-    tri = stats.get("triangulation") or {}
-    tr3 = tri.get("TR-3") or {}
-    row_count = int(tr3.get("rowCount") or 0)
-    mismatch = int(tr3.get("mismatchCount") or 0)
+    cross = _cross_join_views(stats)
+    gov_view = cross[0] if cross else (None, {})
+    gov_id, tr_gov = gov_view if gov_view[0] else (None, {})
+    row_count = int(tr_gov.get("rowCount") or 0)
+    mismatch = int(tr_gov.get("mismatchCount") or 0)
     gov_rows = []
     if row_count:
         gov_rows = (
@@ -507,6 +533,9 @@ def _final_chart_pngs(stats: dict[str, Any]) -> dict[str, bytes]:
             * mismatch
         )
 
+    practice_title = tr1.get("title") or tr1.get("viewId") or "Claimed vs observed"
+    gov_title = (tr_gov.get("title") or gov_id or "Cross-form concordance")
+
     return {
         "flagSummary": report_charts.chart_flag_summary_by_tool(tools, overall=overall),
         "topRules": report_charts.chart_top_failing_rules(
@@ -515,10 +544,14 @@ def _final_chart_pngs(stats: dict[str, Any]) -> dict[str, bytes]:
         ),
         "coverage": report_charts.chart_coverage_vs_plan(tools, title="Coverage vs plan"),
         "tr1": report_charts.chart_tr1_claimed_vs_observed(
-            tr1["practices"], concordance_pct=tr1["concordance"]
+            tr1["practices"],
+            concordance_pct=tr1["concordance"],
+            title=f"{practice_title} · concordance {int(tr1['concordance'])}%"
+            if tr1["concordance"] is not None
+            else practice_title,
         ),
         "tr3": report_charts.chart_governance_mismatch(
-            gov_rows, title="TR-3 Governance: school vs parent confirmation"
+            gov_rows, title=gov_title
         ),
         "trend": report_charts.chart_flag_rate_trend(
             stats.get("flagRateByDay") or [],
@@ -934,7 +967,9 @@ def generate_final_dqa_report(
     run_ai: bool = True,
 ) -> Report:
     settings = get_or_create_settings(db)
-    sid = study_id or SIGHTSAVERS_2030_ID
+    if not study_id:
+        raise ValueError("study_id is required")
+    sid = study_id
     study = db.get(Study, sid)
     if not study:
         raise ValueError(f"Study not found: {sid}")
@@ -963,7 +998,7 @@ def generate_final_dqa_report(
     row = Report(
         id=report_id,
         title=stats.get("title") or f"Final DQA — {study.name}",
-        description="Study close-out DQA with triangulation TR-1 / TR-3 / TR-5",
+        description="Study close-out DQA with study-defined triangulation views",
         status="ready",
         format="pdf",
         report_type="final_dqa",

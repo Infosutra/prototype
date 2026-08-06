@@ -16,6 +16,11 @@ fields:
   knowledge_b2a: B2a
   has_cwd: D1
   practice_d4: D4
+  observe_front_seating: CO1
+  observe_differentiated: CO2
+  observe_multi_sensory: CO3
+  observe_peer_group: CO4
+  observe_adapted_materials: CO8
   start: start
   end: end
 thresholds:

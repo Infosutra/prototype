@@ -104,25 +104,23 @@ class TriangulationPracticeStat(CamelModel):
     gap_pct: float = 0.0
 
 
+class TriangulationColumn(CamelModel):
+    key: str
+    label: str
+    kind: str = "text"  # text | bool | number | list
+
+
+class TriangulationCell(CamelModel):
+    key: str
+    label: str
+    value: Any = None
+    kind: str = "text"  # text | bool | number | list
+
+
 class TriangulationRow(CamelModel):
-    udise: str
-    school_name: str | None = None
-    facility: TriangulationLink | None = None
-    teacher: TriangulationLink | None = None
-    parent: TriangulationLink | None = None
-    # TR-5
-    teacher_has_cwd: bool | None = None
-    parent_reports_disability: bool | None = None
-    # TR-1
-    claimed_practices: list[str] = []
-    observed_practices: list[str] = []
-    practice_gap: int | None = None
-    # TR-3
-    school_meetings: int | None = None
-    school_cwd_discussed: bool | None = None
-    school_governance_active: bool | None = None
-    parent_attended_pta: bool | None = None
-    parent_cwd_issues: bool | None = None
+    key: str
+    cells: list[TriangulationCell] = []
+    links: dict[str, TriangulationLink | None] = {}
     mismatch: bool = False
 
 
@@ -130,6 +128,7 @@ class TriangulationViewOut(CamelModel):
     id: str
     title: str
     description: str | None = None
+    columns: list[TriangulationColumn] = []
     rows: list[TriangulationRow]
     mismatch_count: int
     practices: list[TriangulationPracticeStat] = []
@@ -138,3 +137,26 @@ class TriangulationViewOut(CamelModel):
 class TriangulationViewInfo(CamelModel):
     id: str
     title: str
+
+
+class TriangulationViewDefinitionOut(CamelModel):
+    id: str
+    study_id: str
+    code: str
+    title: str
+    description: str | None = None
+    definition: dict[str, Any]
+
+
+class TriangulationViewDefinitionUpdate(CamelModel):
+    title: str | None = None
+    description: str | None = None
+    definition: dict[str, Any] | None = None
+    code: str | None = None
+
+
+class TriangulationViewDefinitionCreate(CamelModel):
+    code: str
+    title: str
+    description: str | None = None
+    definition: dict[str, Any]

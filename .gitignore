@@ -48,3 +48,4 @@ artifacts/api-python/.venv/
 **/__pycache__/
 *.py[cod]
 *.log
+artifacts/api-python/data/

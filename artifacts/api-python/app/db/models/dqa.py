@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.db.models.study import Study
 
 
 class RulePack(Base):
@@ -18,6 +22,28 @@ class RulePack(Base):
     pack: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TriangulationView(Base):
+    """Study-defined triangulation view (cross-form join or claim vs observation)."""
+
+    __tablename__ = "triangulation_views"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    study_id: Mapped[str] = mapped_column(
+        ForeignKey("studies.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False, default="")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    definition: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+    study: Mapped[Study] = relationship(back_populates="triangulation_views")
+
+    __table_args__ = (
+        UniqueConstraint("study_id", "code", name="triangulation_views_study_code_uidx"),
+        Index("triangulation_views_study_idx", "study_id"),
     )
 
 

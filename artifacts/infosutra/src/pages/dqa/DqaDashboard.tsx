@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -6,12 +6,15 @@ import {
   getGetDqaFlagsQueryKey,
   getGetDqaSummaryQueryKey,
   getGetTriangulationViewQueryKey,
+  getGetTriangulationViewsQueryKey,
   useGetDqaEnumerators,
   useGetDqaFlags,
   useGetDqaSummary,
   useGetProjects,
   useGetTriangulationView,
+  useGetTriangulationViews,
   useRecomputeDqa,
+  type TriangulationCell,
   type TriangulationLink,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
@@ -70,6 +73,19 @@ function FormLink({ link, label }: { link?: TriangulationLink | null; label?: st
   );
 }
 
+function formatCell(cell: TriangulationCell | undefined) {
+  if (!cell || cell.value == null || cell.value === "") return "—";
+  if (cell.kind === "bool") return cell.value ? "Yes" : "No";
+  if (cell.kind === "list" && Array.isArray(cell.value)) {
+    return cell.value.length ? cell.value.join(", ") : "—";
+  }
+  return String(cell.value);
+}
+
+function cellByKey(cells: TriangulationCell[] | undefined, key: string) {
+  return cells?.find((c) => c.key === key);
+}
+
 export default function DqaDashboard() {
   const [tab, setTab] = useState<TabId>("coverage");
   const initialParams =
@@ -80,7 +96,7 @@ export default function DqaDashboard() {
   const [severity, setSeverity] = useState<string>("");
   const [drillRuleId, setDrillRuleId] = useState<string | null>(initialParams.get("ruleId"));
   const [mismatchOnly, setMismatchOnly] = useState(true);
-  const [triViewId, setTriViewId] = useState("TR-5");
+  const [triViewId, setTriViewId] = useState("");
 
   const openRule = (ruleId: string | null) => {
     setDrillRuleId(ruleId);
@@ -119,6 +135,21 @@ export default function DqaDashboard() {
     studyId: studyScopedId,
   };
 
+  const viewsQuery = useGetTriangulationViews(
+    activeStudyId ? { studyId: activeStudyId } : undefined,
+    {
+      query: { enabled: tab === "triangulation" && Boolean(activeStudyId) } as never,
+    },
+  );
+
+  useEffect(() => {
+    const views = viewsQuery.data ?? [];
+    if (!views.length) return;
+    if (!triViewId || !views.some((v) => v.id === triViewId)) {
+      setTriViewId(views[0].id);
+    }
+  }, [viewsQuery.data, triViewId]);
+
   const summaryQuery = useGetDqaSummary(summaryParams);
   const flagsQuery = useGetDqaFlags(flagsParams);
   const drillFlagsQuery = useGetDqaFlags(drillFlagsParams, {
@@ -129,7 +160,9 @@ export default function DqaDashboard() {
     triViewId,
     activeStudyId ? { studyId: activeStudyId } : undefined,
     {
-      query: { enabled: tab === "triangulation" && Boolean(activeStudyId) } as never,
+      query: {
+        enabled: tab === "triangulation" && Boolean(activeStudyId) && Boolean(triViewId),
+      } as never,
     },
   );
 
@@ -141,6 +174,9 @@ export default function DqaDashboard() {
         queryClient.invalidateQueries({ queryKey: getGetDqaEnumeratorsQueryKey() });
         queryClient.invalidateQueries({
           queryKey: getGetTriangulationViewQueryKey(triViewId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: getGetTriangulationViewsQueryKey(),
         });
       },
     },
@@ -518,9 +554,11 @@ export default function DqaDashboard() {
                 value={triViewId}
                 onChange={(e) => setTriViewId(e.target.value)}
               >
-                <option value="TR-1">TR-1 · Claimed vs observed practice</option>
-                <option value="TR-3">TR-3 · School vs parent governance</option>
-                <option value="TR-5">TR-5 · CWD identification</option>
+                {(viewsQuery.data ?? []).map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.id} · {v.title}
+                  </option>
+                ))}
               </select>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input
@@ -530,6 +568,11 @@ export default function DqaDashboard() {
                 />
                 Mismatches only
               </label>
+              {activeStudyId && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/studies/${activeStudyId}/triangulation`}>Edit views</Link>
+                </Button>
+              )}
             </div>
 
             {triangulationQuery.data?.description && (
@@ -583,29 +626,11 @@ export default function DqaDashboard() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="border-b bg-muted/40 text-left">
                     <tr>
-                      <th className="p-3">UDISE</th>
-                      <th className="p-3">School</th>
-                      {triViewId === "TR-5" && (
-                        <>
-                          <th className="p-3">Teacher CWD</th>
-                          <th className="p-3">Parent disability</th>
-                        </>
-                      )}
-                      {triViewId === "TR-1" && (
-                        <>
-                          <th className="p-3">Claimed</th>
-                          <th className="p-3">Observed</th>
-                          <th className="p-3">Gap</th>
-                        </>
-                      )}
-                      {triViewId === "TR-3" && (
-                        <>
-                          <th className="p-3">School meetings</th>
-                          <th className="p-3">School CWD disc.</th>
-                          <th className="p-3">Parent attended</th>
-                          <th className="p-3">Parent CWD issues</th>
-                        </>
-                      )}
+                      {(triangulationQuery.data?.columns ?? []).map((col) => (
+                        <th key={col.key} className="p-3">
+                          {col.label}
+                        </th>
+                      ))}
                       <th className="p-3">Forms</th>
                       <th className="p-3">Mismatch</th>
                     </tr>
@@ -613,8 +638,11 @@ export default function DqaDashboard() {
                   <tbody className="divide-y">
                     {triangulationRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-4 text-muted-foreground">
-                          {triangulationQuery.isLoading
+                        <td
+                          colSpan={(triangulationQuery.data?.columns?.length ?? 0) + 2 || 4}
+                          className="p-4 text-muted-foreground"
+                        >
+                          {triangulationQuery.isLoading || viewsQuery.isLoading
                             ? "Loading…"
                             : mismatchOnly
                               ? "No mismatches found."
@@ -622,73 +650,44 @@ export default function DqaDashboard() {
                         </td>
                       </tr>
                     ) : (
-                      triangulationRows.map((row) => (
-                        <tr key={`${row.udise}-${row.teacher?.submissionId || row.parent?.submissionId || ""}`} className={row.mismatch ? "bg-destructive/5" : undefined}>
-                          <td className="p-3 font-mono text-xs">{row.udise}</td>
-                          <td className="p-3">{row.schoolName || "—"}</td>
-                          {triViewId === "TR-5" && (
-                            <>
-                              <td className="p-3">
-                                {row.teacherHasCwd == null ? "—" : row.teacherHasCwd ? "Yes" : "No"}
+                      triangulationRows.map((row) => {
+                        const linkEntries = Object.entries(row.links ?? {});
+                        return (
+                          <tr
+                            key={`${row.key}-${linkEntries.map(([, l]) => l?.submissionId).join("-")}`}
+                            className={row.mismatch ? "bg-destructive/5" : undefined}
+                          >
+                            {(triangulationQuery.data?.columns ?? []).map((col) => (
+                              <td
+                                key={col.key}
+                                className={
+                                  col.kind === "number" || col.key === "join_key"
+                                    ? "p-3 font-mono text-xs"
+                                    : col.kind === "list"
+                                      ? "p-3 text-xs"
+                                      : "p-3"
+                                }
+                              >
+                                {formatCell(cellByKey(row.cells, col.key))}
                               </td>
-                              <td className="p-3">
-                                {row.parentReportsDisability == null
-                                  ? "—"
-                                  : row.parentReportsDisability
-                                    ? "Yes"
-                                    : "No"}
-                              </td>
-                            </>
-                          )}
-                          {triViewId === "TR-1" && (
-                            <>
-                              <td className="p-3 text-xs">{(row.claimedPractices || []).join(", ") || "—"}</td>
-                              <td className="p-3 text-xs">{(row.observedPractices || []).join(", ") || "—"}</td>
-                              <td className="p-3 font-mono">{row.practiceGap ?? 0}</td>
-                            </>
-                          )}
-                          {triViewId === "TR-3" && (
-                            <>
-                              <td className="p-3 font-mono">{row.schoolMeetings ?? "—"}</td>
-                              <td className="p-3">
-                                {row.schoolCwdDiscussed == null
-                                  ? "—"
-                                  : row.schoolCwdDiscussed
-                                    ? "Yes"
-                                    : "No"}
-                              </td>
-                              <td className="p-3">
-                                {row.parentAttendedPta == null
-                                  ? "—"
-                                  : row.parentAttendedPta
-                                    ? "Yes"
-                                    : "No"}
-                              </td>
-                              <td className="p-3">
-                                {row.parentCwdIssues == null
-                                  ? "—"
-                                  : row.parentCwdIssues
-                                    ? "Yes"
-                                    : "No"}
-                              </td>
-                            </>
-                          )}
-                          <td className="p-3">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-muted-foreground">
-                                T: <FormLink link={row.teacher} />
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                P: <FormLink link={row.parent} />
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                F: <FormLink link={row.facility} />
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3">{row.mismatch ? "Yes" : ""}</td>
-                        </tr>
-                      ))
+                            ))}
+                            <td className="p-3">
+                              <div className="flex flex-col gap-1">
+                                {linkEntries.length === 0 ? (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                ) : (
+                                  linkEntries.map(([role, link]) => (
+                                    <span key={role} className="text-xs text-muted-foreground">
+                                      {role}: <FormLink link={link} />
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3">{row.mismatch ? "Yes" : ""}</td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

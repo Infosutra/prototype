@@ -319,6 +319,166 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/triangulation-views:
+    get:
+      tags:
+      - studies
+      summary: List Study Triangulation Views
+      operationId: listStudyTriangulationViews
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TriangulationViewDefinitionOut'
+                title: Response Liststudytriangulationviews
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - studies
+      summary: Create Study Triangulation View
+      operationId: createStudyTriangulationView
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriangulationViewDefinitionCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriangulationViewDefinitionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/triangulation-views/{code}:
+    get:
+      tags:
+      - studies
+      summary: Get Study Triangulation View
+      operationId: getStudyTriangulationView
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriangulationViewDefinitionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - studies
+      summary: Update Study Triangulation View
+      operationId: updateStudyTriangulationView
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriangulationViewDefinitionUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriangulationViewDefinitionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - studies
+      summary: Delete Study Triangulation View
+      operationId: deleteStudyTriangulationView
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /projects:
     get:
       tags:
@@ -1500,24 +1660,39 @@ paths:
       tags:
       - dqa
       summary: List Triangulation Views
+      description: List triangulation views defined for a study. studyId is required.
       operationId: getTriangulationViews
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
+                type: array
                 items:
                   $ref: '#/components/schemas/TriangulationViewInfo'
-                type: array
                 title: Response Gettriangulationviews
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /dqa/triangulation/{view_id}:
     get:
       tags:
       - dqa
       summary: Triangulation View
-      description: 'UDISE-joined triangulation views: TR-1, TR-3, TR-5 (study-scoped
-        when studyId set).'
+      description: Evaluate a study-defined triangulation view. studyId is required.
       operationId: getTriangulationView
       parameters:
       - name: view_id
@@ -3480,6 +3655,42 @@ components:
       - submissions
       - projects
       title: TrendPoint
+    TriangulationCell:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        value:
+          title: Value
+        kind:
+          type: string
+          title: Kind
+          default: text
+      type: object
+      required:
+      - key
+      - label
+      title: TriangulationCell
+    TriangulationColumn:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        kind:
+          type: string
+          title: Kind
+          default: text
+      type: object
+      required:
+      - key
+      - label
+      title: TriangulationColumn
     TriangulationLink:
       properties:
         submissionId:
@@ -3552,86 +3763,110 @@ components:
       title: TriangulationPracticeStat
     TriangulationRow:
       properties:
-        udise:
+        key:
           type: string
-          title: Udise
-        schoolName:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Schoolname
-        facility:
-          anyOf:
-          - $ref: '#/components/schemas/TriangulationLink'
-          - type: 'null'
-        teacher:
-          anyOf:
-          - $ref: '#/components/schemas/TriangulationLink'
-          - type: 'null'
-        parent:
-          anyOf:
-          - $ref: '#/components/schemas/TriangulationLink'
-          - type: 'null'
-        teacherHasCwd:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Teacherhascwd
-        parentReportsDisability:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Parentreportsdisability
-        claimedPractices:
+          title: Key
+        cells:
           items:
-            type: string
+            $ref: '#/components/schemas/TriangulationCell'
           type: array
-          title: Claimedpractices
+          title: Cells
           default: []
-        observedPractices:
-          items:
-            type: string
-          type: array
-          title: Observedpractices
-          default: []
-        practiceGap:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Practicegap
-        schoolMeetings:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Schoolmeetings
-        schoolCwdDiscussed:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Schoolcwddiscussed
-        schoolGovernanceActive:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Schoolgovernanceactive
-        parentAttendedPta:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Parentattendedpta
-        parentCwdIssues:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Parentcwdissues
+        links:
+          additionalProperties:
+            anyOf:
+            - $ref: '#/components/schemas/TriangulationLink'
+            - type: 'null'
+          type: object
+          title: Links
+          default: {}
         mismatch:
           type: boolean
           title: Mismatch
           default: false
       type: object
       required:
-      - udise
+      - key
       title: TriangulationRow
+    TriangulationViewDefinitionCreate:
+      properties:
+        code:
+          type: string
+          title: Code
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        definition:
+          additionalProperties: true
+          type: object
+          title: Definition
+      type: object
+      required:
+      - code
+      - title
+      - definition
+      title: TriangulationViewDefinitionCreate
+    TriangulationViewDefinitionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        studyId:
+          type: string
+          title: Studyid
+        code:
+          type: string
+          title: Code
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        definition:
+          additionalProperties: true
+          type: object
+          title: Definition
+      type: object
+      required:
+      - id
+      - studyId
+      - code
+      - title
+      - definition
+      title: TriangulationViewDefinitionOut
+    TriangulationViewDefinitionUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        definition:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Definition
+        code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Code
+      type: object
+      title: TriangulationViewDefinitionUpdate
     TriangulationViewInfo:
       properties:
         id:
@@ -3658,6 +3893,12 @@ components:
           - type: string
           - type: 'null'
           title: Description
+        columns:
+          items:
+            $ref: '#/components/schemas/TriangulationColumn'
+          type: array
+          title: Columns
+          default: []
         rows:
           items:
             $ref: '#/components/schemas/TriangulationRow'
