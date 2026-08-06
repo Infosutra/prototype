@@ -45,4 +45,6 @@ Thumbs.db
 .cache/
 .local/
 artifacts/api-python/.venv/
+**/__pycache__/
+*.py[cod]
 *.log

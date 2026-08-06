@@ -1,0 +1,27 @@
+[Unit]
+Description=Infosutra (API + production UI)
+Documentation=file:///home/sarath/work/Infosutra/DataInsightshub/artifacts/api-python/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sarath
+Group=sarath
+WorkingDirectory=/home/sarath/work/Infosutra/DataInsightshub
+ExecStart=/home/sarath/work/Infosutra/DataInsightshub/scripts/run-production.sh
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+# Hardening (safe defaults for a local LAN service)
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logs: journalctl -u infosutra -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=infosutra
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,190 @@
+from __future__ import annotations
+
+from typing import Any
+
+from app.schemas.common import CamelModel
+
+
+class HealthStatus(CamelModel):
+    status: str
+
+
+class StatusCount(CamelModel):
+    status: str
+    count: int
+
+
+class ProjectSummary(CamelModel):
+    id: str
+    name: str
+    submission_count: int
+    last_submission_at: str | None = None
+
+
+class DashboardSummary(CamelModel):
+    total_projects: int
+    total_submissions: int
+    submissions_this_month: int
+    active_enumerators: int
+    pending_reports: int
+    last_sync_at: str | None = None
+    submissions_by_status: list[StatusCount]
+    top_projects: list[ProjectSummary]
+
+
+class ActivityItem(CamelModel):
+    id: str
+    type: str
+    message: str
+    project_name: str | None = None
+    timestamp: str
+    icon: str | None = None
+
+
+class EnumeratorStat(CamelModel):
+    name: str
+    count: int
+    project_count: int | None = None
+
+
+class ChartDataPoint(CamelModel):
+    label: str
+    value: float
+
+
+class FieldDistribution(CamelModel):
+    field: str
+    type: str
+    data: list[ChartDataPoint]
+
+
+class AnalyticsOverview(CamelModel):
+    total_submissions: int
+    submissions_by_status: list[StatusCount]
+    submissions_by_project: list[ChartDataPoint]
+    enumerator_performance: list[EnumeratorStat]
+    field_distributions: list[FieldDistribution] = []
+
+
+class ProjectAnalytics(CamelModel):
+    project_id: str
+    project_name: str
+    total_submissions: int
+    submissions_by_status: list[StatusCount]
+    enumerator_stats: list[EnumeratorStat]
+    field_distributions: list[FieldDistribution] = []
+    timeline: list[ChartDataPoint] = []
+
+
+class TrendPoint(CamelModel):
+    date: str
+    submissions: int
+    projects: int
+
+
+class InsightOut(CamelModel):
+    id: str
+    title: str
+    summary: str
+    content: str
+    type: str
+    project_id: str | None = None
+    project_name: str | None = None
+    severity: str
+    tags: list[str]
+    created_at: str
+
+
+class InsightInput(CamelModel):
+    title: str
+    summary: str = ""
+    content: str = ""
+    type: str = "summary"
+    project_id: str | None = None
+    project_name: str | None = None
+    severity: str = "info"
+    tags: list[str] = []
+
+
+class PromptOut(CamelModel):
+    id: str
+    name: str
+    description: str
+    content: str
+    category: str
+    project_ids: list[str]
+    created_at: str
+    updated_at: str
+
+
+class PromptInput(CamelModel):
+    name: str
+    description: str = ""
+    content: str = ""
+    category: str = "general"
+    project_ids: list[str] = []
+
+
+class PromptUpdate(CamelModel):
+    name: str | None = None
+    description: str | None = None
+    content: str | None = None
+    category: str | None = None
+    project_ids: list[str] | None = None
+
+
+class ReportOut(CamelModel):
+    id: str
+    title: str
+    description: str
+    status: str
+    format: str
+    report_type: str = "custom"
+    study_id: str | None = None
+    report_date: str | None = None
+    prompt_id: str | None = None
+    prompt_name: str | None = None
+    project_ids: list[str]
+    project_names: list[str]
+    generated_content: str | None = None
+    download_url: str | None = None
+    page_count: int | None = None
+    file_size_kb: float | None = None
+    generated_at: str | None = None
+    created_at: str
+
+
+class ReportInput(CamelModel):
+    title: str
+    description: str = ""
+    format: str = "pdf"
+    report_type: str = "custom"
+    study_id: str | None = None
+    report_date: str | None = None
+    prompt_id: str | None = None
+    project_ids: list[str] = []
+
+
+class GenerateDqaDailyInput(CamelModel):
+    study_id: str | None = None
+    report_date: str | None = None
+    send_email: bool = False
+    run_ai: bool = True
+
+
+class GenerateDqaFinalInput(CamelModel):
+    study_id: str | None = None
+    run_ai: bool = True
+    send_email: bool = False
+
+
+class ShareReportInput(CamelModel):
+    recipients: list[str]
+    subject: str
+    message: str | None = None
+
+
+class ShareResult(CamelModel):
+    success: bool
+    recipients_count: int
+    message: str

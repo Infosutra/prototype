@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Infosutra NGO Data Dashboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: projects
+    description: KoboToolbox projects and forms
+  - name: submissions
+    description: Field data submissions
+  - name: dashboard
+    description: Dashboard summaries and activity
+  - name: analytics
+    description: Data visualizations and charts
+  - name: ai
+    description: AI insights and analysis
+  - name: reports
+    description: Report management and generation
+  - name: prompts
+    description: Report prompt templates
+  - name: settings
+    description: Application settings
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +40,588 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # Dashboard
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get overall dashboard statistics
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/activity:
+    get:
+      operationId: getDashboardActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  # Projects
+  /projects:
+    get:
+      operationId: getProjects
+      tags: [projects]
+      summary: List all KoboToolbox projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /projects/sync:
+    post:
+      operationId: syncProjects
+      tags: [projects]
+      summary: Pull latest data from KoboToolbox
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  /projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project details
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update project settings (label language for data preview)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid input
+        "404":
+          description: Not found
+
+  /projects/{projectId}/sync:
+    post:
+      operationId: syncProject
+      tags: [projects]
+      summary: Sync a specific project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  # Submissions
+  /submissions:
+    get:
+      operationId: getSubmissions
+      tags: [submissions]
+      summary: List data submissions
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, validated, pending, flagged]
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Submissions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionsPage"
+
+  /submissions/{submissionId}:
+    get:
+      operationId: getSubmission
+      tags: [submissions]
+      summary: Get a single submission
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Submission detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+        "404":
+          description: Not found
+
+  # Analytics
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Get analytics overview across all projects
+      responses:
+        "200":
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
+  /analytics/projects/{projectId}:
+    get:
+      operationId: getProjectAnalytics
+      tags: [analytics]
+      summary: Get analytics for a specific project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAnalytics"
+
+  /analytics/trends:
+    get:
+      operationId: getSubmissionTrends
+      tags: [analytics]
+      summary: Get submission trends over time
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 1y]
+            default: 30d
+      responses:
+        "200":
+          description: Trends data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrendPoint"
+
+  # AI Insights
+  /ai/insights:
+    get:
+      operationId: getInsights
+      tags: [ai]
+      summary: List AI-generated insights
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Insights list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Insight"
+    post:
+      operationId: generateInsight
+      tags: [ai]
+      summary: Generate a new AI insight
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsightInput"
+      responses:
+        "201":
+          description: Generated insight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Insight"
+
+  /ai/insights/{insightId}:
+    get:
+      operationId: getInsight
+      tags: [ai]
+      summary: Get a specific insight
+      parameters:
+        - name: insightId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Insight detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Insight"
+
+    delete:
+      operationId: deleteInsight
+      tags: [ai]
+      summary: Delete an insight
+      parameters:
+        - name: insightId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # Prompts
+  /prompts:
+    get:
+      operationId: getPrompts
+      tags: [prompts]
+      summary: List report prompt templates
+      responses:
+        "200":
+          description: Prompts list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Prompt"
+    post:
+      operationId: createPrompt
+      tags: [prompts]
+      summary: Create a prompt template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptInput"
+      responses:
+        "201":
+          description: Created prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt"
+
+  /prompts/{promptId}:
+    get:
+      operationId: getPrompt
+      tags: [prompts]
+      summary: Get a prompt template
+      parameters:
+        - name: promptId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Prompt detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt"
+    put:
+      operationId: updatePrompt
+      tags: [prompts]
+      summary: Update a prompt template
+      parameters:
+        - name: promptId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptUpdate"
+      responses:
+        "200":
+          description: Updated prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt"
+    delete:
+      operationId: deletePrompt
+      tags: [prompts]
+      summary: Delete a prompt template
+      parameters:
+        - name: promptId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # Reports
+  /reports:
+    get:
+      operationId: getReports
+      tags: [reports]
+      summary: List generated reports
+      responses:
+        "200":
+          description: Reports list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Report"
+    post:
+      operationId: createReport
+      tags: [reports]
+      summary: Create and schedule a report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportInput"
+      responses:
+        "201":
+          description: Created report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /reports/{reportId}:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get a report
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+    delete:
+      operationId: deleteReport
+      tags: [reports]
+      summary: Delete a report
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /reports/{reportId}/generate:
+    post:
+      operationId: generateReport
+      tags: [reports]
+      summary: Generate report content using AI
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report generation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /reports/{reportId}/share:
+    post:
+      operationId: shareReport
+      tags: [reports]
+      summary: Share report via email
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareReportInput"
+      responses:
+        "200":
+          description: Share result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareResult"
+
+  # Settings
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get application settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update application settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsInput"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  /settings/test-kobo:
+    post:
+      operationId: testKoboConnection
+      tags: [settings]
+      summary: Test KoboToolbox API connection
+      responses:
+        "200":
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
+  /settings/test-smtp:
+    post:
+      operationId: testSmtpConnection
+      tags: [settings]
+      summary: Test SMTP connection
+      responses:
+        "200":
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
+  /settings/send-daily-report:
+    post:
+      operationId: sendDailyReport
+      tags: [settings]
+      summary: Send today's daily consolidated report email now
+      responses:
+        "200":
+          description: Daily report send result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +632,800 @@ components:
       required:
         - status
 
+    DashboardSummary:
+      type: object
+      properties:
+        totalProjects:
+          type: integer
+        totalSubmissions:
+          type: integer
+        submissionsThisMonth:
+          type: integer
+        activeEnumerators:
+          type: integer
+        pendingReports:
+          type: integer
+        lastSyncAt:
+          type: ["string", "null"]
+        submissionsByStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        topProjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSummary"
+      required:
+        - totalProjects
+        - totalSubmissions
+        - submissionsThisMonth
+        - activeEnumerators
+        - pendingReports
+        - lastSyncAt
+        - submissionsByStatus
+        - topProjects
+
+    StatusCount:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required:
+        - status
+        - count
+
+    ProjectSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        submissionCount:
+          type: integer
+        lastSubmissionAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - name
+        - submissionCount
+        - lastSubmissionAt
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [submission, sync, report, insight, alert]
+        message:
+          type: string
+        projectName:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+        icon:
+          type: ["string", "null"]
+      required:
+        - id
+        - type
+        - message
+        - projectName
+        - timestamp
+        - icon
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        uid:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [deployed, archived, draft]
+        submissionCount:
+          type: integer
+        formCount:
+          type: integer
+        enumeratorCount:
+          type: integer
+        questionCount:
+          type: integer
+        owner:
+          type: ["string", "null"]
+        lastEditedBy:
+          type: ["string", "null"]
+        lastModifiedAt:
+          type: ["string", "null"]
+        lastSubmissionAt:
+          type: ["string", "null"]
+        lastSyncAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        deployedAt:
+          type: ["string", "null"]
+        formVersionId:
+          type: ["string", "null"]
+        deployedVersionId:
+          type: ["string", "null"]
+        currentVersionNumber:
+          type: ["integer", "null"]
+        deployedVersionNumber:
+          type: ["integer", "null"]
+        syncStatus:
+          type: string
+          enum: [never, syncing, success, partial, failed]
+        syncError:
+          type: ["string", "null"]
+        sector:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        labelLanguage:
+          type: string
+          description: Preferred form label language for submission preview
+        availableLabelLanguages:
+          type: array
+          items:
+            type: string
+          description: Languages present in the Kobo form definition
+      required:
+        - id
+        - uid
+        - name
+        - description
+        - status
+        - submissionCount
+        - formCount
+        - enumeratorCount
+        - questionCount
+        - owner
+        - lastEditedBy
+        - lastModifiedAt
+        - lastSubmissionAt
+        - lastSyncAt
+        - createdAt
+        - deployedAt
+        - formVersionId
+        - deployedVersionId
+        - currentVersionNumber
+        - deployedVersionNumber
+        - syncStatus
+        - syncError
+        - sector
+        - country
+        - labelLanguage
+        - availableLabelLanguages
+
+    ProjectUpdate:
+      type: object
+      properties:
+        labelLanguage:
+          type: string
+      required:
+        - labelLanguage
+
+    SyncResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        projectsSynced:
+          type: integer
+        submissionsFetched:
+          type: integer
+        newSubmissions:
+          type: integer
+        syncedAt:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - projectsSynced
+        - submissionsFetched
+        - newSubmissions
+        - syncedAt
+        - errors
+
+    SubmissionsPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Submission"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - limit
+        - totalPages
+
+    Submission:
+      type: object
+      properties:
+        id:
+          type: string
+        displayId:
+          type: string
+        projectId:
+          type: string
+        projectName:
+          type: string
+        formId:
+          type: string
+        formName:
+          type: string
+        enumerator:
+          type: string
+        status:
+          type: string
+          enum: [validated, pending, flagged]
+        submittedAt:
+          type: string
+        location:
+          type: ["string", "null"]
+        data:
+          type: object
+          additionalProperties: true
+        responses:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormResponse"
+        attachmentCount:
+          type: integer
+      required:
+        - id
+        - displayId
+        - projectId
+        - projectName
+        - formId
+        - formName
+        - enumerator
+        - status
+        - submittedAt
+        - location
+        - data
+        - responses
+        - attachmentCount
+
+    FormResponse:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        questionType:
+          type: string
+        value: {}
+      required:
+        - key
+        - label
+        - questionType
+        - value
+
+    AnalyticsOverview:
+      type: object
+      properties:
+        submissionsByProject:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+        submissionsByMonth:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+        submissionsByStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+        submissionsByCountry:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+        enumeratorPerformance:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnumeratorStat"
+      required:
+        - submissionsByProject
+        - submissionsByMonth
+        - submissionsByStatus
+        - submissionsByCountry
+        - enumeratorPerformance
+
+    ProjectAnalytics:
+      type: object
+      properties:
+        projectId:
+          type: string
+        projectName:
+          type: string
+        fieldDistributions:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldDistribution"
+        submissionsOverTime:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+        enumeratorStats:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnumeratorStat"
+      required:
+        - projectId
+        - projectName
+        - fieldDistributions
+        - submissionsOverTime
+        - enumeratorStats
+
+    ChartDataPoint:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: number
+        color:
+          type: ["string", "null"]
+      required:
+        - label
+        - value
+        - color
+
+    FieldDistribution:
+      type: object
+      properties:
+        fieldName:
+          type: string
+        fieldLabel:
+          type: string
+        type:
+          type: string
+          enum: [bar, pie, line, table]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+      required:
+        - fieldName
+        - fieldLabel
+        - type
+        - data
+
+    EnumeratorStat:
+      type: object
+      properties:
+        name:
+          type: string
+        submissionCount:
+          type: integer
+        validatedCount:
+          type: integer
+        lastActive:
+          type: ["string", "null"]
+      required:
+        - name
+        - submissionCount
+        - validatedCount
+        - lastActive
+
+    TrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        submissions:
+          type: integer
+        projects:
+          type: integer
+      required:
+        - date
+        - submissions
+        - projects
+
+    Insight:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        content:
+          type: string
+        type:
+          type: string
+          enum: [trend, anomaly, recommendation, summary]
+        projectId:
+          type: ["string", "null"]
+        projectName:
+          type: ["string", "null"]
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        createdAt:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - title
+        - summary
+        - content
+        - type
+        - projectId
+        - projectName
+        - severity
+        - createdAt
+        - tags
+
+    InsightInput:
+      type: object
+      properties:
+        projectId:
+          type: ["string", "null"]
+        question:
+          type: string
+        type:
+          type: string
+          enum: [trend, anomaly, recommendation, summary]
+      required:
+        - question
+        - type
+
+    Prompt:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        content:
+          type: string
+        category:
+          type: string
+          enum: [executive, field, compliance, donor, custom]
+        projectIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - content
+        - category
+        - projectIds
+        - createdAt
+        - updatedAt
+
+    PromptInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+        category:
+          type: string
+          enum: [executive, field, compliance, donor, custom]
+        projectIds:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - content
+        - category
+
+    PromptUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+        category:
+          type: string
+          enum: [executive, field, compliance, donor, custom]
+        projectIds:
+          type: array
+          items:
+            type: string
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, generating, ready, failed]
+        format:
+          type: string
+          enum: [pdf, excel, both]
+        promptId:
+          type: ["string", "null"]
+        promptName:
+          type: ["string", "null"]
+        projectIds:
+          type: array
+          items:
+            type: string
+        projectNames:
+          type: array
+          items:
+            type: string
+        generatedContent:
+          type: ["string", "null"]
+        downloadUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        generatedAt:
+          type: ["string", "null"]
+        pageCount:
+          type: ["integer", "null"]
+        fileSizeKb:
+          type: ["number", "null"]
+      required:
+        - id
+        - title
+        - description
+        - status
+        - format
+        - promptId
+        - promptName
+        - projectIds
+        - projectNames
+        - generatedContent
+        - downloadUrl
+        - createdAt
+        - generatedAt
+        - pageCount
+        - fileSizeKb
+
+    ReportInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        format:
+          type: string
+          enum: [pdf, excel, both]
+        promptId:
+          type: string
+        projectIds:
+          type: array
+          items:
+            type: string
+      required:
+        - title
+        - format
+        - projectIds
+
+    ShareReportInput:
+      type: object
+      properties:
+        recipients:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        message:
+          type: string
+      required:
+        - recipients
+        - subject
+
+    ShareResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        recipientsCount:
+          type: integer
+        message:
+          type: string
+      required:
+        - success
+        - recipientsCount
+        - message
+
+    Settings:
+      type: object
+      properties:
+        kobo:
+          $ref: "#/components/schemas/KoboSettings"
+        smtp:
+          $ref: "#/components/schemas/SmtpSettings"
+        dailyReport:
+          $ref: "#/components/schemas/DailyReportSettings"
+        general:
+          $ref: "#/components/schemas/GeneralSettings"
+      required:
+        - kobo
+        - smtp
+        - dailyReport
+        - general
+
+    KoboSettings:
+      type: object
+      properties:
+        serverUrl:
+          type: string
+        apiToken:
+          type: string
+        username:
+          type: string
+        autoSync:
+          type: boolean
+        syncIntervalHours:
+          type: integer
+        connected:
+          type: boolean
+        lastTestedAt:
+          type: ["string", "null"]
+      required:
+        - serverUrl
+        - apiToken
+        - username
+        - autoSync
+        - syncIntervalHours
+        - connected
+        - lastTestedAt
+
+    SmtpSettings:
+      type: object
+      properties:
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        useTls:
+          type: boolean
+        connected:
+          type: boolean
+        lastTestedAt:
+          type: ["string", "null"]
+      required:
+        - host
+        - port
+        - username
+        - password
+        - fromName
+        - fromEmail
+        - useTls
+        - connected
+        - lastTestedAt
+
+    DailyReportSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        sendTime:
+          type: string
+          description: Local time HH:mm in the report timezone
+        timezone:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+        lastSentOn:
+          type: ["string", "null"]
+          description: Calendar date YYYY-MM-DD of the last successful send
+      required:
+        - enabled
+        - sendTime
+        - timezone
+        - recipients
+        - lastSentOn
+
+    GeneralSettings:
+      type: object
+      properties:
+        organizationName:
+          type: string
+        timezone:
+          type: string
+        dateFormat:
+          type: string
+        language:
+          type: string
+        aiEnabled:
+          type: boolean
+        aiProvider:
+          type: string
+          enum: [openai, anthropic, gemini]
+        aiApiKey:
+          type: string
+        reportLogoUrl:
+          type: ["string", "null"]
+      required:
+        - organizationName
+        - timezone
+        - dateFormat
+        - language
+        - aiEnabled
+        - aiProvider
+        - aiApiKey
+        - reportLogoUrl
+
+    SettingsInput:
+      type: object
+      properties:
+        kobo:
+          $ref: "#/components/schemas/KoboSettings"
+        smtp:
+          $ref: "#/components/schemas/SmtpSettings"
+        dailyReport:
+          $ref: "#/components/schemas/DailyReportSettings"
+        general:
+          $ref: "#/components/schemas/GeneralSettings"
+
+    ConnectionTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        details:
+          type: ["string", "null"]
+      required:
+        - success
+        - message
+        - details

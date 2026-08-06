@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Infosutra Dashboard"
+version = "1.0.0"
+id = "artifacts/infosutra"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18618
+
+[services.development]
+run = "pnpm --filter @workspace/infosutra run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/infosutra", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/infosutra/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18618"
+BASE_PATH = "/"

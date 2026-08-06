@@ -1,0 +1,219 @@
+id: facility
+project_uids:
+  - ajHnaDiKywwDknGB3L2nLC
+join_key: udise
+fields:
+  consent: CONSENT
+  enumerator_id: Q1
+  district: A1
+  block: A1b
+  institution_name: A2
+  udise: A2b
+  institution_type: A3
+  classroom_area: C1
+  ramp_present: C6
+  ramp_gradient: C7a
+  ramp_width: C7b
+  ramp_handrail_a: C8a
+  ramp_handrail_b: C8b
+  learning_materials: D1
+  teaching_materials: D4
+  assistive_devices: D6
+  meetings_held: E7c
+  cwd_discussed: E7d
+  parents_represented: E7b
+  emergency_exits: F1
+  cwd_exit_access: F2
+  hazards: F5
+  start: start
+  end: end
+thresholds:
+  min_duration_minutes: 15
+  area_min: 50
+  area_max: 5000
+  meetings_max: 24
+  emergency_exits_max: 20
+  unable_to_assess_pct: 30
+rules:
+  - id: T1-1
+    severity: red
+    title: Consent recorded
+    message: Consent missing or No but form sections contain data
+    check:
+      op: if_then
+      if: { op: any_section_filled, prefix: "con1/" }
+      then: { op: equals_any, field: consent, values: ["1", "yes", "Yes"] }
+
+  - id: T1-2
+    severity: red
+    title: Key identifiers present
+    message: Enumerator, district, block, institution name or UDISE is blank
+    check:
+      op: all
+      checks:
+        - { op: required, field: enumerator_id }
+        - { op: required, field: district }
+        - { op: required, field: block }
+        - { op: required, field: institution_name }
+        - { op: required, field: udise }
+
+  - id: T1-3a
+    severity: red
+    title: UDISE format
+    message: UDISE must be exactly 11 digits
+    check: { op: regex, field: udise, pattern: "^\\d{11}$" }
+
+  - id: T1-3b
+    severity: red
+    title: UDISE unique
+    message: Same UDISE appears in more than one Facility submission
+    check: { op: unique_in_project, field: udise }
+
+  - id: T1-5
+    severity: amber
+    title: Classroom area outlier
+    message: Classroom area outside plausible band or blank
+    check:
+      op: between
+      field: classroom_area
+      min_threshold: area_min
+      max_threshold: area_max
+
+  - id: T1-6a
+    severity: red
+    title: "None + other in learning materials (D1)"
+    message: None available selected with another D1 option
+    check:
+      op: exclusive_choice
+      field: learning_materials
+      exclusive_values: ["e"]
+
+  - id: T1-6b
+    severity: red
+    title: "None + other in teaching materials (D4)"
+    message: None available selected with another D4 option
+    check:
+      op: exclusive_choice
+      field: teaching_materials
+      exclusive_values: ["e"]
+
+  - id: T1-6c
+    severity: red
+    title: "None + other in assistive devices (D6)"
+    message: None in use selected with another D6 option
+    check:
+      op: exclusive_choice
+      field: assistive_devices
+      exclusive_values: ["f"]
+
+  - id: T1-6d
+    severity: red
+    title: "None + other in hazards (F5)"
+    message: None observed selected with another F5 option
+    check:
+      op: exclusive_choice
+      field: hazards
+      exclusive_values: ["e"]
+
+  - id: T1-7
+    severity: amber
+    title: Skip-logic residue on ramp
+    message: Ramp marked No but ramp detail fields are still filled
+    check:
+      op: skip_residue
+      parent_field: ramp_present
+      parent_absent_values: ["2", "no", "No"]
+      child_fields: [ramp_gradient, ramp_width, ramp_handrail_a, ramp_handrail_b]
+
+  - id: T1-9
+    severity: amber
+    title: PTA/SMC meetings count outlier
+    message: Meetings held is non-integer, negative, or above ceiling
+    checks:
+      - { op: integer, field: meetings_held }
+      - { op: between, field: meetings_held, min: 0, max_threshold: meetings_max }
+
+  - id: T1-10
+    severity: amber
+    title: Governance internal consistency
+    message: Meetings held is 0 but CWD discussed or parents represented is Yes
+    check:
+      op: if_then
+      if: { op: equals_any, field: meetings_held, values: ["0"] }
+      then:
+        op: all
+        checks:
+          - { op: not_in, field: cwd_discussed, values: ["1"] }
+          - { op: not_in, field: parents_represented, values: ["1"] }
+
+  - id: T1-11
+    severity: red
+    title: Emergency-exit logic
+    message: F1 is 0 but F2 is Yes/No instead of N/A
+    check:
+      op: if_then
+      if: { op: equals_any, field: emergency_exits, values: ["0"] }
+      then: { op: not_in, field: cwd_exit_access, values: ["1", "2"] }
+
+  - id: T1-12
+    severity: amber
+    title: Emergency-exit count outlier
+    message: Emergency exit count is non-integer or above 20
+    checks:
+      - { op: integer, field: emergency_exits }
+      - { op: between, field: emergency_exits, min: 0, max_threshold: emergency_exits_max }
+
+  - id: T1-13
+    severity: amber
+    title: Unable to assess density
+    message: More than 30% of key observation items are Unable to assess
+    check:
+      op: match_density_gt
+      match_values: ["3"]
+      threshold: unable_to_assess_pct
+      fields:
+        - C3b
+        - C4
+        - C7a
+        - C7b
+        - C8a
+        - C8b
+        - C8c
+        - C9a
+        - C9b
+        - C10a
+        - C10b
+        - C10c
+        - C11a
+        - C13a
+        - C13b
+        - C14b
+        - C14c
+        - C14d
+        - C17a
+        - C17b
+
+  - id: T1-14
+    severity: amber
+    title: Straight-lining in governance Yes/No block
+    message: Every item in the E5–E6 Yes/No block shares the same response
+    check:
+      op: all_equal
+      min_fields: 3
+      fields: [E5a, E5b, E6, E7a, E8, E9, E10]
+
+  - id: T1-15
+    severity: amber
+    title: Observation duration too short
+    message: End−start is below the minimum facility walk-through threshold
+    check:
+      op: duration_minutes_gte
+      start_field: start
+      end_field: end
+      threshold: min_duration_minutes
+
+  - id: T1-16
+    severity: amber
+    title: GPS present
+    message: GPS / geolocation is missing
+    check: { op: gps_present }

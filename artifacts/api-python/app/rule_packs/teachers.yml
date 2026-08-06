@@ -1,0 +1,96 @@
+id: teachers
+project_uids:
+  - a5qKLPgxnHTaYbrDWeeg9v
+join_key: udise
+fields:
+  consent: K_CONSENT
+  enumerator_id: K_ENUM_ID
+  respondent_id: P_RESP_ID
+  district: A1
+  block: A1b
+  institution_name: A2
+  udise: K_INST_ID
+  role: A2b
+  grades_taught: A4
+  knowledge_inclusion: B1
+  knowledge_b2a: B2a
+  has_cwd: D1
+  practice_d4: D4
+  start: start
+  end: end
+thresholds:
+  min_duration_minutes: 20
+  support_needs_max: 3
+rules:
+  - id: T2-1
+    severity: red
+    title: Consent recorded
+    message: Consent missing or No but responses exist
+    check:
+      op: if_then
+      if: { op: any_section_filled, prefix: "con1/" }
+      then: { op: equals_any, field: consent, values: ["1", "yes", "Yes"] }
+
+  - id: T2-2
+    severity: red
+    title: Identifiers and institution link
+    message: Enumerator, respondent or UDISE is blank
+    check:
+      op: all
+      checks:
+        - { op: required, field: enumerator_id }
+        - { op: required, field: respondent_id }
+        - { op: required, field: udise }
+
+  - id: T2-3
+    severity: amber
+    title: Duplicate respondent
+    message: Same respondent name appears more than once
+    check: { op: unique_in_project, field: respondent_id }
+
+  - id: T2-5
+    severity: red
+    title: Don't know with specific knowledge
+    message: Don't know selected together with another B1 option
+    check:
+      op: exclusive_choice
+      field: knowledge_inclusion
+      exclusive_values: ["f"]
+
+  - id: T2-7
+    severity: amber
+    title: Attitude / confidence straight-lining
+    message: All Likert items in the C block share the identical point
+    check:
+      op: all_equal
+      min_fields: 4
+      fields: [C1, C2, C3, C4, C5, C6]
+
+  - id: T2-10
+    severity: amber
+    title: Practice vs having CWD
+    message: No CWD in class but many inclusive practice options selected
+    check:
+      op: if_then
+      if: { op: equals_any, field: has_cwd, values: ["2", "no", "No"] }
+      then: { op: selected_count_lte, field: practice_d4, max: 1 }
+
+  - id: T2-13
+    severity: amber
+    title: Open responses present
+    message: Both open narrative items are blank
+    check:
+      op: any
+      checks:
+        - { op: required, field: F1 }
+        - { op: required, field: F2 }
+
+  - id: T2-14
+    severity: amber
+    title: Interview duration too short
+    message: End−start is below the minimum KAP interview threshold
+    check:
+      op: duration_minutes_gte
+      start_field: start
+      end_field: end
+      threshold: min_duration_minutes

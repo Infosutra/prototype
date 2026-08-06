@@ -1,0 +1,129 @@
+id: parents
+project_uids:
+  - aN5bufzTGmh9SibWSDZBr8
+join_key: udise
+fields:
+  consent: P_CONSENT
+  enumerator_id: Q1
+  respondent_id: Q2
+  district: P1
+  block: P1b
+  udise: P_INST_ID
+  child_enrolled: P6
+  attendance: P7
+  learning_reading: P9a
+  learning_participation: P9b
+  learning_progress: P9c
+  barriers: P10
+  most_barrier: P11
+  knows_access: P13
+  aware_entitlements: P14a
+  attended_pta: P17
+  pta_issues: P18
+  start: start
+  end: end
+thresholds:
+  min_duration_minutes: 15
+  sample_cap_per_institution: 2
+rules:
+  - id: T3-1
+    severity: red
+    title: Consent recorded
+    message: Consent missing or No but responses exist
+    check:
+      op: if_then
+      if: { op: any_section_filled, prefix: "con1/" }
+      then: { op: equals_any, field: consent, values: ["1", "yes", "Yes"] }
+
+  - id: T3-2
+    severity: red
+    title: Identifiers and institution link
+    message: Enumerator, respondent or child's UDISE is blank
+    check:
+      op: all
+      checks:
+        - { op: required, field: enumerator_id }
+        - { op: required, field: respondent_id }
+        - { op: required, field: udise }
+
+  - id: T3-3
+    severity: amber
+    title: Sample cap per institution
+    message: More than the planned number of parents recorded for one UDISE
+    check:
+      op: group_count_lte
+      field: udise
+      threshold: sample_cap_per_institution
+
+  - id: T3-4
+    severity: red
+    title: Enrolled vs attendance logic
+    message: Child not enrolled but attendance is Every day / Most days
+    check:
+      op: if_then
+      if: { op: equals_any, field: child_enrolled, values: ["2", "no", "No"] }
+      then: { op: not_in, field: attendance, values: ["1", "2"] }
+
+  - id: T3-5
+    severity: amber
+    title: Learning-outcome straight-lining
+    message: Reading, participation and progress are all identical
+    check:
+      op: all_equal
+      min_fields: 3
+      fields: [learning_reading, learning_participation, learning_progress]
+
+  - id: T3-6
+    severity: red
+    title: Barriers list — None + another
+    message: No barriers selected together with a specific barrier
+    check:
+      op: exclusive_choice
+      field: barriers
+      exclusive_values: ["i"]
+
+  - id: T3-7
+    severity: amber
+    title: Most-significant barrier vs list
+    message: Barriers list is None but a most-significant barrier is named
+    check:
+      op: if_then
+      if: { op: equals, field: barriers, value: "i" }
+      then: { op: not_in, field: most_barrier, values: ["1", "2", "3", "4", "5", "6", "7", "8"] }
+
+  - id: T3-9
+    severity: amber
+    title: Know vs access consistency
+    message: Knows how to access services but not aware entitlements exist
+    check:
+      op: if_then
+      if: { op: equals_any, field: knows_access, values: ["1"] }
+      then: { op: equals_any, field: aware_entitlements, values: ["1"] }
+
+  - id: T3-11
+    severity: red
+    title: PTA logic
+    message: Did not attend PTA but reports issues discussed at a meeting attended
+    check:
+      op: if_then
+      if: { op: equals_any, field: attended_pta, values: ["2", "no", "No"] }
+      then: { op: not_in, field: pta_issues, values: ["1"] }
+
+  - id: T3-12
+    severity: amber
+    title: Participation straight-lining
+    message: Participation block items share the identical response
+    check:
+      op: all_equal
+      min_fields: 3
+      fields: [P17, P18, P19]
+
+  - id: T3-13
+    severity: amber
+    title: Interview duration too short
+    message: End−start is below the minimum caregiver interview threshold
+    check:
+      op: duration_minutes_gte
+      start_field: start
+      end_field: end
+      threshold: min_duration_minutes
