@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RefreshCw, Eye, Table, AlertCircle } from "lucide-react";
 import { useFormRouteId } from "@/lib/use-form-route-id";
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : "Not available";
 }
 

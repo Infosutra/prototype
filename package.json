@@ -8,7 +8,10 @@
     "start:local": "bash ./scripts/start-local.sh",
     "sync:rpi": "bash ./scripts/sync-to-rpi.sh",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/infosutra\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/infosutra\" --filter \"./scripts\" --if-present run typecheck",
+    "api:spec": "cd artifacts/api-python && uv run python scripts/export_openapi.py",
+    "api:client": "pnpm run api:spec && pnpm --filter @workspace/api-spec run codegen",
+    "api:spec:check": "pnpm run api:spec && git diff --exit-code lib/api-spec/openapi.yaml"
   },
   "private": true,
   "devDependencies": {

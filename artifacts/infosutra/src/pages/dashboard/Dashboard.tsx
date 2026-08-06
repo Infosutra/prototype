@@ -1,9 +1,9 @@
 import React from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import {
   useGetDashboardActivity,
   useGetDashboardSummary,
+  useGetDqaByProject,
   useGetSubmissionTrends,
 } from "@workspace/api-client-react";
 import { Header } from "@/components/layout/Header";
@@ -19,7 +19,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { dqaApi } from "@/lib/dqa-api";
 import { useStudy } from "@/components/study/StudyProvider";
 
 function formatRelativeTime(value: string): string {
@@ -46,10 +45,9 @@ export default function Dashboard() {
   const summaryQuery = useGetDashboardSummary();
   const activityQuery = useGetDashboardActivity();
   const trendsQuery = useGetSubmissionTrends({ period: "30d" });
-  const dqaByProjectQuery = useQuery({
-    queryKey: ["dqa-by-project", activeStudyId],
-    queryFn: () => dqaApi.byProject(activeStudyId || undefined),
-  });
+  const dqaByProjectQuery = useGetDqaByProject(
+    activeStudyId ? { studyId: activeStudyId } : undefined,
+  );
 
   const summary = summaryQuery.data;
   const activityFeed = activityQuery.data ?? [];
@@ -57,7 +55,7 @@ export default function Dashboard() {
     date: formatTrendLabel(point.date),
     submissions: point.submissions,
   }));
-  const studyProjectIds = new Set(activeStudy?.projects.map((p) => p.id) ?? []);
+  const studyProjectIds = new Set((activeStudy?.projects ?? []).map((p) => p.id));
   const topProjects = (summary?.topProjects ?? []).filter(
     (p) => !activeStudyId || studyProjectIds.has(p.id),
   );

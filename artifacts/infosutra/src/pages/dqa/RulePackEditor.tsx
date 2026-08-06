@@ -1,14 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useGetProject } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetDqaFlagsQueryKey,
+  getGetDqaSummaryQueryKey,
+  getGetProjectRulePackQueryKey,
+  useGetProject,
+  useGetProjectFormFields,
+  useGetProjectRulePack,
+  useRecomputeDqa,
+  useUpdateProjectRulePack,
+  type FormFieldOut,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Plus, Save, Trash2 } from "lucide-react";
-import { dqaApi, type FormField } from "@/lib/dqa-api";
 
 const STANDARD_ALIASES = [
   "consent",
@@ -124,16 +133,14 @@ export default function RulePackEditor() {
   const projectId = params.id;
   const queryClient = useQueryClient();
   const projectQuery = useGetProject(projectId);
-  const fieldsQuery = useQuery({
-    queryKey: ["form-fields", projectId],
-    queryFn: () => dqaApi.formFields(projectId),
-    enabled: Boolean(projectId),
+  const fieldsQuery = useGetProjectFormFields(projectId, {
+    query: { enabled: Boolean(projectId) } as never,
   });
-  const packQuery = useQuery({
-    queryKey: ["rule-pack", projectId],
-    queryFn: () => dqaApi.getRulePack(projectId),
-    enabled: Boolean(projectId),
+  const packQuery = useGetProjectRulePack(projectId, {
+    query: { enabled: Boolean(projectId) } as never,
   });
+  const updatePack = useUpdateProjectRulePack();
+  const recompute = useRecomputeDqa();
 
   const [fieldsMap, setFieldsMap] = useState<Record<string, string>>({});
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
@@ -143,14 +150,17 @@ export default function RulePackEditor() {
   const [fieldSearch, setFieldSearch] = useState("");
   const [joinKey, setJoinKey] = useState("udise");
   const [message, setMessage] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!packQuery.data?.pack) return;
     const pack = packQuery.data.pack;
-    setFieldsMap({ ...(pack.fields || {}) });
-    setThresholds({ ...(pack.thresholds || {}) });
+    setFieldsMap({ ...((pack.fields as Record<string, string> | undefined) || {}) });
+    setThresholds({ ...((pack.thresholds as Record<string, number> | undefined) || {}) });
     setJoinKey(String(pack.join_key || "udise"));
-    setRules((pack.rules || []).map((r) => ruleToEditable(r as Record<string, unknown>)));
+    const rawRules = Array.isArray(pack.rules) ? pack.rules : [];
+    setRules(rawRules.map((r) => ruleToEditable(r as Record<string, unknown>)));
   }, [packQuery.data]);
 
   const filteredFields = useMemo(() => {
@@ -163,8 +173,10 @@ export default function RulePackEditor() {
     );
   }, [fieldsQuery.data, fieldSearch]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
+  const saveAndRecompute = async () => {
+    setSaveError(null);
+    setIsSaving(true);
+    try {
       const existing = packQuery.data?.pack || {};
       const pack = {
         ...existing,
@@ -175,16 +187,18 @@ export default function RulePackEditor() {
         thresholds,
         rules: rules.filter((r) => r.id || r.title).map(editableToRule),
       };
-      await dqaApi.putRulePack(projectId, pack);
-      return dqaApi.recompute(projectId);
-    },
-    onSuccess: (result) => {
+      await updatePack.mutateAsync({ projectId, data: { pack } });
+      const result = await recompute.mutateAsync({ params: { projectId } });
       setMessage(`Saved. Recomputed ${result.flags} flags across ${result.submissions} submissions.`);
-      queryClient.invalidateQueries({ queryKey: ["rule-pack", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["dqa-summary"] });
-      queryClient.invalidateQueries({ queryKey: ["dqa-flags"] });
-    },
-  });
+      queryClient.invalidateQueries({ queryKey: getGetProjectRulePackQueryKey(projectId) });
+      queryClient.invalidateQueries({ queryKey: getGetDqaSummaryQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetDqaFlagsQueryKey() });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const aliasKeys = useMemo(() => {
     const keys = new Set([...STANDARD_ALIASES, ...Object.keys(fieldsMap)]);
@@ -195,7 +209,7 @@ export default function RulePackEditor() {
     projectQuery.error?.message ||
     fieldsQuery.error?.message ||
     packQuery.error?.message ||
-    saveMutation.error?.message;
+    saveError;
 
   function FieldSelect({
     value,
@@ -211,7 +225,7 @@ export default function RulePackEditor() {
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">— select field —</option>
-        {(fieldsQuery.data ?? []).map((f: FormField) => (
+        {(fieldsQuery.data ?? []).map((f: FormFieldOut) => (
           <option key={f.name} value={f.name}>
             {f.name} — {f.label.slice(0, 60)}
           </option>
@@ -231,8 +245,8 @@ export default function RulePackEditor() {
               <Link href="/dqa">Back to DQA</Link>
             </Button>
             <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
+              onClick={() => void saveAndRecompute()}
+              disabled={isSaving}
               className="bg-primary text-primary-foreground"
             >
               <Save className="w-4 h-4 mr-2" />
@@ -272,9 +286,9 @@ export default function RulePackEditor() {
                     <div className="font-mono text-xs text-muted-foreground">{f.type}</div>
                     <div className="font-medium">{f.name}</div>
                     <div className="text-muted-foreground text-xs">{f.label}</div>
-                    {f.choices?.length > 0 && (
+                    {f.choices && f.choices.length > 0 && (
                       <div className="mt-1 text-[11px] font-mono text-muted-foreground">
-                        {f.choices.slice(0, 8).map((c) => `${c.name}=${c.label}`).join(" · ")}
+                        {f.choices.slice(0, 8).map((c) => `${String(c.name ?? "")}=${String(c.label ?? "")}`).join(" · ")}
                         {f.choices.length > 8 ? "…" : ""}
                       </div>
                     )}

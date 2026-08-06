@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from math import ceil
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Project, Submission
 from app.db.session import get_db
+from app.schemas.common import SubmissionsListQuery
 from app.schemas.submissions import FormResponse, SubmissionOut, SubmissionsPage
 from app.services.form_labels import build_form_responses
 
@@ -37,16 +39,17 @@ def _map_submission(row: Submission, responses: list[dict] | None = None) -> Sub
     )
 
 
-@router.get("", response_model=SubmissionsPage)
+@router.get("", response_model=SubmissionsPage, operation_id="getSubmissions")
 def list_submissions(
-    project_id: str | None = None,
-    status: str | None = Query(default=None),
-    date_from: str | None = Query(default=None, alias="dateFrom"),
-    date_to: str | None = Query(default=None, alias="dateTo"),
-    page: int = 1,
-    limit: int = 20,
+    params: Annotated[SubmissionsListQuery, Query()],
     db: Session = Depends(get_db),
 ) -> SubmissionsPage:
+    project_id = params.project_id
+    status = params.status
+    date_from = params.date_from
+    date_to = params.date_to
+    page = params.page
+    limit = params.limit
     conditions = []
     if project_id:
         conditions.append(Submission.project_id == project_id)
@@ -73,7 +76,7 @@ def list_submissions(
     )
 
 
-@router.get("/{submission_id}", response_model=SubmissionOut)
+@router.get("/{submission_id}", response_model=SubmissionOut, operation_id="getSubmission")
 def get_submission(submission_id: str, db: Session = Depends(get_db)) -> SubmissionOut:
     row = db.get(Submission, submission_id)
     if not row:

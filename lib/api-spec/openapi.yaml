@@ -1,1431 +1,3657 @@
+# GENERATED FILE — do not edit by hand.
+# Source of truth: FastAPI app (artifacts/api-python).
+# Regenerate with: pnpm run api:spec
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: Infosutra NGO Data Dashboard API
-servers:
-  - url: /api
-    description: Base API path
-tags:
-  - name: health
-    description: Health operations
-  - name: projects
-    description: KoboToolbox projects and forms
-  - name: submissions
-    description: Field data submissions
-  - name: dashboard
-    description: Dashboard summaries and activity
-  - name: analytics
-    description: Data visualizations and charts
-  - name: ai
-    description: AI insights and analysis
-  - name: reports
-    description: Report management and generation
-  - name: prompts
-    description: Report prompt templates
-  - name: settings
-    description: Application settings
-
 paths:
   /healthz:
     get:
-      operationId: healthCheck
-      tags: [health]
-      summary: Health check
+      tags:
+      - health
+      summary: Healthz
+      operationId: healthz
       responses:
-        "200":
-          description: Healthy
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
-
-  # Dashboard
+                $ref: '#/components/schemas/HealthStatus'
   /dashboard/summary:
     get:
+      tags:
+      - dashboard
+      summary: Dashboard Summary
       operationId: getDashboardSummary
-      tags: [dashboard]
-      summary: Get overall dashboard statistics
       responses:
-        "200":
-          description: Dashboard summary
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DashboardSummary"
-
+                $ref: '#/components/schemas/DashboardSummary'
   /dashboard/activity:
     get:
+      tags:
+      - dashboard
+      summary: Dashboard Activity
       operationId: getDashboardActivity
-      tags: [dashboard]
-      summary: Get recent activity feed
       responses:
-        "200":
-          description: Recent activity
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                type: array
                 items:
-                  $ref: "#/components/schemas/ActivityItem"
-
-  # Projects
+                  $ref: '#/components/schemas/ActivityItem'
+                type: array
+                title: Response Getdashboardactivity
+  /studies:
+    get:
+      tags:
+      - studies
+      summary: List Studies
+      operationId: getStudies
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/StudyOut'
+                type: array
+                title: Response Getstudies
+    post:
+      tags:
+      - studies
+      summary: Create Study
+      operationId: createStudy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}:
+    get:
+      tags:
+      - studies
+      summary: Get Study
+      operationId: getStudy
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - studies
+      summary: Update Study
+      operationId: updateStudy
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - studies
+      summary: Delete Study
+      operationId: deleteStudy
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/projects:
+    post:
+      tags:
+      - studies
+      summary: Assign Project
+      operationId: assignStudyProject
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyAssignProject'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/projects/{project_id}:
+    delete:
+      tags:
+      - studies
+      summary: Unassign Project
+      operationId: unassignStudyProject
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /projects:
     get:
+      tags:
+      - projects
+      summary: List Projects
       operationId: getProjects
-      tags: [projects]
-      summary: List all KoboToolbox projects
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
-        "200":
-          description: List of projects
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Project"
-
+                  $ref: '#/components/schemas/ProjectOut'
+                title: Response Getprojects
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /projects/sync:
     post:
+      tags:
+      - projects
+      summary: Sync Projects
       operationId: syncProjects
-      tags: [projects]
-      summary: Pull latest data from KoboToolbox
       responses:
-        "200":
-          description: Sync result
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SyncResult"
-
-  /projects/{projectId}:
+                $ref: '#/components/schemas/SyncResult'
+  /projects/{project_id}:
     get:
+      tags:
+      - projects
+      summary: Get Project
       operationId: getProject
-      tags: [projects]
-      summary: Get project details
       parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
       responses:
-        "200":
-          description: Project details
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Project"
-        "404":
-          description: Not found
+                $ref: '#/components/schemas/ProjectOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     patch:
+      tags:
+      - projects
+      summary: Update Project
       operationId: updateProject
-      tags: [projects]
-      summary: Update project settings (label language for data preview)
       parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProjectUpdate"
+              $ref: '#/components/schemas/ProjectUpdate'
       responses:
-        "200":
-          description: Updated project
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Project"
-        "400":
-          description: Invalid input
-        "404":
-          description: Not found
-
-  /projects/{projectId}/sync:
-    post:
-      operationId: syncProject
-      tags: [projects]
-      summary: Sync a specific project
+                $ref: '#/components/schemas/ProjectOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/data-grid:
+    get:
+      tags:
+      - projects
+      summary: Project Data Grid
+      description: All submissions of a project as rows x questions, with DQA severity
+        per cell.
+      operationId: getProjectDataGrid
       parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: severity
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+      - name: enumerator
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enumerator
       responses:
-        "200":
-          description: Sync result
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SyncResult"
-
-  # Submissions
+                $ref: '#/components/schemas/SubmissionGrid'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/sync:
+    post:
+      tags:
+      - projects
+      summary: Sync One Project
+      operationId: syncProject
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /submissions:
     get:
+      tags:
+      - submissions
+      summary: List Submissions
       operationId: getSubmissions
-      tags: [submissions]
-      summary: List data submissions
       parameters:
-        - name: projectId
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [all, validated, pending, flagged]
-        - name: dateFrom
-          in: query
-          schema:
-            type: string
-        - name: dateTo
-          in: query
-          schema:
-            type: string
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 1
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 20
+      - name: projectId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Page
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 20
+          title: Limit
       responses:
-        "200":
-          description: Submissions list
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubmissionsPage"
-
-  /submissions/{submissionId}:
+                $ref: '#/components/schemas/SubmissionsPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /submissions/{submission_id}:
     get:
+      tags:
+      - submissions
+      summary: Get Submission
       operationId: getSubmission
-      tags: [submissions]
-      summary: Get a single submission
       parameters:
-        - name: submissionId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: submission_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Submission Id
       responses:
-        "200":
-          description: Submission detail
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Submission"
-        "404":
-          description: Not found
-
-  # Analytics
+                $ref: '#/components/schemas/SubmissionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /analytics/overview:
     get:
+      tags:
+      - analytics
+      summary: Analytics Overview
       operationId: getAnalyticsOverview
-      tags: [analytics]
-      summary: Get analytics overview across all projects
       responses:
-        "200":
-          description: Analytics overview
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalyticsOverview"
-
-  /analytics/projects/{projectId}:
+                $ref: '#/components/schemas/AnalyticsOverview'
+  /analytics/projects/{project_id}:
     get:
+      tags:
+      - analytics
+      summary: Project Analytics
       operationId: getProjectAnalytics
-      tags: [analytics]
-      summary: Get analytics for a specific project
       parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
       responses:
-        "200":
-          description: Project analytics
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectAnalytics"
-
+                $ref: '#/components/schemas/ProjectAnalytics'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /analytics/trends:
     get:
+      tags:
+      - analytics
+      summary: Submission Trends
       operationId: getSubmissionTrends
-      tags: [analytics]
-      summary: Get submission trends over time
       parameters:
-        - name: period
-          in: query
-          schema:
-            type: string
-            enum: [7d, 30d, 90d, 1y]
-            default: 30d
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: 30d
+          title: Period
       responses:
-        "200":
-          description: Trends data
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/TrendPoint"
-
-  # AI Insights
+                  $ref: '#/components/schemas/TrendPoint'
+                title: Response Getsubmissiontrends
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /ai/insights:
     get:
+      tags:
+      - ai
+      summary: List Insights
       operationId: getInsights
-      tags: [ai]
-      summary: List AI-generated insights
       parameters:
-        - name: projectId
-          in: query
-          schema:
-            type: string
+      - name: project_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Project Id
       responses:
-        "200":
-          description: Insights list
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Insight"
+                  $ref: '#/components/schemas/InsightOut'
+                title: Response Getinsights
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
-      operationId: generateInsight
-      tags: [ai]
-      summary: Generate a new AI insight
+      tags:
+      - ai
+      summary: Create Insight
+      operationId: createInsight
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InsightInput"
+              $ref: '#/components/schemas/InsightInput'
       responses:
-        "201":
-          description: Generated insight
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Insight"
-
-  /ai/insights/{insightId}:
+                $ref: '#/components/schemas/InsightOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ai/insights/{insight_id}:
     get:
+      tags:
+      - ai
+      summary: Get Insight
       operationId: getInsight
-      tags: [ai]
-      summary: Get a specific insight
       parameters:
-        - name: insightId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: insight_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Insight Id
       responses:
-        "200":
-          description: Insight detail
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Insight"
-
+                $ref: '#/components/schemas/InsightOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
+      tags:
+      - ai
+      summary: Delete Insight
       operationId: deleteInsight
-      tags: [ai]
-      summary: Delete an insight
       parameters:
-        - name: insightId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: insight_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Insight Id
       responses:
-        "204":
-          description: Deleted
-
-  # Prompts
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /prompts:
     get:
+      tags:
+      - prompts
+      summary: List Prompts
       operationId: getPrompts
-      tags: [prompts]
-      summary: List report prompt templates
       responses:
-        "200":
-          description: Prompts list
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                type: array
                 items:
-                  $ref: "#/components/schemas/Prompt"
+                  $ref: '#/components/schemas/PromptOut'
+                type: array
+                title: Response Getprompts
     post:
+      tags:
+      - prompts
+      summary: Create Prompt
       operationId: createPrompt
-      tags: [prompts]
-      summary: Create a prompt template
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PromptInput"
+              $ref: '#/components/schemas/PromptInput'
+        required: true
       responses:
-        "201":
-          description: Created prompt
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Prompt"
-
-  /prompts/{promptId}:
+                $ref: '#/components/schemas/PromptOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /prompts/{prompt_id}:
     get:
+      tags:
+      - prompts
+      summary: Get Prompt
       operationId: getPrompt
-      tags: [prompts]
-      summary: Get a prompt template
       parameters:
-        - name: promptId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: prompt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Prompt Id
       responses:
-        "200":
-          description: Prompt detail
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Prompt"
+                $ref: '#/components/schemas/PromptOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     put:
+      tags:
+      - prompts
+      summary: Update Prompt
       operationId: updatePrompt
-      tags: [prompts]
-      summary: Update a prompt template
       parameters:
-        - name: promptId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: prompt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Prompt Id
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PromptUpdate"
+              $ref: '#/components/schemas/PromptUpdate'
       responses:
-        "200":
-          description: Updated prompt
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Prompt"
+                $ref: '#/components/schemas/PromptOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
+      tags:
+      - prompts
+      summary: Delete Prompt
       operationId: deletePrompt
-      tags: [prompts]
-      summary: Delete a prompt template
       parameters:
-        - name: promptId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: prompt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Prompt Id
       responses:
-        "204":
-          description: Deleted
-
-  # Reports
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /reports:
     get:
+      tags:
+      - reports
+      summary: List Reports
       operationId: getReports
-      tags: [reports]
-      summary: List generated reports
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: reportType
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reporttype
       responses:
-        "200":
-          description: Reports list
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Report"
+                  $ref: '#/components/schemas/ReportOut'
+                title: Response Getreports
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
+      tags:
+      - reports
+      summary: Create Report
       operationId: createReport
-      tags: [reports]
-      summary: Create and schedule a report
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ReportInput"
+              $ref: '#/components/schemas/ReportInput'
       responses:
-        "201":
-          description: Created report
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Report"
-
-  /reports/{reportId}:
+                $ref: '#/components/schemas/ReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/dqa-daily:
+    post:
+      tags:
+      - reports
+      summary: Create Dqa Daily
+      operationId: createDqaDailyReport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDqaDailyInput'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/dqa-final:
+    post:
+      tags:
+      - reports
+      summary: Create Dqa Final
+      operationId: createDqaFinalReport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDqaFinalInput'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/{report_id}:
     get:
+      tags:
+      - reports
+      summary: Get Report
       operationId: getReport
-      tags: [reports]
-      summary: Get a report
       parameters:
-        - name: reportId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
       responses:
-        "200":
-          description: Report detail
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Report"
+                $ref: '#/components/schemas/ReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
+      tags:
+      - reports
+      summary: Delete Report
       operationId: deleteReport
-      tags: [reports]
-      summary: Delete a report
       parameters:
-        - name: reportId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
       responses:
-        "204":
-          description: Deleted
-
-  /reports/{reportId}/generate:
-    post:
-      operationId: generateReport
-      tags: [reports]
-      summary: Generate report content using AI
-      parameters:
-        - name: reportId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Report generation started
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Report"
-
-  /reports/{reportId}/share:
-    post:
-      operationId: shareReport
-      tags: [reports]
-      summary: Share report via email
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/{report_id}/preview:
+    get:
+      tags:
+      - reports
+      summary: Preview Report
+      operationId: previewReport
       parameters:
-        - name: reportId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/html:
+              schema:
+                type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/{report_id}/download:
+    get:
+      tags:
+      - reports
+      summary: Download Report
+      operationId: downloadReport
+      parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(pdf|docx)$
+          default: pdf
+          title: Format
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+            application/pdf: {}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/{report_id}/generate:
+    post:
+      tags:
+      - reports
+      summary: Generate Report
+      operationId: generateReport
+      parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /reports/{report_id}/share:
+    post:
+      tags:
+      - reports
+      summary: Share Report
+      operationId: shareReport
+      parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ShareReportInput"
+              $ref: '#/components/schemas/ShareReportInput'
       responses:
-        "200":
-          description: Share result
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ShareResult"
-
-  # Settings
+                $ref: '#/components/schemas/ShareResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /settings:
     get:
+      tags:
+      - settings
+      summary: Get Settings
       operationId: getSettings
-      tags: [settings]
-      summary: Get application settings
       responses:
-        "200":
-          description: Settings
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Settings"
+                $ref: '#/components/schemas/SettingsOut'
     put:
+      tags:
+      - settings
+      summary: Put Settings
       operationId: updateSettings
-      tags: [settings]
-      summary: Update application settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsOut'
+        '400':
+          description: Bad request
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /settings/test-kobo:
+    post:
+      tags:
+      - settings
+      summary: Test Kobo
+      operationId: testKoboConnection
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+  /settings/test-smtp:
+    post:
+      tags:
+      - settings
+      summary: Test Smtp
+      operationId: testSmtpConnection
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+  /settings/send-daily-report:
+    post:
+      tags:
+      - settings
+      summary: Send Daily Report
+      operationId: sendDailyReport
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        '400':
+          description: Bad request
+  /settings/send-dqa-daily-report:
+    post:
+      tags:
+      - settings
+      summary: Send Dqa Daily Report
+      description: Generate and email today's DQA Daily (separate from submission
+        digest).
+      operationId: sendDqaDailyReport
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        '400':
+          description: Bad request
+  /dqa/summary:
+    get:
+      tags:
+      - dqa
+      summary: Dqa Summary
+      operationId: getDqaSummary
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: projectId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/by-project:
+    get:
+      tags:
+      - dqa
+      summary: Dqa By Project
+      description: Per-project DQA metrics aligned with the Data Quality dashboard.
+      operationId: getDqaByProject
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectDqaStat'
+                title: Response Getdqabyproject
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/flags:
+    get:
+      tags:
+      - dqa
+      summary: List Flags
+      operationId: getDqaFlags
+      parameters:
+      - name: projectId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: submissionId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Submissionid
+      - name: ruleId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ruleid
+      - name: severity
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+      - name: enumerator
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enumerator
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2000
+          minimum: 1
+          default: 500
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DqaFlagOut'
+                title: Response Getdqaflags
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/enumerators:
+    get:
+      tags:
+      - dqa
+      summary: Enumerator Stats
+      operationId: getDqaEnumerators
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: projectId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/app__schemas__dqa__EnumeratorStat'
+                title: Response Getdqaenumerators
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/recompute:
+    post:
+      tags:
+      - dqa
+      summary: Recompute
+      operationId: recomputeDqa
+      parameters:
+      - name: projectId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaRecomputeResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/triangulation:
+    get:
+      tags:
+      - dqa
+      summary: List Triangulation Views
+      operationId: getTriangulationViews
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TriangulationViewInfo'
+                type: array
+                title: Response Gettriangulationviews
+  /dqa/triangulation/{view_id}:
+    get:
+      tags:
+      - dqa
+      summary: Triangulation View
+      description: 'UDISE-joined triangulation views: TR-1, TR-3, TR-5 (study-scoped
+        when studyId set).'
+      operationId: getTriangulationView
+      parameters:
+      - name: view_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: View Id
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriangulationViewOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/form-fields:
+    get:
+      tags:
+      - dqa
+      summary: Project Form Fields
+      operationId: getProjectFormFields
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FormFieldOut'
+                title: Response Getprojectformfields
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/rule-pack:
+    get:
+      tags:
+      - dqa
+      summary: Get Rule Pack
+      operationId: getProjectRulePack
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulePackOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - dqa
+      summary: Put Rule Pack
+      operationId: updateProjectRulePack
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SettingsInput"
+              $ref: '#/components/schemas/RulePackUpdate'
       responses:
-        "200":
-          description: Updated settings
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Settings"
-
-  /settings/test-kobo:
-    post:
-      operationId: testKoboConnection
-      tags: [settings]
-      summary: Test KoboToolbox API connection
-      responses:
-        "200":
-          description: Connection test result
+                $ref: '#/components/schemas/RulePackOut'
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ConnectionTestResult"
-
-  /settings/test-smtp:
-    post:
-      operationId: testSmtpConnection
-      tags: [settings]
-      summary: Test SMTP connection
-      responses:
-        "200":
-          description: Connection test result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConnectionTestResult"
-
-  /settings/send-daily-report:
-    post:
-      operationId: sendDailyReport
-      tags: [settings]
-      summary: Send today's daily consolidated report email now
-      responses:
-        "200":
-          description: Daily report send result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConnectionTestResult"
-
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
-    HealthStatus:
-      type: object
-      properties:
-        status:
-          type: string
-      required:
-        - status
-
-    DashboardSummary:
-      type: object
-      properties:
-        totalProjects:
-          type: integer
-        totalSubmissions:
-          type: integer
-        submissionsThisMonth:
-          type: integer
-        activeEnumerators:
-          type: integer
-        pendingReports:
-          type: integer
-        lastSyncAt:
-          type: ["string", "null"]
-        submissionsByStatus:
-          type: array
-          items:
-            $ref: "#/components/schemas/StatusCount"
-        topProjects:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectSummary"
-      required:
-        - totalProjects
-        - totalSubmissions
-        - submissionsThisMonth
-        - activeEnumerators
-        - pendingReports
-        - lastSyncAt
-        - submissionsByStatus
-        - topProjects
-
-    StatusCount:
-      type: object
-      properties:
-        status:
-          type: string
-        count:
-          type: integer
-      required:
-        - status
-        - count
-
-    ProjectSummary:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        submissionCount:
-          type: integer
-        lastSubmissionAt:
-          type: ["string", "null"]
-      required:
-        - id
-        - name
-        - submissionCount
-        - lastSubmissionAt
-
     ActivityItem:
-      type: object
       properties:
         id:
           type: string
+          title: Id
         type:
           type: string
-          enum: [submission, sync, report, insight, alert]
+          title: Type
         message:
           type: string
+          title: Message
         projectName:
-          type: ["string", "null"]
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectname
         timestamp:
           type: string
+          title: Timestamp
         icon:
-          type: ["string", "null"]
-      required:
-        - id
-        - type
-        - message
-        - projectName
-        - timestamp
-        - icon
-
-    Project:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Icon
       type: object
-      properties:
-        id:
-          type: string
-        uid:
-          type: string
-        name:
-          type: string
-        description:
-          type: ["string", "null"]
-        status:
-          type: string
-          enum: [deployed, archived, draft]
-        submissionCount:
-          type: integer
-        formCount:
-          type: integer
-        enumeratorCount:
-          type: integer
-        questionCount:
-          type: integer
-        owner:
-          type: ["string", "null"]
-        lastEditedBy:
-          type: ["string", "null"]
-        lastModifiedAt:
-          type: ["string", "null"]
-        lastSubmissionAt:
-          type: ["string", "null"]
-        lastSyncAt:
-          type: ["string", "null"]
-        createdAt:
-          type: string
-        deployedAt:
-          type: ["string", "null"]
-        formVersionId:
-          type: ["string", "null"]
-        deployedVersionId:
-          type: ["string", "null"]
-        currentVersionNumber:
-          type: ["integer", "null"]
-        deployedVersionNumber:
-          type: ["integer", "null"]
-        syncStatus:
-          type: string
-          enum: [never, syncing, success, partial, failed]
-        syncError:
-          type: ["string", "null"]
-        sector:
-          type: ["string", "null"]
-        country:
-          type: ["string", "null"]
-        labelLanguage:
-          type: string
-          description: Preferred form label language for submission preview
-        availableLabelLanguages:
-          type: array
-          items:
-            type: string
-          description: Languages present in the Kobo form definition
       required:
-        - id
-        - uid
-        - name
-        - description
-        - status
-        - submissionCount
-        - formCount
-        - enumeratorCount
-        - questionCount
-        - owner
-        - lastEditedBy
-        - lastModifiedAt
-        - lastSubmissionAt
-        - lastSyncAt
-        - createdAt
-        - deployedAt
-        - formVersionId
-        - deployedVersionId
-        - currentVersionNumber
-        - deployedVersionNumber
-        - syncStatus
-        - syncError
-        - sector
-        - country
-        - labelLanguage
-        - availableLabelLanguages
-
-    ProjectUpdate:
-      type: object
-      properties:
-        labelLanguage:
-          type: string
-      required:
-        - labelLanguage
-
-    SyncResult:
-      type: object
-      properties:
-        success:
-          type: boolean
-        projectsSynced:
-          type: integer
-        submissionsFetched:
-          type: integer
-        newSubmissions:
-          type: integer
-        syncedAt:
-          type: string
-        errors:
-          type: array
-          items:
-            type: string
-      required:
-        - success
-        - projectsSynced
-        - submissionsFetched
-        - newSubmissions
-        - syncedAt
-        - errors
-
-    SubmissionsPage:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/Submission"
-        total:
-          type: integer
-        page:
-          type: integer
-        limit:
-          type: integer
-        totalPages:
-          type: integer
-      required:
-        - data
-        - total
-        - page
-        - limit
-        - totalPages
-
-    Submission:
-      type: object
-      properties:
-        id:
-          type: string
-        displayId:
-          type: string
-        projectId:
-          type: string
-        projectName:
-          type: string
-        formId:
-          type: string
-        formName:
-          type: string
-        enumerator:
-          type: string
-        status:
-          type: string
-          enum: [validated, pending, flagged]
-        submittedAt:
-          type: string
-        location:
-          type: ["string", "null"]
-        data:
-          type: object
-          additionalProperties: true
-        responses:
-          type: array
-          items:
-            $ref: "#/components/schemas/FormResponse"
-        attachmentCount:
-          type: integer
-      required:
-        - id
-        - displayId
-        - projectId
-        - projectName
-        - formId
-        - formName
-        - enumerator
-        - status
-        - submittedAt
-        - location
-        - data
-        - responses
-        - attachmentCount
-
-    FormResponse:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-        questionType:
-          type: string
-        value: {}
-      required:
-        - key
-        - label
-        - questionType
-        - value
-
+      - id
+      - type
+      - message
+      - timestamp
+      title: ActivityItem
     AnalyticsOverview:
-      type: object
       properties:
-        submissionsByProject:
-          type: array
-          items:
-            $ref: "#/components/schemas/ChartDataPoint"
-        submissionsByMonth:
-          type: array
-          items:
-            $ref: "#/components/schemas/ChartDataPoint"
+        totalSubmissions:
+          type: integer
+          title: Totalsubmissions
         submissionsByStatus:
-          type: array
           items:
-            $ref: "#/components/schemas/ChartDataPoint"
-        submissionsByCountry:
+            $ref: '#/components/schemas/StatusCount'
           type: array
+          title: Submissionsbystatus
+        submissionsByProject:
           items:
-            $ref: "#/components/schemas/ChartDataPoint"
+            $ref: '#/components/schemas/ChartDataPoint'
+          type: array
+          title: Submissionsbyproject
         enumeratorPerformance:
-          type: array
           items:
-            $ref: "#/components/schemas/EnumeratorStat"
-      required:
-        - submissionsByProject
-        - submissionsByMonth
-        - submissionsByStatus
-        - submissionsByCountry
-        - enumeratorPerformance
-
-    ProjectAnalytics:
-      type: object
-      properties:
-        projectId:
-          type: string
-        projectName:
-          type: string
+            $ref: '#/components/schemas/app__schemas__misc__EnumeratorStat'
+          type: array
+          title: Enumeratorperformance
         fieldDistributions:
-          type: array
           items:
-            $ref: "#/components/schemas/FieldDistribution"
-        submissionsOverTime:
+            $ref: '#/components/schemas/FieldDistribution'
           type: array
-          items:
-            $ref: "#/components/schemas/ChartDataPoint"
-        enumeratorStats:
-          type: array
-          items:
-            $ref: "#/components/schemas/EnumeratorStat"
-      required:
-        - projectId
-        - projectName
-        - fieldDistributions
-        - submissionsOverTime
-        - enumeratorStats
-
-    ChartDataPoint:
+          title: Fielddistributions
+          default: []
       type: object
+      required:
+      - totalSubmissions
+      - submissionsByStatus
+      - submissionsByProject
+      - enumeratorPerformance
+      title: AnalyticsOverview
+    ChartDataPoint:
       properties:
         label:
           type: string
+          title: Label
         value:
           type: number
-        color:
-          type: ["string", "null"]
+          title: Value
+      type: object
       required:
-        - label
-        - value
-        - color
-
-    FieldDistribution:
-      type: object
-      properties:
-        fieldName:
-          type: string
-        fieldLabel:
-          type: string
-        type:
-          type: string
-          enum: [bar, pie, line, table]
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/ChartDataPoint"
-      required:
-        - fieldName
-        - fieldLabel
-        - type
-        - data
-
-    EnumeratorStat:
-      type: object
-      properties:
-        name:
-          type: string
-        submissionCount:
-          type: integer
-        validatedCount:
-          type: integer
-        lastActive:
-          type: ["string", "null"]
-      required:
-        - name
-        - submissionCount
-        - validatedCount
-        - lastActive
-
-    TrendPoint:
-      type: object
-      properties:
-        date:
-          type: string
-        submissions:
-          type: integer
-        projects:
-          type: integer
-      required:
-        - date
-        - submissions
-        - projects
-
-    Insight:
-      type: object
-      properties:
-        id:
-          type: string
-        title:
-          type: string
-        summary:
-          type: string
-        content:
-          type: string
-        type:
-          type: string
-          enum: [trend, anomaly, recommendation, summary]
-        projectId:
-          type: ["string", "null"]
-        projectName:
-          type: ["string", "null"]
-        severity:
-          type: string
-          enum: [info, warning, critical]
-        createdAt:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-      required:
-        - id
-        - title
-        - summary
-        - content
-        - type
-        - projectId
-        - projectName
-        - severity
-        - createdAt
-        - tags
-
-    InsightInput:
-      type: object
-      properties:
-        projectId:
-          type: ["string", "null"]
-        question:
-          type: string
-        type:
-          type: string
-          enum: [trend, anomaly, recommendation, summary]
-      required:
-        - question
-        - type
-
-    Prompt:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        description:
-          type: ["string", "null"]
-        content:
-          type: string
-        category:
-          type: string
-          enum: [executive, field, compliance, donor, custom]
-        projectIds:
-          type: array
-          items:
-            type: string
-        createdAt:
-          type: string
-        updatedAt:
-          type: string
-      required:
-        - id
-        - name
-        - description
-        - content
-        - category
-        - projectIds
-        - createdAt
-        - updatedAt
-
-    PromptInput:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-        content:
-          type: string
-        category:
-          type: string
-          enum: [executive, field, compliance, donor, custom]
-        projectIds:
-          type: array
-          items:
-            type: string
-      required:
-        - name
-        - content
-        - category
-
-    PromptUpdate:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-        content:
-          type: string
-        category:
-          type: string
-          enum: [executive, field, compliance, donor, custom]
-        projectIds:
-          type: array
-          items:
-            type: string
-
-    Report:
-      type: object
-      properties:
-        id:
-          type: string
-        title:
-          type: string
-        description:
-          type: ["string", "null"]
-        status:
-          type: string
-          enum: [draft, generating, ready, failed]
-        format:
-          type: string
-          enum: [pdf, excel, both]
-        promptId:
-          type: ["string", "null"]
-        promptName:
-          type: ["string", "null"]
-        projectIds:
-          type: array
-          items:
-            type: string
-        projectNames:
-          type: array
-          items:
-            type: string
-        generatedContent:
-          type: ["string", "null"]
-        downloadUrl:
-          type: ["string", "null"]
-        createdAt:
-          type: string
-        generatedAt:
-          type: ["string", "null"]
-        pageCount:
-          type: ["integer", "null"]
-        fileSizeKb:
-          type: ["number", "null"]
-      required:
-        - id
-        - title
-        - description
-        - status
-        - format
-        - promptId
-        - promptName
-        - projectIds
-        - projectNames
-        - generatedContent
-        - downloadUrl
-        - createdAt
-        - generatedAt
-        - pageCount
-        - fileSizeKb
-
-    ReportInput:
-      type: object
-      properties:
-        title:
-          type: string
-        description:
-          type: string
-        format:
-          type: string
-          enum: [pdf, excel, both]
-        promptId:
-          type: string
-        projectIds:
-          type: array
-          items:
-            type: string
-      required:
-        - title
-        - format
-        - projectIds
-
-    ShareReportInput:
-      type: object
-      properties:
-        recipients:
-          type: array
-          items:
-            type: string
-        subject:
-          type: string
-        message:
-          type: string
-      required:
-        - recipients
-        - subject
-
-    ShareResult:
-      type: object
+      - label
+      - value
+      title: ChartDataPoint
+    ConnectionTestResult:
       properties:
         success:
           type: boolean
-        recipientsCount:
-          type: integer
+          title: Success
         message:
           type: string
-      required:
-        - success
-        - recipientsCount
-        - message
-
-    Settings:
+          title: Message
+        details:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Details
       type: object
-      properties:
-        kobo:
-          $ref: "#/components/schemas/KoboSettings"
-        smtp:
-          $ref: "#/components/schemas/SmtpSettings"
-        dailyReport:
-          $ref: "#/components/schemas/DailyReportSettings"
-        general:
-          $ref: "#/components/schemas/GeneralSettings"
       required:
-        - kobo
-        - smtp
-        - dailyReport
-        - general
-
-    KoboSettings:
-      type: object
-      properties:
-        serverUrl:
-          type: string
-        apiToken:
-          type: string
-        username:
-          type: string
-        autoSync:
-          type: boolean
-        syncIntervalHours:
-          type: integer
-        connected:
-          type: boolean
-        lastTestedAt:
-          type: ["string", "null"]
-      required:
-        - serverUrl
-        - apiToken
-        - username
-        - autoSync
-        - syncIntervalHours
-        - connected
-        - lastTestedAt
-
-    SmtpSettings:
-      type: object
-      properties:
-        host:
-          type: string
-        port:
-          type: integer
-        username:
-          type: string
-        password:
-          type: string
-        fromName:
-          type: string
-        fromEmail:
-          type: string
-        useTls:
-          type: boolean
-        connected:
-          type: boolean
-        lastTestedAt:
-          type: ["string", "null"]
-      required:
-        - host
-        - port
-        - username
-        - password
-        - fromName
-        - fromEmail
-        - useTls
-        - connected
-        - lastTestedAt
-
+      - success
+      - message
+      title: ConnectionTestResult
     DailyReportSettings:
-      type: object
       properties:
         enabled:
           type: boolean
+          title: Enabled
         sendTime:
           type: string
-          description: Local time HH:mm in the report timezone
+          title: Sendtime
         timezone:
           type: string
+          title: Timezone
         recipients:
-          type: array
           items:
             type: string
+          type: array
+          title: Recipients
         lastSentOn:
-          type: ["string", "null"]
-          description: Calendar date YYYY-MM-DD of the last successful send
-      required:
-        - enabled
-        - sendTime
-        - timezone
-        - recipients
-        - lastSentOn
-
-    GeneralSettings:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsenton
       type: object
+      required:
+      - enabled
+      - sendTime
+      - timezone
+      - recipients
+      title: DailyReportSettings
+    DashboardSummary:
+      properties:
+        totalProjects:
+          type: integer
+          title: Totalprojects
+        totalSubmissions:
+          type: integer
+          title: Totalsubmissions
+        submissionsThisMonth:
+          type: integer
+          title: Submissionsthismonth
+        activeEnumerators:
+          type: integer
+          title: Activeenumerators
+        pendingReports:
+          type: integer
+          title: Pendingreports
+        lastSyncAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsyncat
+        submissionsByStatus:
+          items:
+            $ref: '#/components/schemas/StatusCount'
+          type: array
+          title: Submissionsbystatus
+        topProjects:
+          items:
+            $ref: '#/components/schemas/ProjectSummary'
+          type: array
+          title: Topprojects
+      type: object
+      required:
+      - totalProjects
+      - totalSubmissions
+      - submissionsThisMonth
+      - activeEnumerators
+      - pendingReports
+      - submissionsByStatus
+      - topProjects
+      title: DashboardSummary
+    DqaDailySettings:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+          default: false
+        sendTime:
+          type: string
+          title: Sendtime
+          default: '21:30'
+        timezone:
+          type: string
+          title: Timezone
+          default: Asia/Kolkata
+        recipients:
+          items:
+            type: string
+          type: array
+          title: Recipients
+          default: []
+        lastSentOn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsenton
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      type: object
+      title: DqaDailySettings
+      description: Separate from the submission daily digest — DQA Daily HTML+PDF
+        email.
+    DqaFlagOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        submissionId:
+          type: string
+          title: Submissionid
+        projectId:
+          type: string
+          title: Projectid
+        ruleId:
+          type: string
+          title: Ruleid
+        severity:
+          type: string
+          title: Severity
+        title:
+          type: string
+          title: Title
+        message:
+          type: string
+          title: Message
+        details:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Details
+        evaluatedAt:
+          type: string
+          title: Evaluatedat
+        enumerator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enumerator
+        projectName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectname
+        koboId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Koboid
+        submittedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Submittedat
+      type: object
+      required:
+      - id
+      - submissionId
+      - projectId
+      - ruleId
+      - severity
+      - title
+      - message
+      - evaluatedAt
+      title: DqaFlagOut
+    DqaRecomputeResult:
+      properties:
+        projectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+        submissions:
+          type: integer
+          title: Submissions
+        flaggedSubmissions:
+          type: integer
+          title: Flaggedsubmissions
+        flags:
+          type: integer
+          title: Flags
+      type: object
+      required:
+      - submissions
+      - flaggedSubmissions
+      - flags
+      title: DqaRecomputeResult
+    DqaRuleCount:
+      properties:
+        ruleId:
+          type: string
+          title: Ruleid
+        title:
+          type: string
+          title: Title
+        severity:
+          type: string
+          title: Severity
+        count:
+          type: integer
+          title: Count
+      type: object
+      required:
+      - ruleId
+      - title
+      - severity
+      - count
+      title: DqaRuleCount
+    DqaSummary:
+      properties:
+        projectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+        totalSubmissions:
+          type: integer
+          title: Totalsubmissions
+        flaggedSubmissions:
+          type: integer
+          title: Flaggedsubmissions
+        flaggedPct:
+          type: number
+          title: Flaggedpct
+        redFlags:
+          type: integer
+          title: Redflags
+        amberFlags:
+          type: integer
+          title: Amberflags
+        byRule:
+          items:
+            $ref: '#/components/schemas/DqaRuleCount'
+          type: array
+          title: Byrule
+      type: object
+      required:
+      - totalSubmissions
+      - flaggedSubmissions
+      - flaggedPct
+      - redFlags
+      - amberFlags
+      - byRule
+      title: DqaSummary
+    FieldDistribution:
+      properties:
+        field:
+          type: string
+          title: Field
+        type:
+          type: string
+          title: Type
+        data:
+          items:
+            $ref: '#/components/schemas/ChartDataPoint'
+          type: array
+          title: Data
+      type: object
+      required:
+      - field
+      - type
+      - data
+      title: FieldDistribution
+    FormFieldOut:
+      properties:
+        name:
+          type: string
+          title: Name
+        type:
+          type: string
+          title: Type
+        label:
+          type: string
+          title: Label
+        listName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Listname
+        choices:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Choices
+          default: []
+      type: object
+      required:
+      - name
+      - type
+      - label
+      title: FormFieldOut
+    FormResponse:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        questionType:
+          type: string
+          title: Questiontype
+        value:
+          title: Value
+      type: object
+      required:
+      - key
+      - label
+      - questionType
+      - value
+      title: FormResponse
+    GeneralSettings:
       properties:
         organizationName:
           type: string
+          title: Organizationname
         timezone:
           type: string
+          title: Timezone
         dateFormat:
           type: string
+          title: Dateformat
         language:
           type: string
+          title: Language
         aiEnabled:
           type: boolean
+          title: Aienabled
         aiProvider:
           type: string
-          enum: [openai, anthropic, gemini]
+          title: Aiprovider
         aiApiKey:
           type: string
+          title: Aiapikey
+        aiBaseUrl:
+          type: string
+          title: Aibaseurl
+          default: https://openrouter.ai/api/v1
+        aiModel:
+          type: string
+          title: Aimodel
+          default: nvidia/nemotron-3-super-120b-a12b:free
+        aiTemperature:
+          type: number
+          title: Aitemperature
+          default: 0.3
+        aiMaxTokens:
+          type: integer
+          title: Aimaxtokens
+          default: 2048
+        aiTimeoutSeconds:
+          type: integer
+          title: Aitimeoutseconds
+          default: 60
         reportLogoUrl:
-          type: ["string", "null"]
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reportlogourl
+      type: object
       required:
-        - organizationName
-        - timezone
-        - dateFormat
-        - language
-        - aiEnabled
-        - aiProvider
-        - aiApiKey
-        - reportLogoUrl
-
-    SettingsInput:
-      type: object
+      - organizationName
+      - timezone
+      - dateFormat
+      - language
+      - aiEnabled
+      - aiProvider
+      - aiApiKey
+      title: GeneralSettings
+    GenerateDqaDailyInput:
       properties:
-        kobo:
-          $ref: "#/components/schemas/KoboSettings"
-        smtp:
-          $ref: "#/components/schemas/SmtpSettings"
-        dailyReport:
-          $ref: "#/components/schemas/DailyReportSettings"
-        general:
-          $ref: "#/components/schemas/GeneralSettings"
-
-    ConnectionTestResult:
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        reportDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reportdate
+        sendEmail:
+          type: boolean
+          title: Sendemail
+          default: false
+        runAi:
+          type: boolean
+          title: Runai
+          default: true
       type: object
+      title: GenerateDqaDailyInput
+    GenerateDqaFinalInput:
+      properties:
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        runAi:
+          type: boolean
+          title: Runai
+          default: true
+        sendEmail:
+          type: boolean
+          title: Sendemail
+          default: false
+      type: object
+      title: GenerateDqaFinalInput
+    GridCell:
+      properties:
+        value:
+          type: string
+          title: Value
+          default: ''
+        severity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+        flags:
+          items:
+            $ref: '#/components/schemas/GridFlagRef'
+          type: array
+          title: Flags
+          default: []
+      type: object
+      title: GridCell
+    GridColumn:
+      properties:
+        key:
+          type: string
+          title: Key
+        code:
+          type: string
+          title: Code
+        label:
+          type: string
+          title: Label
+        type:
+          type: string
+          title: Type
+          default: ''
+        filled:
+          type: integer
+          title: Filled
+          default: 0
+        flagged:
+          type: integer
+          title: Flagged
+          default: 0
+        extra:
+          type: boolean
+          title: Extra
+          default: false
+      type: object
+      required:
+      - key
+      - code
+      - label
+      title: GridColumn
+    GridFlagRef:
+      properties:
+        id:
+          type: string
+          title: Id
+        ruleId:
+          type: string
+          title: Ruleid
+        severity:
+          type: string
+          title: Severity
+        title:
+          type: string
+          title: Title
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - id
+      - ruleId
+      - severity
+      - title
+      - message
+      title: GridFlagRef
+    GridRow:
+      properties:
+        submissionId:
+          type: string
+          title: Submissionid
+        displayId:
+          type: string
+          title: Displayid
+        koboId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Koboid
+        enumerator:
+          type: string
+          title: Enumerator
+          default: ''
+        submittedAt:
+          type: string
+          title: Submittedat
+          default: ''
+        status:
+          type: string
+          title: Status
+          default: ''
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        severity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+        redFlags:
+          type: integer
+          title: Redflags
+          default: 0
+        amberFlags:
+          type: integer
+          title: Amberflags
+          default: 0
+        cells:
+          additionalProperties:
+            $ref: '#/components/schemas/GridCell'
+          type: object
+          title: Cells
+          default: {}
+        rowFlags:
+          items:
+            $ref: '#/components/schemas/GridFlagRef'
+          type: array
+          title: Rowflags
+          default: []
+      type: object
+      required:
+      - submissionId
+      - displayId
+      title: GridRow
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthStatus:
+      properties:
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - status
+      title: HealthStatus
+    InsightInput:
+      properties:
+        title:
+          type: string
+          title: Title
+        summary:
+          type: string
+          title: Summary
+          default: ''
+        content:
+          type: string
+          title: Content
+          default: ''
+        type:
+          type: string
+          title: Type
+          default: summary
+        projectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+        projectName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectname
+        severity:
+          type: string
+          title: Severity
+          default: info
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+          default: []
+      type: object
+      required:
+      - title
+      title: InsightInput
+    InsightOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        summary:
+          type: string
+          title: Summary
+        content:
+          type: string
+          title: Content
+        type:
+          type: string
+          title: Type
+        projectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+        projectName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectname
+        severity:
+          type: string
+          title: Severity
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        createdAt:
+          type: string
+          title: Createdat
+      type: object
+      required:
+      - id
+      - title
+      - summary
+      - content
+      - type
+      - severity
+      - tags
+      - createdAt
+      title: InsightOut
+    KoboSettings:
+      properties:
+        serverUrl:
+          type: string
+          title: Serverurl
+        apiToken:
+          type: string
+          title: Apitoken
+        username:
+          type: string
+          title: Username
+        autoSync:
+          type: boolean
+          title: Autosync
+        syncIntervalHours:
+          type: integer
+          title: Syncintervalhours
+        connected:
+          type: boolean
+          title: Connected
+        lastTestedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lasttestedat
+      type: object
+      required:
+      - serverUrl
+      - apiToken
+      - username
+      - autoSync
+      - syncIntervalHours
+      - connected
+      title: KoboSettings
+    OkResponse:
       properties:
         success:
           type: boolean
+          title: Success
+          default: true
+      type: object
+      title: OkResponse
+    ProjectAnalytics:
+      properties:
+        projectId:
+          type: string
+          title: Projectid
+        projectName:
+          type: string
+          title: Projectname
+        totalSubmissions:
+          type: integer
+          title: Totalsubmissions
+        submissionsByStatus:
+          items:
+            $ref: '#/components/schemas/StatusCount'
+          type: array
+          title: Submissionsbystatus
+        enumeratorStats:
+          items:
+            $ref: '#/components/schemas/app__schemas__misc__EnumeratorStat'
+          type: array
+          title: Enumeratorstats
+        fieldDistributions:
+          items:
+            $ref: '#/components/schemas/FieldDistribution'
+          type: array
+          title: Fielddistributions
+          default: []
+        timeline:
+          items:
+            $ref: '#/components/schemas/ChartDataPoint'
+          type: array
+          title: Timeline
+          default: []
+      type: object
+      required:
+      - projectId
+      - projectName
+      - totalSubmissions
+      - submissionsByStatus
+      - enumeratorStats
+      title: ProjectAnalytics
+    ProjectDqaStat:
+      properties:
+        projectId:
+          type: string
+          title: Projectid
+        projectName:
+          type: string
+          title: Projectname
+        totalSubmissions:
+          type: integer
+          title: Totalsubmissions
+        cleanSubmissions:
+          type: integer
+          title: Cleansubmissions
+        amberSubmissions:
+          type: integer
+          title: Ambersubmissions
+        redSubmissions:
+          type: integer
+          title: Redsubmissions
+        redFlags:
+          type: integer
+          title: Redflags
+        amberFlags:
+          type: integer
+          title: Amberflags
+        flaggedPct:
+          type: number
+          title: Flaggedpct
+      type: object
+      required:
+      - projectId
+      - projectName
+      - totalSubmissions
+      - cleanSubmissions
+      - amberSubmissions
+      - redSubmissions
+      - redFlags
+      - amberFlags
+      - flaggedPct
+      title: ProjectDqaStat
+    ProjectOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        uid:
+          type: string
+          title: Uid
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        status:
+          type: string
+          title: Status
+        submissionCount:
+          type: integer
+          title: Submissioncount
+        formCount:
+          type: integer
+          title: Formcount
+        enumeratorCount:
+          type: integer
+          title: Enumeratorcount
+        questionCount:
+          type: integer
+          title: Questioncount
+        owner:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Owner
+        lastEditedBy:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lasteditedby
+        lastModifiedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastmodifiedat
+        lastSubmissionAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsubmissionat
+        lastSyncAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsyncat
+        createdAt:
+          type: string
+          title: Createdat
+        deployedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Deployedat
+        formVersionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Formversionid
+        deployedVersionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Deployedversionid
+        currentVersionNumber:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Currentversionnumber
+        deployedVersionNumber:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deployedversionnumber
+        syncStatus:
+          type: string
+          title: Syncstatus
+        syncError:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Syncerror
+        sector:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sector
+        country:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Country
+        labelLanguage:
+          type: string
+          title: Labellanguage
+        availableLabelLanguages:
+          items:
+            type: string
+          type: array
+          title: Availablelabellanguages
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        toolCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Toolcode
+        studyName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyname
+      type: object
+      required:
+      - id
+      - uid
+      - name
+      - status
+      - submissionCount
+      - formCount
+      - enumeratorCount
+      - questionCount
+      - createdAt
+      - syncStatus
+      - labelLanguage
+      - availableLabelLanguages
+      title: ProjectOut
+    ProjectSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        submissionCount:
+          type: integer
+          title: Submissioncount
+        lastSubmissionAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsubmissionat
+      type: object
+      required:
+      - id
+      - name
+      - submissionCount
+      title: ProjectSummary
+    ProjectUpdate:
+      properties:
+        labelLanguage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Labellanguage
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        toolCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Toolcode
+      type: object
+      title: ProjectUpdate
+    PromptInput:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+          default: ''
+        content:
+          type: string
+          title: Content
+          default: ''
+        category:
+          type: string
+          title: Category
+          default: general
+        projectIds:
+          items:
+            type: string
+          type: array
+          title: Projectids
+          default: []
+      type: object
+      required:
+      - name
+      title: PromptInput
+    PromptOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        content:
+          type: string
+          title: Content
+        category:
+          type: string
+          title: Category
+        projectIds:
+          items:
+            type: string
+          type: array
+          title: Projectids
+        createdAt:
+          type: string
+          title: Createdat
+        updatedAt:
+          type: string
+          title: Updatedat
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - content
+      - category
+      - projectIds
+      - createdAt
+      - updatedAt
+      title: PromptOut
+    PromptUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        projectIds:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Projectids
+      type: object
+      title: PromptUpdate
+    ReportInput:
+      properties:
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+          default: ''
+        format:
+          type: string
+          title: Format
+          default: pdf
+        reportType:
+          type: string
+          title: Reporttype
+          default: custom
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        reportDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reportdate
+        promptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Promptid
+        projectIds:
+          items:
+            type: string
+          type: array
+          title: Projectids
+          default: []
+      type: object
+      required:
+      - title
+      title: ReportInput
+    ReportOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        status:
+          type: string
+          title: Status
+        format:
+          type: string
+          title: Format
+        reportType:
+          type: string
+          title: Reporttype
+          default: custom
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        reportDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reportdate
+        promptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Promptid
+        promptName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Promptname
+        projectIds:
+          items:
+            type: string
+          type: array
+          title: Projectids
+        projectNames:
+          items:
+            type: string
+          type: array
+          title: Projectnames
+        generatedContent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Generatedcontent
+        downloadUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Downloadurl
+        pageCount:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pagecount
+        fileSizeKb:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Filesizekb
+        generatedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Generatedat
+        createdAt:
+          type: string
+          title: Createdat
+      type: object
+      required:
+      - id
+      - title
+      - description
+      - status
+      - format
+      - projectIds
+      - projectNames
+      - createdAt
+      title: ReportOut
+    RulePackOut:
+      properties:
+        projectId:
+          type: string
+          title: Projectid
+        pack:
+          additionalProperties: true
+          type: object
+          title: Pack
+      type: object
+      required:
+      - projectId
+      - pack
+      title: RulePackOut
+    RulePackUpdate:
+      properties:
+        pack:
+          additionalProperties: true
+          type: object
+          title: Pack
+      type: object
+      required:
+      - pack
+      title: RulePackUpdate
+    SettingsOut:
+      properties:
+        kobo:
+          $ref: '#/components/schemas/KoboSettings'
+        smtp:
+          $ref: '#/components/schemas/SmtpSettings'
+        dailyReport:
+          $ref: '#/components/schemas/DailyReportSettings'
+        dqaDaily:
+          $ref: '#/components/schemas/DqaDailySettings'
+        general:
+          $ref: '#/components/schemas/GeneralSettings'
+      type: object
+      required:
+      - kobo
+      - smtp
+      - dailyReport
+      - dqaDaily
+      - general
+      title: SettingsOut
+    SettingsUpdate:
+      properties:
+        kobo:
+          anyOf:
+          - $ref: '#/components/schemas/KoboSettings'
+          - type: 'null'
+        smtp:
+          anyOf:
+          - $ref: '#/components/schemas/SmtpSettings'
+          - type: 'null'
+        dailyReport:
+          anyOf:
+          - $ref: '#/components/schemas/DailyReportSettings'
+          - type: 'null'
+        dqaDaily:
+          anyOf:
+          - $ref: '#/components/schemas/DqaDailySettings'
+          - type: 'null'
+        general:
+          anyOf:
+          - $ref: '#/components/schemas/GeneralSettings'
+          - type: 'null'
+      type: object
+      title: SettingsUpdate
+    ShareReportInput:
+      properties:
+        recipients:
+          items:
+            type: string
+          type: array
+          title: Recipients
+        subject:
+          type: string
+          title: Subject
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+      type: object
+      required:
+      - recipients
+      - subject
+      title: ShareReportInput
+    ShareResult:
+      properties:
+        success:
+          type: boolean
+          title: Success
+        recipientsCount:
+          type: integer
+          title: Recipientscount
         message:
           type: string
-        details:
-          type: ["string", "null"]
+          title: Message
+      type: object
       required:
-        - success
-        - message
-        - details
+      - success
+      - recipientsCount
+      - message
+      title: ShareResult
+    SmtpSettings:
+      properties:
+        host:
+          type: string
+          title: Host
+        port:
+          type: integer
+          title: Port
+        username:
+          type: string
+          title: Username
+        password:
+          type: string
+          title: Password
+        fromName:
+          type: string
+          title: Fromname
+        fromEmail:
+          type: string
+          title: Fromemail
+        useTls:
+          type: boolean
+          title: Usetls
+        connected:
+          type: boolean
+          title: Connected
+        lastTestedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lasttestedat
+      type: object
+      required:
+      - host
+      - port
+      - username
+      - password
+      - fromName
+      - fromEmail
+      - useTls
+      - connected
+      title: SmtpSettings
+    StatusCount:
+      properties:
+        status:
+          type: string
+          title: Status
+        count:
+          type: integer
+          title: Count
+      type: object
+      required:
+      - status
+      - count
+      title: StatusCount
+    StudyAssignProject:
+      properties:
+        projectId:
+          type: string
+          title: Projectid
+        toolCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Toolcode
+      type: object
+      required:
+      - projectId
+      title: StudyAssignProject
+    StudyCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        startDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Startdate
+        endDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enddate
+        timezone:
+          type: string
+          title: Timezone
+          default: Asia/Kolkata
+        targets:
+          additionalProperties: true
+          type: object
+          title: Targets
+          default: {}
+        formMap:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Formmap
+          default: []
+      type: object
+      required:
+      - name
+      title: StudyCreate
+    StudyOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        startDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Startdate
+        endDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enddate
+        timezone:
+          type: string
+          title: Timezone
+          default: Asia/Kolkata
+        targets:
+          additionalProperties: true
+          type: object
+          title: Targets
+          default: {}
+        formMap:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Formmap
+          default: []
+        dayNumber:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Daynumber
+        projectCount:
+          type: integer
+          title: Projectcount
+          default: 0
+        submissionCount:
+          type: integer
+          title: Submissioncount
+          default: 0
+        projects:
+          items:
+            $ref: '#/components/schemas/StudyProjectOut'
+          type: array
+          title: Projects
+          default: []
+        createdAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Createdat
+        updatedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updatedat
+      type: object
+      required:
+      - id
+      - name
+      title: StudyOut
+    StudyProjectOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        uid:
+          type: string
+          title: Uid
+        name:
+          type: string
+          title: Name
+        toolCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Toolcode
+        submissionCount:
+          type: integer
+          title: Submissioncount
+          default: 0
+        syncStatus:
+          type: string
+          title: Syncstatus
+          default: never
+      type: object
+      required:
+      - id
+      - uid
+      - name
+      title: StudyProjectOut
+    StudyUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        startDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Startdate
+        endDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enddate
+        timezone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Timezone
+        targets:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Targets
+        formMap:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Formmap
+      type: object
+      title: StudyUpdate
+    SubmissionGrid:
+      properties:
+        projectId:
+          type: string
+          title: Projectid
+        projectName:
+          type: string
+          title: Projectname
+        labelLanguage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Labellanguage
+        columns:
+          items:
+            $ref: '#/components/schemas/GridColumn'
+          type: array
+          title: Columns
+        rows:
+          items:
+            $ref: '#/components/schemas/GridRow'
+          type: array
+          title: Rows
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        limit:
+          type: integer
+          title: Limit
+        totalPages:
+          type: integer
+          title: Totalpages
+      type: object
+      required:
+      - projectId
+      - projectName
+      - columns
+      - rows
+      - total
+      - page
+      - limit
+      - totalPages
+      title: SubmissionGrid
+    SubmissionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        displayId:
+          type: string
+          title: Displayid
+        projectId:
+          type: string
+          title: Projectid
+        projectName:
+          type: string
+          title: Projectname
+        formId:
+          type: string
+          title: Formid
+        formName:
+          type: string
+          title: Formname
+        enumerator:
+          type: string
+          title: Enumerator
+        status:
+          type: string
+          title: Status
+        submittedAt:
+          type: string
+          title: Submittedat
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        data:
+          additionalProperties: true
+          type: object
+          title: Data
+        responses:
+          items:
+            $ref: '#/components/schemas/FormResponse'
+          type: array
+          title: Responses
+          default: []
+        attachmentCount:
+          type: integer
+          title: Attachmentcount
+      type: object
+      required:
+      - id
+      - displayId
+      - projectId
+      - projectName
+      - formId
+      - formName
+      - enumerator
+      - status
+      - submittedAt
+      - data
+      - attachmentCount
+      title: SubmissionOut
+    SubmissionsPage:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/SubmissionOut'
+          type: array
+          title: Data
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        limit:
+          type: integer
+          title: Limit
+        totalPages:
+          type: integer
+          title: Totalpages
+      type: object
+      required:
+      - data
+      - total
+      - page
+      - limit
+      - totalPages
+      title: SubmissionsPage
+    SyncResult:
+      properties:
+        success:
+          type: boolean
+          title: Success
+        projectsSynced:
+          type: integer
+          title: Projectssynced
+        submissionsFetched:
+          type: integer
+          title: Submissionsfetched
+        newSubmissions:
+          type: integer
+          title: Newsubmissions
+        syncedAt:
+          type: string
+          title: Syncedat
+        errors:
+          items:
+            type: string
+          type: array
+          title: Errors
+      type: object
+      required:
+      - success
+      - projectsSynced
+      - submissionsFetched
+      - newSubmissions
+      - syncedAt
+      - errors
+      title: SyncResult
+    TrendPoint:
+      properties:
+        date:
+          type: string
+          title: Date
+        submissions:
+          type: integer
+          title: Submissions
+        projects:
+          type: integer
+          title: Projects
+      type: object
+      required:
+      - date
+      - submissions
+      - projects
+      title: TrendPoint
+    TriangulationLink:
+      properties:
+        submissionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Submissionid
+        koboId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Koboid
+        enumerator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enumerator
+        submittedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Submittedat
+        projectName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectname
+      type: object
+      title: TriangulationLink
+    TriangulationPracticeStat:
+      properties:
+        id:
+          type: string
+          title: Id
+        label:
+          type: string
+          title: Label
+        claimedCount:
+          type: integer
+          title: Claimedcount
+          default: 0
+        observedCount:
+          type: integer
+          title: Observedcount
+          default: 0
+        n:
+          type: integer
+          title: N
+          default: 0
+        claimedPct:
+          type: number
+          title: Claimedpct
+          default: 0.0
+        observedPct:
+          type: number
+          title: Observedpct
+          default: 0.0
+        concordancePct:
+          type: number
+          title: Concordancepct
+          default: 0.0
+        gapPct:
+          type: number
+          title: Gappct
+          default: 0.0
+      type: object
+      required:
+      - id
+      - label
+      title: TriangulationPracticeStat
+    TriangulationRow:
+      properties:
+        udise:
+          type: string
+          title: Udise
+        schoolName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Schoolname
+        facility:
+          anyOf:
+          - $ref: '#/components/schemas/TriangulationLink'
+          - type: 'null'
+        teacher:
+          anyOf:
+          - $ref: '#/components/schemas/TriangulationLink'
+          - type: 'null'
+        parent:
+          anyOf:
+          - $ref: '#/components/schemas/TriangulationLink'
+          - type: 'null'
+        teacherHasCwd:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Teacherhascwd
+        parentReportsDisability:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Parentreportsdisability
+        claimedPractices:
+          items:
+            type: string
+          type: array
+          title: Claimedpractices
+          default: []
+        observedPractices:
+          items:
+            type: string
+          type: array
+          title: Observedpractices
+          default: []
+        practiceGap:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Practicegap
+        schoolMeetings:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Schoolmeetings
+        schoolCwdDiscussed:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Schoolcwddiscussed
+        schoolGovernanceActive:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Schoolgovernanceactive
+        parentAttendedPta:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Parentattendedpta
+        parentCwdIssues:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Parentcwdissues
+        mismatch:
+          type: boolean
+          title: Mismatch
+          default: false
+      type: object
+      required:
+      - udise
+      title: TriangulationRow
+    TriangulationViewInfo:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+      type: object
+      required:
+      - id
+      - title
+      title: TriangulationViewInfo
+    TriangulationViewOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        rows:
+          items:
+            $ref: '#/components/schemas/TriangulationRow'
+          type: array
+          title: Rows
+        mismatchCount:
+          type: integer
+          title: Mismatchcount
+        practices:
+          items:
+            $ref: '#/components/schemas/TriangulationPracticeStat'
+          type: array
+          title: Practices
+          default: []
+      type: object
+      required:
+      - id
+      - title
+      - rows
+      - mismatchCount
+      title: TriangulationViewOut
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    app__schemas__dqa__EnumeratorStat:
+      properties:
+        enumerator:
+          type: string
+          title: Enumerator
+        submissions:
+          type: integer
+          title: Submissions
+        flagged:
+          type: integer
+          title: Flagged
+        flaggedPct:
+          type: number
+          title: Flaggedpct
+        redFlags:
+          type: integer
+          title: Redflags
+        amberFlags:
+          type: integer
+          title: Amberflags
+          default: 0
+        medianDurationMinutes:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mediandurationminutes
+      type: object
+      required:
+      - enumerator
+      - submissions
+      - flagged
+      - flaggedPct
+      - redFlags
+      title: EnumeratorStat
+    app__schemas__misc__EnumeratorStat:
+      properties:
+        name:
+          type: string
+          title: Name
+        count:
+          type: integer
+          title: Count
+        projectCount:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Projectcount
+      type: object
+      required:
+      - name
+      - count
+      title: EnumeratorStat
+servers:
+- url: /api
+  description: Base API path

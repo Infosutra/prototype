@@ -3,6 +3,7 @@ import {
   getGetSettingsQueryKey,
   useGetSettings,
   useSendDailyReport,
+  useSendDqaDailyReport,
   useTestKoboConnection,
   useTestSmtpConnection,
   useUpdateSettings,
@@ -52,7 +53,6 @@ export default function Settings() {
   const [dqaDailyTime, setDqaDailyTime] = useState("21:30");
   const [dqaDailyRecipients, setDqaDailyRecipients] = useState("");
   const [dqaDailyStudyId, setDqaDailyStudyId] = useState("");
-  const [dqaDailySending, setDqaDailySending] = useState(false);
 
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiApiKey, setAiApiKey] = useState("");
@@ -133,6 +133,19 @@ export default function Settings() {
     mutation: {
       onSuccess: (result) => {
         setFeedback({ success: result.success, message: result.details ?? result.message });
+        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+      },
+      onError: (error) => setFeedback({ success: false, message: error.message }),
+    },
+  });
+
+  const sendDqaDailyReport = useSendDqaDailyReport({
+    mutation: {
+      onSuccess: (result) => {
+        setFeedback({
+          success: result.success,
+          message: result.details ?? result.message ?? "DQA Daily sent",
+        });
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
       },
       onError: (error) => setFeedback({ success: false, message: error.message }),
@@ -619,37 +632,16 @@ export default function Settings() {
                       variant="outline"
                       className="bg-card"
                       disabled={
-                        dqaDailySending ||
+                        sendDqaDailyReport.isPending ||
                         parseRecipientInput(dqaDailyRecipients).length === 0 ||
                         !settingsQuery.data?.smtp.connected
                       }
-                      onClick={async () => {
+                      onClick={() => {
                         setFeedback(null);
-                        setDqaDailySending(true);
-                        try {
-                          const res = await fetch("/api/settings/send-dqa-daily-report", {
-                            method: "POST",
-                          });
-                          const body = await res.json();
-                          if (!res.ok) {
-                            throw new Error(body.details || body.message || "Send failed");
-                          }
-                          setFeedback({
-                            success: true,
-                            message: body.details || body.message || "DQA Daily sent",
-                          });
-                          queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-                        } catch (err) {
-                          setFeedback({
-                            success: false,
-                            message: err instanceof Error ? err.message : "Send failed",
-                          });
-                        } finally {
-                          setDqaDailySending(false);
-                        }
+                        sendDqaDailyReport.mutate();
                       }}
                     >
-                      {dqaDailySending ? "Sending…" : "Send DQA Daily now"}
+                      {sendDqaDailyReport.isPending ? "Sending…" : "Send DQA Daily now"}
                     </Button>
                   </div>
 

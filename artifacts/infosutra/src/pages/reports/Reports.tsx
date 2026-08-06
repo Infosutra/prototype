@@ -1,5 +1,13 @@
 import React, { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetReportsQueryKey,
+  useCreateDqaDailyReport,
+  useCreateDqaFinalReport,
+  useDeleteReport,
+  useGetReports,
+  type ReportOut,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -16,54 +24,43 @@ import {
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
 import { formatReportDatetime } from "@/lib/datetime";
-import { reportsApi, type Report } from "@/lib/reports-api";
+import { reportDownloadUrl, reportPreviewUrl } from "@/lib/report-urls";
 
 export default function Reports() {
   const { activeStudy, activeStudyId } = useStudy();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
-  const listQuery = useQuery({
-    queryKey: ["reports", activeStudyId],
-    queryFn: () =>
-      reportsApi.list({
-        studyId: activeStudyId || undefined,
-      }),
-    enabled: Boolean(activeStudyId),
-  });
+  const listQuery = useGetReports(
+    { studyId: activeStudyId || undefined },
+    { query: { enabled: Boolean(activeStudyId) } as never },
+  );
 
-  const generateDaily = useMutation({
-    mutationFn: () =>
-      reportsApi.generateDqaDaily({
-        studyId: activeStudyId || undefined,
-        runAi: true,
-        sendEmail: false,
-      }),
-    onSuccess: () => {
-      setError(null);
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
+  const generateDaily = useCreateDqaDailyReport({
+    mutation: {
+      onSuccess: () => {
+        setError(null);
+        queryClient.invalidateQueries({ queryKey: getGetReportsQueryKey() });
+      },
+      onError: (err) => setError(err.message),
     },
-    onError: (err: Error) => setError(err.message),
   });
 
-  const generateFinal = useMutation({
-    mutationFn: () =>
-      reportsApi.generateDqaFinal({
-        studyId: activeStudyId || undefined,
-        runAi: true,
-        sendEmail: false,
-      }),
-    onSuccess: () => {
-      setError(null);
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
+  const generateFinal = useCreateDqaFinalReport({
+    mutation: {
+      onSuccess: () => {
+        setError(null);
+        queryClient.invalidateQueries({ queryKey: getGetReportsQueryKey() });
+      },
+      onError: (err) => setError(err.message),
     },
-    onError: (err: Error) => setError(err.message),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => reportsApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reports"] }),
-    onError: (err: Error) => setError(err.message),
+  const remove = useDeleteReport({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetReportsQueryKey() }),
+      onError: (err) => setError(err.message),
+    },
   });
 
   const reports = (listQuery.data ?? []).filter(
@@ -88,7 +85,15 @@ export default function Reports() {
               size="sm"
               variant="outline"
               disabled={!activeStudyId || busy}
-              onClick={() => generateDaily.mutate()}
+              onClick={() =>
+                generateDaily.mutate({
+                  data: {
+                    studyId: activeStudyId || undefined,
+                    runAi: true,
+                    sendEmail: false,
+                  },
+                })
+              }
             >
               <Sparkles className={`w-4 h-4 mr-2 ${generateDaily.isPending ? "animate-pulse" : ""}`} />
               {generateDaily.isPending ? "Generating…" : "DQA Daily"}
@@ -97,7 +102,15 @@ export default function Reports() {
               size="sm"
               className="bg-primary text-primary-foreground"
               disabled={!activeStudyId || busy}
-              onClick={() => generateFinal.mutate()}
+              onClick={() =>
+                generateFinal.mutate({
+                  data: {
+                    studyId: activeStudyId || undefined,
+                    runAi: true,
+                    sendEmail: false,
+                  },
+                })
+              }
             >
               <FileBarChart className={`w-4 h-4 mr-2 ${generateFinal.isPending ? "animate-pulse" : ""}`} />
               {generateFinal.isPending ? "Generating…" : "Final DQA"}
@@ -143,7 +156,7 @@ export default function Reports() {
             </Card>
           )}
 
-          {reports.map((report: Report) => (
+          {reports.map((report: ReportOut) => (
             <Card key={report.id} className="overflow-hidden">
               <CardContent className="p-5 flex flex-col md:flex-row gap-4 md:items-center">
                 <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center shrink-0">
@@ -169,19 +182,19 @@ export default function Reports() {
                 </div>
                 <div className="flex flex-wrap gap-2 justify-end">
                   <Button variant="outline" size="sm" asChild>
-                    <a href={reportsApi.previewUrl(report.id)} target="_blank" rel="noreferrer">
+                    <a href={reportPreviewUrl(report.id)} target="_blank" rel="noreferrer">
                       <ExternalLink className="w-4 h-4 mr-1.5" />
                       Preview
                     </a>
                   </Button>
                   <Button variant="outline" size="sm" asChild>
-                    <a href={reportsApi.downloadUrl(report.id, "pdf")} download>
+                    <a href={reportDownloadUrl(report.id, "pdf")} download>
                       <Download className="w-4 h-4 mr-1.5" />
                       PDF
                     </a>
                   </Button>
                   <Button variant="outline" size="sm" asChild>
-                    <a href={reportsApi.downloadUrl(report.id, "docx")} download>
+                    <a href={reportDownloadUrl(report.id, "docx")} download>
                       <Download className="w-4 h-4 mr-1.5" />
                       DOCX
                     </a>
@@ -191,7 +204,7 @@ export default function Reports() {
                     size="sm"
                     className="text-destructive"
                     disabled={remove.isPending}
-                    onClick={() => remove.mutate(report.id)}
+                    onClick={() => remove.mutate({ reportId: report.id })}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>

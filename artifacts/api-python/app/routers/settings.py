@@ -14,13 +14,18 @@ from app.integrations.smtp import SmtpError
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-@router.get("", response_model=SettingsOut)
+@router.get("", response_model=SettingsOut, operation_id="getSettings")
 def get_settings(db: Session = Depends(get_db)) -> SettingsOut:
     row = settings_service.get_or_create_settings(db)
     return settings_service.to_settings_out(row)
 
 
-@router.put("", response_model=SettingsOut)
+@router.put(
+    "",
+    response_model=SettingsOut,
+    operation_id="updateSettings",
+    responses={400: {"description": "Bad request"}},
+)
 def put_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> SettingsOut:
     try:
         return settings_service.update_settings(db, payload)
@@ -28,17 +33,22 @@ def put_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> Sett
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
-@router.post("/test-kobo", response_model=ConnectionTestResult)
+@router.post("/test-kobo", response_model=ConnectionTestResult, operation_id="testKoboConnection")
 def test_kobo(db: Session = Depends(get_db)) -> ConnectionTestResult:
     return settings_service.test_kobo(db)
 
 
-@router.post("/test-smtp", response_model=ConnectionTestResult)
+@router.post("/test-smtp", response_model=ConnectionTestResult, operation_id="testSmtpConnection")
 def test_smtp(db: Session = Depends(get_db)) -> ConnectionTestResult:
     return settings_service.test_smtp(db)
 
 
-@router.post("/send-daily-report", response_model=ConnectionTestResult)
+@router.post(
+    "/send-daily-report",
+    response_model=ConnectionTestResult,
+    operation_id="sendDailyReport",
+    responses={400: {"description": "Bad request"}},
+)
 def send_daily_report(db: Session = Depends(get_db)) -> ConnectionTestResult:
     try:
         report, recipients = daily_report_service.send_daily_report_now(db)
@@ -61,7 +71,12 @@ def send_daily_report(db: Session = Depends(get_db)) -> ConnectionTestResult:
         )
 
 
-@router.post("/send-dqa-daily-report", response_model=ConnectionTestResult)
+@router.post(
+    "/send-dqa-daily-report",
+    response_model=ConnectionTestResult,
+    operation_id="sendDqaDailyReport",
+    responses={400: {"description": "Bad request"}},
+)
 def send_dqa_daily_report(db: Session = Depends(get_db)) -> ConnectionTestResult:
     """Generate and email today's DQA Daily (separate from submission digest)."""
     from app.services import dqa_daily_report as dqa_daily

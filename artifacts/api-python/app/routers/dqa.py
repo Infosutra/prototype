@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from statistics import median
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import DqaFlag, Project, Submission
 from app.db.session import get_db
+from app.schemas.common import DqaFlagsQuery, ProjectIdQuery, StudyIdQuery, StudyProjectQuery
 from app.schemas.dqa import (
     DqaFlagOut,
     DqaRecomputeResult,
@@ -79,12 +81,13 @@ def _flag_out(
     )
 
 
-@router.get("/summary", response_model=DqaSummary)
+@router.get("/summary", response_model=DqaSummary, operation_id="getDqaSummary")
 def dqa_summary(
-    project_id: str | None = Query(default=None, alias="projectId"),
-    study_id: str | None = Query(default=None, alias="studyId"),
+    q: Annotated[StudyProjectQuery, Query()],
     db: Session = Depends(get_db),
 ) -> DqaSummary:
+    project_id = q.project_id
+    study_id = q.study_id
     sub_q = select(Submission)
     flag_q = select(DqaFlag)
     if study_id and not project_id:
@@ -137,12 +140,13 @@ def dqa_summary(
     )
 
 
-@router.get("/by-project", response_model=list[ProjectDqaStat])
+@router.get("/by-project", response_model=list[ProjectDqaStat], operation_id="getDqaByProject")
 def dqa_by_project(
-    study_id: str | None = Query(default=None, alias="studyId"),
+    q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ProjectDqaStat]:
     """Per-project DQA metrics aligned with the Data Quality dashboard."""
+    study_id = q.study_id
     project_q = select(Project).order_by(Project.name)
     if study_id:
         project_q = project_q.where(Project.study_id == study_id)
@@ -209,17 +213,18 @@ def dqa_by_project(
     return sorted(results, key=lambda r: (-r.flagged_pct, -r.total_submissions, r.project_name))
 
 
-@router.get("/flags", response_model=list[DqaFlagOut])
+@router.get("/flags", response_model=list[DqaFlagOut], operation_id="getDqaFlags")
 def list_flags(
-    project_id: str | None = Query(default=None, alias="projectId"),
-    study_id: str | None = Query(default=None, alias="studyId"),
-    submission_id: str | None = Query(default=None, alias="submissionId"),
-    rule_id: str | None = Query(default=None, alias="ruleId"),
-    severity: str | None = None,
-    enumerator: str | None = None,
-    limit: int = Query(default=500, ge=1, le=2000),
+    params: Annotated[DqaFlagsQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[DqaFlagOut]:
+    project_id = params.project_id
+    study_id = params.study_id
+    submission_id = params.submission_id
+    rule_id = params.rule_id
+    severity = params.severity
+    enumerator = params.enumerator
+    limit = params.limit
     q = select(DqaFlag).order_by(DqaFlag.evaluated_at.desc()).limit(limit)
     if study_id and not project_id:
         project_ids = [
@@ -289,12 +294,13 @@ def list_flags(
     return results
 
 
-@router.get("/enumerators", response_model=list[EnumeratorStat])
+@router.get("/enumerators", response_model=list[EnumeratorStat], operation_id="getDqaEnumerators")
 def enumerator_stats(
-    project_id: str | None = Query(default=None, alias="projectId"),
-    study_id: str | None = Query(default=None, alias="studyId"),
+    q: Annotated[StudyProjectQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[EnumeratorStat]:
+    project_id = q.project_id
+    study_id = q.study_id
     sub_q = select(Submission)
     flag_q = select(DqaFlag)
     if study_id and not project_id:
@@ -360,11 +366,12 @@ def enumerator_stats(
     return sorted(result, key=lambda r: (-r.flagged_pct, -r.submissions, r.enumerator))
 
 
-@router.post("/recompute", response_model=DqaRecomputeResult)
+@router.post("/recompute", response_model=DqaRecomputeResult, operation_id="recomputeDqa")
 def recompute(
-    project_id: str | None = Query(default=None, alias="projectId"),
+    q: Annotated[ProjectIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> DqaRecomputeResult:
+    project_id = q.project_id
     if project_id:
         if not db.get(Project, project_id):
             raise HTTPException(status_code=404, detail="Project not found")
@@ -379,24 +386,32 @@ def recompute(
     return DqaRecomputeResult(project_id=None, **totals)
 
 
-@router.get("/triangulation", response_model=list[TriangulationViewInfo])
+@router.get(
+    "/triangulation",
+    response_model=list[TriangulationViewInfo],
+    operation_id="getTriangulationViews",
+)
 def list_triangulation_views() -> list[TriangulationViewInfo]:
     from app.services import triangulation as tri
 
     return [TriangulationViewInfo.model_validate(v) for v in tri.list_triangulation_views()]
 
 
-@router.get("/triangulation/{view_id}", response_model=TriangulationViewOut)
+@router.get(
+    "/triangulation/{view_id}",
+    response_model=TriangulationViewOut,
+    operation_id="getTriangulationView",
+)
 def triangulation_view(
     view_id: str,
-    study_id: str | None = Query(default=None, alias="studyId"),
+    q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> TriangulationViewOut:
     """UDISE-joined triangulation views: TR-1, TR-3, TR-5 (study-scoped when studyId set)."""
     from app.services import triangulation as tri
 
     try:
-        return tri.build_view(db, view_id, study_id=study_id)
+        return tri.build_view(db, view_id, study_id=q.study_id)
     except KeyError as exc:
         raise HTTPException(
             status_code=404,
@@ -408,7 +423,11 @@ def triangulation_view(
 projects_router = APIRouter(prefix="/projects", tags=["dqa"])
 
 
-@projects_router.get("/{project_id}/form-fields", response_model=list[FormFieldOut])
+@projects_router.get(
+    "/{project_id}/form-fields",
+    response_model=list[FormFieldOut],
+    operation_id="getProjectFormFields",
+)
 def project_form_fields(project_id: str, db: Session = Depends(get_db)) -> list[FormFieldOut]:
     project = db.get(Project, project_id)
     if not project:
@@ -419,7 +438,11 @@ def project_form_fields(project_id: str, db: Session = Depends(get_db)) -> list[
     return [FormFieldOut.model_validate(f) for f in fields]
 
 
-@projects_router.get("/{project_id}/rule-pack", response_model=RulePackOut)
+@projects_router.get(
+    "/{project_id}/rule-pack",
+    response_model=RulePackOut,
+    operation_id="getProjectRulePack",
+)
 def get_rule_pack(project_id: str, db: Session = Depends(get_db)) -> RulePackOut:
     project = db.get(Project, project_id)
     if not project:
@@ -434,7 +457,11 @@ def get_rule_pack(project_id: str, db: Session = Depends(get_db)) -> RulePackOut
     return RulePackOut(project_id=project_id, pack=pack)
 
 
-@projects_router.put("/{project_id}/rule-pack", response_model=RulePackOut)
+@projects_router.put(
+    "/{project_id}/rule-pack",
+    response_model=RulePackOut,
+    operation_id="updateProjectRulePack",
+)
 def put_rule_pack(
     project_id: str,
     payload: RulePackUpdate,

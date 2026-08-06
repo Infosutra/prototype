@@ -1,19 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import {
+  useGetProjectDataGrid,
+  type GridCell,
+  type GridColumn,
+  type GridFlagRef,
+  type GridRow,
+  type SubmissionGrid,
+} from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ChevronLeft, ChevronRight, Download, Eye, ShieldAlert } from "lucide-react";
-import {
-  dqaApi,
-  type GridCell,
-  type GridColumn,
-  type GridFlagRef,
-  type GridRow,
-} from "@/lib/dqa-api";
 
 const SEVERITY_FILTERS = [
   { id: "", label: "All forms" },
@@ -43,7 +43,7 @@ function severityCellClass(severity?: string | null): string {
   return "";
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value?: string): string {
   if (!value) return "—";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
@@ -70,16 +70,19 @@ function downloadCsv(fileName: string, columns: GridColumn[], rows: GridRow[]) {
   ];
   const lines = [header.map(csvEscape).join(",")];
   for (const row of rows) {
-    const flags = [...row.rowFlags, ...columns.flatMap((c) => row.cells[c.key]?.flags ?? [])];
+    const flags = [
+      ...(row.rowFlags ?? []),
+      ...columns.flatMap((c) => row.cells?.[c.key]?.flags ?? []),
+    ];
     const ruleIds = [...new Set(flags.map((flag) => `${flag.ruleId}(${flag.severity})`))];
     lines.push(
       [
         row.displayId,
-        row.submittedAt,
-        row.enumerator,
-        row.status,
+        row.submittedAt ?? "",
+        row.enumerator ?? "",
+        row.status ?? "",
         ruleIds.join(" "),
-        ...columns.map((column) => row.cells[column.key]?.value ?? ""),
+        ...columns.map((column) => row.cells?.[column.key]?.value ?? ""),
       ]
         .map((value) => csvEscape(String(value ?? "")))
         .join(","),
@@ -137,26 +140,31 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
     return () => clearTimeout(timer);
   }, [enumeratorInput]);
 
-  const gridQuery = useQuery({
-    queryKey: ["submission-grid", projectId, page, limit, severity, enumerator],
-    queryFn: () =>
-      dqaApi.dataGrid(projectId, {
-        page,
-        limit,
-        severity: severity || undefined,
-        enumerator: enumerator || undefined,
-      }),
-    enabled: Boolean(projectId),
-    placeholderData: (previous) =>
-      previous?.projectId === projectId ? previous : undefined,
-  });
+  const gridQuery = useGetProjectDataGrid(
+    projectId,
+    {
+      page,
+      limit,
+      severity: severity || undefined,
+      enumerator: enumerator || undefined,
+    },
+    {
+      query: {
+        enabled: Boolean(projectId),
+        placeholderData: (previous: SubmissionGrid | undefined) =>
+          previous?.projectId === projectId ? previous : undefined,
+      } as never,
+    },
+  );
 
   const grid = gridQuery.data;
 
   const columns = useMemo(() => {
     const all = grid?.columns ?? [];
-    if (flaggedColumnsOnly) return all.filter((column) => column.flagged > 0);
-    if (hideEmptyColumns) return all.filter((column) => column.filled > 0 || column.flagged > 0);
+    if (flaggedColumnsOnly) return all.filter((column) => (column.flagged ?? 0) > 0);
+    if (hideEmptyColumns) {
+      return all.filter((column) => (column.filled ?? 0) > 0 || (column.flagged ?? 0) > 0);
+    }
     return all;
   }, [grid?.columns, flaggedColumnsOnly, hideEmptyColumns]);
 
@@ -170,8 +178,8 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
       row,
       columnLabel: column.label,
       columnCode: column.code,
-      value: cell.value,
-      flags: cell.flags,
+      value: cell.value ?? "",
+      flags: cell.flags ?? [],
     });
   };
 
@@ -277,7 +285,7 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
                   >
                     <span className="block font-mono text-[10px] text-muted-foreground">
                       {column.code}
-                      {column.flagged > 0 ? ` · ${column.flagged} flagged` : ""}
+                      {(column.flagged ?? 0) > 0 ? ` · ${column.flagged} flagged` : ""}
                     </span>
                     <span className="line-clamp-2 text-xs font-medium normal-case text-foreground">
                       {column.label}
@@ -305,21 +313,21 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
                     <span className="block text-[10px] text-muted-foreground">
                       {formatDateTime(row.submittedAt)}
                     </span>
-                    {(row.redFlags > 0 || row.amberFlags > 0) && (
+                    {(row.redFlags ?? 0) > 0 || (row.amberFlags ?? 0) > 0 ? (
                       <span className="mt-1 flex flex-wrap items-center gap-1">
-                        {row.redFlags > 0 && (
+                        {(row.redFlags ?? 0) > 0 && (
                           <Badge variant="destructive" className="px-1 py-0 text-[10px]">
                             {row.redFlags} RED
                           </Badge>
                         )}
-                        {row.amberFlags > 0 && (
+                        {(row.amberFlags ?? 0) > 0 && (
                           <Badge variant="secondary" className="px-1 py-0 text-[10px]">
                             {row.amberFlags} AMBER
                           </Badge>
                         )}
                       </span>
-                    )}
-                    {row.rowFlags.length > 0 && (
+                    ) : null}
+                    {(row.rowFlags?.length ?? 0) > 0 && (
                       <button
                         type="button"
                         className="mt-1 flex items-center gap-1 text-[10px] text-primary underline"
@@ -329,17 +337,17 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
                             columnLabel: "Form-level checks",
                             columnCode: row.displayId,
                             value: "",
-                            flags: row.rowFlags,
+                            flags: row.rowFlags ?? [],
                           })
                         }
                       >
                         <ShieldAlert className="h-3 w-3" />
-                        {row.rowFlags.length} form-level
+                        {row.rowFlags?.length} form-level
                       </button>
                     )}
                   </th>
                   {columns.map((column) => {
-                    const cell = row.cells[column.key];
+                    const cell = row.cells?.[column.key];
                     const value = cell?.value ?? "";
                     const flags = cell?.flags ?? [];
                     const className = `border-b px-3 py-2 align-top ${severityCellClass(cell?.severity)}`;

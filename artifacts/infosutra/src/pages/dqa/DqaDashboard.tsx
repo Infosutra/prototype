@@ -1,14 +1,25 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useGetProjects } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetDqaEnumeratorsQueryKey,
+  getGetDqaFlagsQueryKey,
+  getGetDqaSummaryQueryKey,
+  getGetTriangulationViewQueryKey,
+  useGetDqaEnumerators,
+  useGetDqaFlags,
+  useGetDqaSummary,
+  useGetProjects,
+  useGetTriangulationView,
+  useRecomputeDqa,
+  type TriangulationLink,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
-import { dqaApi, type TriangulationLink } from "@/lib/dqa-api";
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
 
@@ -88,52 +99,50 @@ export default function DqaDashboard() {
     ? allProjects.filter((p) => p.studyId === activeStudyId)
     : allProjects;
 
-  const summaryQuery = useQuery({
-    queryKey: ["dqa-summary", projectId, activeStudyId],
-    queryFn: () =>
-      dqaApi.summary(projectId || undefined, projectId ? undefined : activeStudyId || undefined),
-  });
-  const flagsQuery = useQuery({
-    queryKey: ["dqa-flags", projectId, severity, activeStudyId],
-    queryFn: () =>
-      dqaApi.flags({
-        projectId: projectId || undefined,
-        studyId: projectId ? undefined : activeStudyId || undefined,
-        severity: severity || undefined,
-      }),
-  });
-  const drillFlagsQuery = useQuery({
-    queryKey: ["dqa-flags-drill", projectId, drillRuleId, activeStudyId],
-    queryFn: () =>
-      dqaApi.flags({
-        projectId: projectId || undefined,
-        studyId: projectId ? undefined : activeStudyId || undefined,
-        ruleId: drillRuleId!,
-      }),
-    enabled: Boolean(drillRuleId),
-  });
-  const enumeratorsQuery = useQuery({
-    queryKey: ["dqa-enumerators", projectId, activeStudyId],
-    queryFn: () =>
-      dqaApi.enumerators(
-        projectId || undefined,
-        projectId ? undefined : activeStudyId || undefined,
-      ),
-  });
-  const triangulationQuery = useQuery({
-    queryKey: ["dqa-triangulation", triViewId, activeStudyId],
-    queryFn: () => dqaApi.triangulation(triViewId, activeStudyId || undefined),
-    enabled: tab === "triangulation" && Boolean(activeStudyId),
-  });
+  const studyScopedId = projectId ? undefined : activeStudyId || undefined;
+  const summaryParams = {
+    projectId: projectId || undefined,
+    studyId: studyScopedId,
+  };
+  const flagsParams = {
+    projectId: projectId || undefined,
+    studyId: studyScopedId,
+    severity: severity || undefined,
+  };
+  const drillFlagsParams = {
+    projectId: projectId || undefined,
+    studyId: studyScopedId,
+    ruleId: drillRuleId || undefined,
+  };
+  const enumeratorParams = {
+    projectId: projectId || undefined,
+    studyId: studyScopedId,
+  };
 
-  const recompute = useMutation({
-    mutationFn: () => dqaApi.recompute(projectId || undefined),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dqa-summary"] });
-      queryClient.invalidateQueries({ queryKey: ["dqa-flags"] });
-      queryClient.invalidateQueries({ queryKey: ["dqa-flags-drill"] });
-      queryClient.invalidateQueries({ queryKey: ["dqa-enumerators"] });
-      queryClient.invalidateQueries({ queryKey: ["dqa-triangulation"] });
+  const summaryQuery = useGetDqaSummary(summaryParams);
+  const flagsQuery = useGetDqaFlags(flagsParams);
+  const drillFlagsQuery = useGetDqaFlags(drillFlagsParams, {
+    query: { enabled: Boolean(drillRuleId) } as never,
+  });
+  const enumeratorsQuery = useGetDqaEnumerators(enumeratorParams);
+  const triangulationQuery = useGetTriangulationView(
+    triViewId,
+    activeStudyId ? { studyId: activeStudyId } : undefined,
+    {
+      query: { enabled: tab === "triangulation" && Boolean(activeStudyId) } as never,
+    },
+  );
+
+  const recompute = useRecomputeDqa({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetDqaSummaryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDqaFlagsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDqaEnumeratorsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: getGetTriangulationViewQueryKey(triViewId),
+        });
+      },
     },
   });
 
@@ -194,7 +203,11 @@ export default function DqaDashboard() {
             </Button>
             <Button
               size="sm"
-              onClick={() => recompute.mutate()}
+              onClick={() =>
+                recompute.mutate({
+                  params: projectId ? { projectId } : undefined,
+                })
+              }
               disabled={recompute.isPending || !activeStudyId}
               className="bg-primary text-primary-foreground"
               aria-label="Recompute DQA"

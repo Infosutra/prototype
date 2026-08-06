@@ -1,14 +1,18 @@
 import React, { useMemo } from "react";
 import { Link, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { useGetSubmission } from "@workspace/api-client-react";
+import {
+  useGetDqaFlags,
+  useGetProjectFormFields,
+  useGetSubmission,
+  type DqaFlagOut,
+  type FormFieldOut,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, AlertCircle } from "lucide-react";
-import { dqaApi, type DqaFlag, type FormField } from "@/lib/dqa-api";
 
 function leafName(key: string): string {
   return key.split("/").filter(Boolean).pop() || key;
@@ -27,8 +31,8 @@ function fallbackFieldLabel(key: string): string {
     .join(" / ");
 }
 
-function buildFieldCatalog(fields: FormField[]) {
-  const byName = new Map<string, FormField>();
+function buildFieldCatalog(fields: FormFieldOut[]) {
+  const byName = new Map<string, FormFieldOut>();
   for (const field of fields) {
     byName.set(field.name, field);
     // Also index by leaf if name is a path
@@ -37,7 +41,7 @@ function buildFieldCatalog(fields: FormField[]) {
   return byName;
 }
 
-function resolveQuestionLabel(key: string, catalog: Map<string, FormField>, existingLabel?: string): string {
+function resolveQuestionLabel(key: string, catalog: Map<string, FormFieldOut>, existingLabel?: string): string {
   const leaf = leafName(key);
   const fromCatalog = catalog.get(key)?.label || catalog.get(leaf)?.label;
   if (fromCatalog) return fromCatalog;
@@ -61,10 +65,15 @@ function lookupDataValue(data: Record<string, unknown> | undefined, target: stri
 
 function decodeChoiceValue(
   value: unknown,
-  fieldMeta: FormField | undefined,
+  fieldMeta: FormFieldOut | undefined,
 ): unknown {
   if (!fieldMeta?.choices?.length || value == null || value === "") return value;
-  const choiceMap = new Map(fieldMeta.choices.map((c) => [c.name, c.label || c.name]));
+  const choiceMap = new Map(
+    fieldMeta.choices.map((c) => [
+      String(c.name ?? ""),
+      String(c.label ?? c.name ?? ""),
+    ]),
+  );
   if (Array.isArray(value)) {
     return value.map((item) => choiceMap.get(String(item)) || item);
   }
@@ -101,7 +110,7 @@ function FieldValue({ value }: { value: unknown }) {
   return <span className="break-words">{String(value)}</span>;
 }
 
-function highlightTargets(flag: DqaFlag): string[] {
+function highlightTargets(flag: DqaFlagOut): string[] {
   const details = flag.details;
   if (!details || typeof details !== "object") return [];
   const raw = details.highlightFields;
@@ -109,7 +118,7 @@ function highlightTargets(flag: DqaFlag): string[] {
   return raw.map((item) => String(item)).filter(Boolean);
 }
 
-function relatedSubmissions(flag: DqaFlag): Array<{
+function relatedSubmissions(flag: DqaFlagOut): Array<{
   submissionId?: string;
   koboId?: string | null;
   enumerator?: string | null;
@@ -164,15 +173,12 @@ export default function SubmissionDetail() {
   const submissionId = params?.id ? decodeURIComponent(params.id) : "";
   const submissionQuery = useGetSubmission(submissionId);
   const submission = submissionQuery.data;
-  const flagsQuery = useQuery({
-    queryKey: ["dqa-flags", "submission", submissionId],
-    queryFn: () => dqaApi.flags({ submissionId }),
-    enabled: Boolean(submissionId),
-  });
-  const formFieldsQuery = useQuery({
-    queryKey: ["form-fields", submission?.projectId],
-    queryFn: () => dqaApi.formFields(submission!.projectId),
-    enabled: Boolean(submission?.projectId),
+  const flagsQuery = useGetDqaFlags(
+    { submissionId },
+    { query: { enabled: Boolean(submissionId) } as never },
+  );
+  const formFieldsQuery = useGetProjectFormFields(submission?.projectId ?? "", {
+    query: { enabled: Boolean(submission?.projectId) } as never,
   });
 
   const fieldCatalog = useMemo(
@@ -209,8 +215,8 @@ export default function SubmissionDetail() {
     const data = (submission.data ?? {}) as Record<string, unknown>;
 
     const base =
-      submission.responses.length > 0
-        ? submission.responses.map((field) => ({
+      (submission.responses?.length ?? 0) > 0
+        ? (submission.responses ?? []).map((field) => ({
             key: field.key,
             code: leafName(field.key),
             label: resolveQuestionLabel(field.key, fieldCatalog, field.label),
@@ -299,7 +305,7 @@ export default function SubmissionDetail() {
     );
   }
 
-  const scrollToField = (flag: DqaFlag) => {
+  const scrollToField = (flag: DqaFlagOut) => {
     const targets = highlightTargets(flag);
     const match = displayFields.find((field) => targets.some((t) => fieldMatches(field.key, t)));
     if (match) {

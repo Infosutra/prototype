@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Project
 from app.db.session import get_db
+from app.schemas.common import OkResponse
 from app.schemas.studies import StudyAssignProject, StudyCreate, StudyOut, StudyUpdate
 from app.services import studies as studies_service
 
@@ -15,18 +16,18 @@ def _out(study) -> StudyOut:
     return StudyOut.model_validate(studies_service.study_to_dict(study))
 
 
-@router.get("", response_model=list[StudyOut])
+@router.get("", response_model=list[StudyOut], operation_id="getStudies")
 def list_studies(db: Session = Depends(get_db)) -> list[StudyOut]:
     return [StudyOut.model_validate(item) for item in studies_service.list_studies(db)]
 
 
-@router.post("", response_model=StudyOut)
+@router.post("", response_model=StudyOut, operation_id="createStudy")
 def create_study(payload: StudyCreate, db: Session = Depends(get_db)) -> StudyOut:
     study = studies_service.create_study(db, payload.model_dump(by_alias=False))
     return _out(study)
 
 
-@router.get("/{study_id}", response_model=StudyOut)
+@router.get("/{study_id}", response_model=StudyOut, operation_id="getStudy")
 def get_study(study_id: str, db: Session = Depends(get_db)) -> StudyOut:
     study = studies_service.get_study(db, study_id)
     if not study:
@@ -34,7 +35,7 @@ def get_study(study_id: str, db: Session = Depends(get_db)) -> StudyOut:
     return _out(study)
 
 
-@router.patch("/{study_id}", response_model=StudyOut)
+@router.patch("/{study_id}", response_model=StudyOut, operation_id="updateStudy")
 def update_study(
     study_id: str,
     payload: StudyUpdate,
@@ -48,16 +49,16 @@ def update_study(
     return _out(study)
 
 
-@router.delete("/{study_id}")
-def delete_study(study_id: str, db: Session = Depends(get_db)) -> dict:
+@router.delete("/{study_id}", response_model=OkResponse, operation_id="deleteStudy")
+def delete_study(study_id: str, db: Session = Depends(get_db)) -> OkResponse:
     study = studies_service.get_study(db, study_id)
     if not study:
         raise HTTPException(status_code=404, detail="Study not found")
     studies_service.delete_study(db, study)
-    return {"success": True}
+    return OkResponse(success=True)
 
 
-@router.post("/{study_id}/projects", response_model=StudyOut)
+@router.post("/{study_id}/projects", response_model=StudyOut, operation_id="assignStudyProject")
 def assign_project(
     study_id: str,
     payload: StudyAssignProject,
@@ -74,12 +75,16 @@ def assign_project(
     return _out(study)
 
 
-@router.delete("/{study_id}/projects/{project_id}", response_model=StudyOut)
+@router.delete(
+    "/{study_id}/projects/{project_id}",
+    response_model=OkResponse,
+    operation_id="unassignStudyProject",
+)
 def unassign_project(
     study_id: str,
     project_id: str,
     db: Session = Depends(get_db),
-) -> StudyOut:
+) -> OkResponse:
     study = studies_service.get_study(db, study_id)
     if not study:
         raise HTTPException(status_code=404, detail="Study not found")
@@ -89,5 +94,4 @@ def unassign_project(
     if project.study_id != study.id:
         raise HTTPException(status_code=400, detail="Project is not in this study")
     studies_service.unassign_project(db, project)
-    db.refresh(study)
-    return _out(study)
+    return OkResponse(success=True)

@@ -18,7 +18,7 @@ from app.schemas.misc import (
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-@router.get("/summary", response_model=DashboardSummary)
+@router.get("/summary", response_model=DashboardSummary, operation_id="getDashboardSummary")
 def dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummary:
     total_projects = db.scalar(select(func.count()).select_from(Project)) or 0
     total_submissions = db.scalar(select(func.count()).select_from(Submission)) or 0
@@ -75,7 +75,7 @@ def dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummary:
     )
 
 
-@router.get("/activity", response_model=list[ActivityItem])
+@router.get("/activity", response_model=list[ActivityItem], operation_id="getDashboardActivity")
 def dashboard_activity(db: Session = Depends(get_db)) -> list[ActivityItem]:
     rows = db.scalars(
         select(Submission).order_by(Submission.submitted_at.desc()).limit(20)

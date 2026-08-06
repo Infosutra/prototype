@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Project, Study
 from app.db.session import get_db
+from app.schemas.common import StudyIdQuery
 from app.schemas.projects import ProjectOut, ProjectUpdate, SyncResult
 from app.schemas.submissions import SubmissionGrid
 from app.services import studies as studies_service
@@ -17,19 +20,19 @@ from app.services.submission_grid import DEFAULT_LIMIT, MAX_LIMIT, build_submiss
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-@router.get("", response_model=list[ProjectOut])
+@router.get("", response_model=list[ProjectOut], operation_id="getProjects")
 def list_projects(
-    study_id: str | None = Query(default=None, alias="studyId"),
+    q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ProjectOut]:
     query = select(Project).options(joinedload(Project.study)).order_by(Project.name)
-    if study_id:
-        query = query.where(Project.study_id == study_id)
+    if q.study_id:
+        query = query.where(Project.study_id == q.study_id)
     rows = db.scalars(query).unique().all()
     return [ProjectOut.model_validate(project_to_dict(row)) for row in rows]
 
 
-@router.post("/sync", response_model=SyncResult)
+@router.post("/sync", response_model=SyncResult, operation_id="syncProjects")
 def sync_projects(db: Session = Depends(get_db)) -> SyncResult:
     try:
         result = sync_all_projects(db)
@@ -38,7 +41,7 @@ def sync_projects(db: Session = Depends(get_db)) -> SyncResult:
     return SyncResult.model_validate(result)
 
 
-@router.get("/{project_id}", response_model=ProjectOut)
+@router.get("/{project_id}", response_model=ProjectOut, operation_id="getProject")
 def get_project(project_id: str, db: Session = Depends(get_db)) -> ProjectOut:
     project = db.scalars(
         select(Project).options(joinedload(Project.study)).where(Project.id == project_id)
@@ -48,7 +51,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)) -> ProjectOut:
     return ProjectOut.model_validate(project_to_dict(project))
 
 
-@router.patch("/{project_id}", response_model=ProjectOut)
+@router.patch("/{project_id}", response_model=ProjectOut, operation_id="updateProject")
 def update_project(
     project_id: str,
     payload: ProjectUpdate,
@@ -100,7 +103,7 @@ def update_project(
     return ProjectOut.model_validate(project_to_dict(project))
 
 
-@router.get("/{project_id}/data-grid", response_model=SubmissionGrid)
+@router.get("/{project_id}/data-grid", response_model=SubmissionGrid, operation_id="getProjectDataGrid")
 def project_data_grid(
     project_id: str,
     page: int = Query(default=1, ge=1),
@@ -124,7 +127,7 @@ def project_data_grid(
     return SubmissionGrid.model_validate(grid)
 
 
-@router.post("/{project_id}/sync", response_model=SyncResult)
+@router.post("/{project_id}/sync", response_model=SyncResult, operation_id="syncProject")
 def sync_one_project(project_id: str, db: Session = Depends(get_db)) -> SyncResult:
     try:
         result = sync_project(db, project_id)

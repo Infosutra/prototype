@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Insight
 from app.db.session import get_db
+from app.schemas.common import OkResponse
 from app.schemas.misc import InsightInput, InsightOut
 
 router = APIRouter(prefix="/ai/insights", tags=["ai"])
@@ -29,7 +30,7 @@ def _map(row: Insight) -> InsightOut:
     )
 
 
-@router.get("", response_model=list[InsightOut])
+@router.get("", response_model=list[InsightOut], operation_id="getInsights")
 def list_insights(project_id: str | None = None, db: Session = Depends(get_db)) -> list[InsightOut]:
     query = select(Insight).order_by(Insight.created_at.desc())
     if project_id:
@@ -37,7 +38,7 @@ def list_insights(project_id: str | None = None, db: Session = Depends(get_db)) 
     return [_map(row) for row in db.scalars(query).all()]
 
 
-@router.post("", response_model=InsightOut)
+@router.post("", response_model=InsightOut, operation_id="createInsight")
 def create_insight(payload: InsightInput, db: Session = Depends(get_db)) -> InsightOut:
     row = Insight(
         id=str(uuid.uuid4()),
@@ -57,7 +58,7 @@ def create_insight(payload: InsightInput, db: Session = Depends(get_db)) -> Insi
     return _map(row)
 
 
-@router.get("/{insight_id}", response_model=InsightOut)
+@router.get("/{insight_id}", response_model=InsightOut, operation_id="getInsight")
 def get_insight(insight_id: str, db: Session = Depends(get_db)) -> InsightOut:
     row = db.get(Insight, insight_id)
     if not row:
@@ -65,11 +66,11 @@ def get_insight(insight_id: str, db: Session = Depends(get_db)) -> InsightOut:
     return _map(row)
 
 
-@router.delete("/{insight_id}")
-def delete_insight(insight_id: str, db: Session = Depends(get_db)) -> dict:
+@router.delete("/{insight_id}", response_model=OkResponse, operation_id="deleteInsight")
+def delete_insight(insight_id: str, db: Session = Depends(get_db)) -> OkResponse:
     row = db.get(Insight, insight_id)
     if not row:
         raise HTTPException(status_code=404, detail="Insight not found")
     db.delete(row)
     db.commit()
-    return {"success": True}
+    return OkResponse(success=True)

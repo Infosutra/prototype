@@ -6,14 +6,18 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { studiesApi, type Study } from "@/lib/studies-api";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetStudiesQueryKey,
+  useGetStudies,
+  type StudyOut,
+} from "@workspace/api-client-react";
 
 const STORAGE_KEY = "infosutra.activeStudyId";
 
 type StudyContextValue = {
-  studies: Study[];
-  activeStudy: Study | null;
+  studies: StudyOut[];
+  activeStudy: StudyOut | null;
   activeStudyId: string | null;
   setActiveStudyId: (id: string | null) => void;
   isLoading: boolean;
@@ -30,10 +34,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     return localStorage.getItem(STORAGE_KEY);
   });
 
-  const studiesQuery = useQuery({
-    queryKey: ["studies"],
-    queryFn: () => studiesApi.list(),
-  });
+  const studiesQuery = useGetStudies();
 
   const studies = studiesQuery.data ?? [];
 
@@ -72,7 +73,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     isLoading: studiesQuery.isLoading,
     error: studiesQuery.error ? (studiesQuery.error as Error).message : null,
     refetch: () => {
-      queryClient.invalidateQueries({ queryKey: ["studies"] });
+      queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
     },
   };
 

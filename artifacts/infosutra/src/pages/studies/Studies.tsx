@@ -1,7 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useGetProjects } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetProjectsQueryKey,
+  getGetStudiesQueryKey,
+  useAssignStudyProject,
+  useCreateStudy,
+  useDeleteStudy,
+  useGetProjects,
+  useGetStudies,
+  useUnassignStudyProject,
+  useUpdateStudy,
+  type StudyCreate,
+  type StudyOut,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -10,10 +22,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Plus, Save, Trash2, X } from "lucide-react";
-import { studiesApi, type Study, type StudyInput } from "@/lib/studies-api";
 import { useStudy } from "@/components/study/StudyProvider";
 
-function emptyForm(): StudyInput {
+function emptyForm(): StudyCreate {
   return {
     name: "",
     description: "",
@@ -30,23 +41,27 @@ type PanelMode = "idle" | "create" | "edit";
 export default function StudiesPage() {
   const queryClient = useQueryClient();
   const { activeStudyId, setActiveStudyId, refetch } = useStudy();
-  const studiesQuery = useQuery({
-    queryKey: ["studies"],
-    queryFn: () => studiesApi.list(),
-  });
+  const studiesQuery = useGetStudies();
   const projectsQuery = useGetProjects();
   const studies = studiesQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
 
   const [panelMode, setPanelMode] = useState<PanelMode>("idle");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<StudyInput>(emptyForm());
+  const [form, setForm] = useState<StudyCreate>(emptyForm());
   const [targetKey, setTargetKey] = useState("T1");
   const [targetValue, setTargetValue] = useState("");
   const [assignProjectId, setAssignProjectId] = useState("");
   const [assignTool, setAssignTool] = useState("T1");
   const [message, setMessage] = useState("");
   const [didAutoSelect, setDidAutoSelect] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const createStudy = useCreateStudy();
+  const updateStudy = useUpdateStudy();
+  const deleteStudy = useDeleteStudy();
+  const assignStudyProject = useAssignStudyProject();
+  const unassignStudyProject = useUnassignStudyProject();
 
   const editing = useMemo(
     () => studies.find((s) => s.id === editingId) ?? null,
@@ -58,6 +73,7 @@ export default function StudiesPage() {
     setEditingId(null);
     setForm(emptyForm());
     setMessage("");
+    setActionError(null);
   };
 
   const clearPanel = () => {
@@ -66,7 +82,7 @@ export default function StudiesPage() {
     setForm(emptyForm());
   };
 
-  const startEdit = (study: Study) => {
+  const startEdit = (study: StudyOut) => {
     setPanelMode("edit");
     setEditingId(study.id);
     setForm({
@@ -75,10 +91,11 @@ export default function StudiesPage() {
       startDate: study.startDate ?? "",
       endDate: study.endDate ?? "",
       timezone: study.timezone || "Asia/Kolkata",
-      targets: { ...study.targets },
+      targets: { ...(study.targets ?? {}) },
       formMap: [...(study.formMap ?? [])],
     });
     setMessage("");
+    setActionError(null);
   };
 
   const cancelCreate = () => {
@@ -101,85 +118,109 @@ export default function StudiesPage() {
     setDidAutoSelect(true);
   }, [studies, studiesQuery.isLoading, activeStudyId, didAutoSelect, panelMode]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const payload: StudyInput = {
-        ...form,
-        startDate: form.startDate || null,
-        endDate: form.endDate || null,
-      };
-      if (panelMode === "edit" && editingId) {
-        return studiesApi.update(editingId, payload);
-      }
-      return studiesApi.create(payload);
-    },
-    onSuccess: (study) => {
-      setMessage(`Saved study “${study.name}”. Assign synced forms below.`);
-      setPanelMode("edit");
-      setEditingId(study.id);
-      setActiveStudyId(study.id);
-      setForm({
-        name: study.name,
-        description: study.description ?? "",
-        startDate: study.startDate ?? "",
-        endDate: study.endDate ?? "",
-        timezone: study.timezone || "Asia/Kolkata",
-        targets: { ...study.targets },
-        formMap: [...(study.formMap ?? [])],
-      });
-      queryClient.invalidateQueries({ queryKey: ["studies"] });
-      queryClient.invalidateQueries({ queryKey: ["getProjects"] });
-      refetch();
-    },
-  });
+  const invalidateStudyQueries = () => {
+    queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+    refetch();
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => studiesApi.remove(id),
-    onSuccess: (_void, deletedId) => {
+  const applyStudyToForm = (study: StudyOut) => {
+    setMessage(`Saved study “${study.name}”. Assign synced forms below.`);
+    setPanelMode("edit");
+    setEditingId(study.id);
+    setActiveStudyId(study.id);
+    setForm({
+      name: study.name,
+      description: study.description ?? "",
+      startDate: study.startDate ?? "",
+      endDate: study.endDate ?? "",
+      timezone: study.timezone || "Asia/Kolkata",
+      targets: { ...(study.targets ?? {}) },
+      formMap: [...(study.formMap ?? [])],
+    });
+    invalidateStudyQueries();
+  };
+
+  const saveStudy = async () => {
+    setActionError(null);
+    const payload: StudyCreate = {
+      ...form,
+      startDate: form.startDate || null,
+      endDate: form.endDate || null,
+    };
+    try {
+      if (panelMode === "edit" && editingId) {
+        const study = await updateStudy.mutateAsync({ studyId: editingId, data: payload });
+        applyStudyToForm(study);
+      } else {
+        const study = await createStudy.mutateAsync({ data: payload });
+        applyStudyToForm(study);
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Save failed");
+    }
+  };
+
+  const removeStudy = async (id: string) => {
+    setActionError(null);
+    try {
+      await deleteStudy.mutateAsync({ studyId: id });
       setMessage("Study deleted.");
       clearPanel();
       setDidAutoSelect(false);
-      if (activeStudyId === deletedId) setActiveStudyId(null);
-      queryClient.invalidateQueries({ queryKey: ["studies"] });
-      queryClient.invalidateQueries({ queryKey: ["getProjects"] });
-      refetch();
-    },
-  });
+      if (activeStudyId === id) setActiveStudyId(null);
+      invalidateStudyQueries();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
 
-  const assignMutation = useMutation({
-    mutationFn: () => {
-      if (!editingId || !assignProjectId) throw new Error("Select a project");
-      return studiesApi.assignProject(editingId, assignProjectId, assignTool);
-    },
-    onSuccess: () => {
+  const assignProject = async () => {
+    setActionError(null);
+    if (!editingId || !assignProjectId) {
+      setActionError("Select a project");
+      return;
+    }
+    try {
+      await assignStudyProject.mutateAsync({
+        studyId: editingId,
+        data: { projectId: assignProjectId, toolCode: assignTool || undefined },
+      });
       setMessage("Form assigned to study.");
       setAssignProjectId("");
-      queryClient.invalidateQueries({ queryKey: ["studies"] });
-      queryClient.invalidateQueries({ queryKey: ["getProjects"] });
-    },
-  });
+      queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Assign failed");
+    }
+  };
 
-  const unassignMutation = useMutation({
-    mutationFn: (projectId: string) => {
-      if (!editingId) throw new Error("No study selected");
-      return studiesApi.unassignProject(editingId, projectId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["studies"] });
-      queryClient.invalidateQueries({ queryKey: ["getProjects"] });
-    },
-  });
+  const unassignProject = async (projectId: string) => {
+    setActionError(null);
+    if (!editingId) {
+      setActionError("No study selected");
+      return;
+    }
+    try {
+      await unassignStudyProject.mutateAsync({ studyId: editingId, projectId });
+      queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Unassign failed");
+    }
+  };
 
   const unassignedProjects = projects.filter((p) => !p.studyId);
   const otherStudyProjects = projects.filter(
     (p) => p.studyId && p.studyId !== editingId,
   );
 
+  const isSaving = createStudy.isPending || updateStudy.isPending;
   const error =
     studiesQuery.error?.message ||
-    saveMutation.error?.message ||
-    deleteMutation.error?.message ||
-    assignMutation.error?.message;
+    actionError;
+
+  const targetEntries = Object.entries(form.targets ?? {});
 
   return (
     <Layout>
@@ -246,11 +287,12 @@ export default function StudiesPage() {
                     )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {study.projectCount} forms · {study.submissionCount.toLocaleString()} submissions
+                    {study.projectCount ?? 0} forms ·{" "}
+                    {(study.submissionCount ?? 0).toLocaleString()} submissions
                     {study.dayNumber != null ? ` · Day ${study.dayNumber}` : ""}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {study.projects.map((p) => (
+                    {(study.projects ?? []).map((p) => (
                       <Badge key={p.id} variant="outline" className="text-[10px]">
                         {p.toolCode || "—"} {p.name.slice(0, 24)}
                       </Badge>
@@ -308,10 +350,10 @@ export default function StudiesPage() {
                       size="sm"
                       variant="ghost"
                       className="text-destructive"
-                      disabled={deleteMutation.isPending}
+                      disabled={deleteStudy.isPending}
                       onClick={() => {
                         if (confirm("Delete this study? Forms stay in Kobo; only local grouping is removed.")) {
-                          deleteMutation.mutate(editingId);
+                          void removeStudy(editingId);
                         }
                       }}
                     >
@@ -322,8 +364,8 @@ export default function StudiesPage() {
                 )}
                 <Button
                   size="sm"
-                  disabled={saveMutation.isPending || !form.name.trim()}
-                  onClick={() => saveMutation.mutate()}
+                  disabled={isSaving || !form.name.trim()}
+                  onClick={() => void saveStudy()}
                 >
                   <Save className="mr-1 h-4 w-4" />
                   Save
@@ -375,13 +417,13 @@ export default function StudiesPage() {
               <div className="border-t pt-4 space-y-3">
                 <Label>Submission targets by tool</Label>
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(form.targets ?? {}).map(([key, value]) => (
+                  {targetEntries.map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2 rounded border px-2 py-1 text-sm">
                       <span className="font-mono text-xs">{key}</span>
                       <Input
                         className="h-8 w-24"
                         type="number"
-                        value={value}
+                        value={Number(value) || 0}
                         onChange={(e) =>
                           setForm((f) => ({
                             ...f,
@@ -463,13 +505,13 @@ export default function StudiesPage() {
                             {p.name}
                           </Link>
                           <span className="ml-2 text-xs text-muted-foreground">
-                            {p.submissionCount.toLocaleString()} submissions
+                            {(p.submissionCount ?? 0).toLocaleString()} submissions
                           </span>
                         </div>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => unassignMutation.mutate(p.id)}
+                          onClick={() => void unassignProject(p.id)}
                         >
                           Remove
                         </Button>
@@ -514,8 +556,8 @@ export default function StudiesPage() {
                       />
                       <Button
                         variant="outline"
-                        disabled={!assignProjectId || assignMutation.isPending}
-                        onClick={() => assignMutation.mutate()}
+                        disabled={!assignProjectId || assignStudyProject.isPending}
+                        onClick={() => void assignProject()}
                       >
                         Assign
                       </Button>

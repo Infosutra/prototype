@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Prompt
 from app.db.session import get_db
+from app.schemas.common import OkResponse
 from app.schemas.misc import PromptInput, PromptOut, PromptUpdate
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
@@ -27,12 +28,12 @@ def _map(row: Prompt) -> PromptOut:
     )
 
 
-@router.get("", response_model=list[PromptOut])
+@router.get("", response_model=list[PromptOut], operation_id="getPrompts")
 def list_prompts(db: Session = Depends(get_db)) -> list[PromptOut]:
     return [_map(row) for row in db.scalars(select(Prompt).order_by(Prompt.name)).all()]
 
 
-@router.post("", response_model=PromptOut)
+@router.post("", response_model=PromptOut, operation_id="createPrompt")
 def create_prompt(payload: PromptInput, db: Session = Depends(get_db)) -> PromptOut:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     row = Prompt(
@@ -51,7 +52,7 @@ def create_prompt(payload: PromptInput, db: Session = Depends(get_db)) -> Prompt
     return _map(row)
 
 
-@router.get("/{prompt_id}", response_model=PromptOut)
+@router.get("/{prompt_id}", response_model=PromptOut, operation_id="getPrompt")
 def get_prompt(prompt_id: str, db: Session = Depends(get_db)) -> PromptOut:
     row = db.get(Prompt, prompt_id)
     if not row:
@@ -59,7 +60,7 @@ def get_prompt(prompt_id: str, db: Session = Depends(get_db)) -> PromptOut:
     return _map(row)
 
 
-@router.put("/{prompt_id}", response_model=PromptOut)
+@router.put("/{prompt_id}", response_model=PromptOut, operation_id="updatePrompt")
 def update_prompt(
     prompt_id: str,
     payload: PromptUpdate,
@@ -84,11 +85,11 @@ def update_prompt(
     return _map(row)
 
 
-@router.delete("/{prompt_id}")
-def delete_prompt(prompt_id: str, db: Session = Depends(get_db)) -> dict:
+@router.delete("/{prompt_id}", response_model=OkResponse, operation_id="deletePrompt")
+def delete_prompt(prompt_id: str, db: Session = Depends(get_db)) -> OkResponse:
     row = db.get(Prompt, prompt_id)
     if not row:
         raise HTTPException(status_code=404, detail="Prompt not found")
     db.delete(row)
     db.commit()
-    return {"success": True}
+    return OkResponse(success=True)

@@ -77,8 +77,8 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
         </select>
         {activeStudy ? (
           <p className="px-1 text-[11px] text-sidebar-foreground/50 truncate">
-            {activeStudy.projectCount} forms ·{" "}
-            {activeStudy.submissionCount.toLocaleString()} submissions
+            {activeStudy.projectCount ?? 0} forms ·{" "}
+            {(activeStudy.submissionCount ?? 0).toLocaleString()} submissions
           </p>
         ) : (
           <p className="px-1 text-[11px] text-sidebar-foreground/50">

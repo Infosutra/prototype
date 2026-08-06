@@ -20,7 +20,7 @@ from app.schemas.misc import (
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-@router.get("/overview", response_model=AnalyticsOverview)
+@router.get("/overview", response_model=AnalyticsOverview, operation_id="getAnalyticsOverview")
 def analytics_overview(db: Session = Depends(get_db)) -> AnalyticsOverview:
     total = db.scalar(select(func.count()).select_from(Submission)) or 0
     by_status = db.execute(
@@ -53,7 +53,7 @@ def analytics_overview(db: Session = Depends(get_db)) -> AnalyticsOverview:
     )
 
 
-@router.get("/projects/{project_id}", response_model=ProjectAnalytics)
+@router.get("/projects/{project_id}", response_model=ProjectAnalytics, operation_id="getProjectAnalytics")
 def project_analytics(project_id: str, db: Session = Depends(get_db)) -> ProjectAnalytics:
     project = db.get(Project, project_id)
     if not project:
@@ -91,7 +91,7 @@ def project_analytics(project_id: str, db: Session = Depends(get_db)) -> Project
     )
 
 
-@router.get("/trends", response_model=list[TrendPoint])
+@router.get("/trends", response_model=list[TrendPoint], operation_id="getSubmissionTrends")
 def submission_trends(
     period: str = Query(default="30d"),
     db: Session = Depends(get_db),

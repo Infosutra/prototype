@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Project, Prompt, Report
 from app.db.session import get_db
 from app.integrations.smtp import SmtpError
+from app.schemas.common import OkResponse, ReportsListQuery
 from app.schemas.misc import (
     GenerateDqaDailyInput,
     GenerateDqaFinalInput,
@@ -58,21 +60,20 @@ def _map(row: Report) -> ReportOut:
     )
 
 
-@router.get("", response_model=list[ReportOut])
+@router.get("", response_model=list[ReportOut], operation_id="getReports")
 def list_reports(
-    study_id: str | None = Query(default=None, alias="studyId"),
-    report_type: str | None = Query(default=None, alias="reportType"),
+    q: Annotated[ReportsListQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ReportOut]:
-    q = select(Report).order_by(Report.created_at.desc())
-    if study_id:
-        q = q.where(Report.study_id == study_id)
-    if report_type:
-        q = q.where(Report.report_type == report_type)
-    return [_map(row) for row in db.scalars(q).all()]
+    query = select(Report).order_by(Report.created_at.desc())
+    if q.study_id:
+        query = query.where(Report.study_id == q.study_id)
+    if q.report_type:
+        query = query.where(Report.report_type == q.report_type)
+    return [_map(row) for row in db.scalars(query).all()]
 
 
-@router.post("/dqa-daily", response_model=ReportOut)
+@router.post("/dqa-daily", response_model=ReportOut, operation_id="createDqaDailyReport")
 def create_dqa_daily(
     payload: GenerateDqaDailyInput,
     db: Session = Depends(get_db),
@@ -95,7 +96,7 @@ def create_dqa_daily(
     return _map(report)
 
 
-@router.post("/dqa-final", response_model=ReportOut)
+@router.post("/dqa-final", response_model=ReportOut, operation_id="createDqaFinalReport")
 def create_dqa_final(
     payload: GenerateDqaFinalInput,
     db: Session = Depends(get_db),
@@ -117,7 +118,7 @@ def create_dqa_final(
     return _map(report)
 
 
-@router.post("", response_model=ReportOut)
+@router.post("", response_model=ReportOut, operation_id="createReport")
 def create_report(payload: ReportInput, db: Session = Depends(get_db)) -> ReportOut:
     names: list[str] = []
     if payload.project_ids:
@@ -151,7 +152,7 @@ def create_report(payload: ReportInput, db: Session = Depends(get_db)) -> Report
     return _map(row)
 
 
-@router.get("/{report_id}", response_model=ReportOut)
+@router.get("/{report_id}", response_model=ReportOut, operation_id="getReport")
 def get_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
     row = db.get(Report, report_id)
     if not row:
@@ -159,7 +160,12 @@ def get_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
     return _map(row)
 
 
-@router.get("/{report_id}/preview")
+@router.get(
+    "/{report_id}/preview",
+    response_class=HTMLResponse,
+    responses={200: {"content": {"text/html": {}}}},
+    operation_id="previewReport",
+)
 def preview_report(report_id: str, db: Session = Depends(get_db)) -> HTMLResponse:
     row = db.get(Report, report_id)
     if not row:
@@ -174,7 +180,19 @@ def preview_report(report_id: str, db: Session = Depends(get_db)) -> HTMLRespons
     return HTMLResponse(content=html_body)
 
 
-@router.get("/{report_id}/download", response_model=None)
+@router.get(
+    "/{report_id}/download",
+    response_model=None,
+    operation_id="downloadReport",
+    responses={
+        200: {
+            "content": {
+                "application/pdf": {},
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+            }
+        }
+    },
+)
 def download_report(
     report_id: str,
     format: str = Query(default="pdf", pattern="^(pdf|docx)$"),
@@ -234,8 +252,8 @@ def download_report(
     )
 
 
-@router.delete("/{report_id}")
-def delete_report(report_id: str, db: Session = Depends(get_db)) -> dict:
+@router.delete("/{report_id}", response_model=OkResponse, operation_id="deleteReport")
+def delete_report(report_id: str, db: Session = Depends(get_db)) -> OkResponse:
     row = db.get(Report, report_id)
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -247,10 +265,10 @@ def delete_report(report_id: str, db: Session = Depends(get_db)) -> dict:
         pdf_path.unlink(missing_ok=True)
     if docx_path.is_file():
         docx_path.unlink(missing_ok=True)
-    return {"success": True}
+    return OkResponse(success=True)
 
 
-@router.post("/{report_id}/generate", response_model=ReportOut)
+@router.post("/{report_id}/generate", response_model=ReportOut, operation_id="generateReport")
 def generate_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
     row = db.get(Report, report_id)
     if not row:
@@ -328,7 +346,7 @@ def generate_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
     return _map(row)
 
 
-@router.post("/{report_id}/share", response_model=ShareResult)
+@router.post("/{report_id}/share", response_model=ShareResult, operation_id="shareReport")
 def share_report(
     report_id: str,
     payload: ShareReportInput,
