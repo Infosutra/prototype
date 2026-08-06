@@ -184,7 +184,7 @@ def _related_submission_ref(row: Submission) -> dict[str, Any]:
         "koboId": row.kobo_id,
         "enumerator": row.enumerator,
         "submittedAt": _iso_naive(row.submitted_at),
-        "projectName": row.project_name,
+        "projectName": row.project.name if row.project is not None else row.form_name,
     }
 
 

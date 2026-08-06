@@ -27,8 +27,9 @@ def analytics_overview(db: Session = Depends(get_db)) -> AnalyticsOverview:
         select(Submission.status, func.count()).group_by(Submission.status)
     ).all()
     by_project = db.execute(
-        select(Submission.project_name, func.count())
-        .group_by(Submission.project_name)
+        select(Project.name, func.count())
+        .join(Submission, Submission.project_id == Project.id)
+        .group_by(Project.name)
         .order_by(func.count().desc())
     ).all()
     by_enumerator = db.execute(

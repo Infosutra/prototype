@@ -5,17 +5,16 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import distinct, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Project, Submission
+from app.db.models import Project, Study, Submission
 from app.integrations.kobo import (
-    KoboApiError,
     KoboClient,
     get_asset_name,
     get_asset_status,
 )
 from app.services.form_labels import extract_enumerator_name
-from app.services.settings import get_kobo_token, get_or_create_settings
+from app.services.settings import get_kobo_token_from_credential, get_study_credential
 
 logger = logging.getLogger(__name__)
 
@@ -89,17 +88,29 @@ def _submission_location(submission: dict[str, Any]) -> str | None:
     return None
 
 
-def _configured_client(db: Session) -> KoboClient:
-    settings = get_or_create_settings(db)
-    token = get_kobo_token(settings)
-    if not settings.kobo_server_url or not token:
+def _configured_client(db: Session, study_id: str) -> KoboClient:
+    cred = get_study_credential(db, study_id)
+    if not cred:
         raise ValueError(
-            "KoboToolbox is not configured. Add a server URL and API token in Settings.",
+            "KoboToolbox is not configured for this study. "
+            "Add a server URL and API token on the study's Kobo settings.",
         )
-    return KoboClient(settings.kobo_server_url, token)
+    token = get_kobo_token_from_credential(cred)
+    if not cred.kobo_server_url or not token:
+        raise ValueError(
+            "KoboToolbox is not configured for this study. "
+            "Add a server URL and API token on the study's Kobo settings.",
+        )
+    return KoboClient(cred.kobo_server_url, token)
 
 
-def _sync_asset(db: Session, client: KoboClient, asset_summary: dict[str, Any]) -> dict[str, int]:
+def _sync_asset(
+    db: Session,
+    client: KoboClient,
+    asset_summary: dict[str, Any],
+    *,
+    study_id: str | None = None,
+) -> dict[str, int]:
     now = datetime.now(timezone.utc)
     uid = str(asset_summary["uid"])
     previous = db.get(Project, uid)
@@ -118,6 +129,8 @@ def _sync_asset(db: Session, client: KoboClient, asset_summary: dict[str, Any]) 
     project.sector = _metadata_text((asset_summary.get("settings") or {}).get("sector"))
     project.country = _metadata_text((asset_summary.get("settings") or {}).get("country"))
     project.updated_at = now
+    if study_id and (previous is None or not project.study_id or project.study_id == study_id):
+        project.study_id = study_id
     if previous is None:
         db.add(project)
     db.flush()
@@ -198,7 +211,6 @@ def _sync_asset(db: Session, client: KoboClient, asset_summary: dict[str, Any]) 
             db.add(row)
 
         row.uuid = submission.get("_uuid")
-        row.project_name = get_asset_name(asset)
         row.form_id = uid
         row.form_name = get_asset_name(asset)
         row.enumerator = str(enumerator)
@@ -241,7 +253,7 @@ def _sync_asset(db: Session, client: KoboClient, asset_summary: dict[str, Any]) 
 
         studies_service.apply_all_study_form_maps(db)
     except Exception:
-        logger.exception("Study form-map assignment failed after sync of %s", uid)
+        logger.exception("Study tool assignment failed after sync of %s", uid)
 
     try:
         from app.services import dqa_engine
@@ -253,8 +265,11 @@ def _sync_asset(db: Session, client: KoboClient, asset_summary: dict[str, Any]) 
     return {"submissions_fetched": len(submissions), "new_submissions": new_submissions}
 
 
-def sync_all_projects(db: Session) -> dict[str, Any]:
-    client = _configured_client(db)
+def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
+    study = db.get(Study, study_id)
+    if not study:
+        raise LookupError("Study not found")
+    client = _configured_client(db, study_id)
     assets = [
         asset
         for asset in client.list_assets()
@@ -267,7 +282,7 @@ def sync_all_projects(db: Session) -> dict[str, Any]:
 
     for asset in assets:
         try:
-            result = _sync_asset(db, client, asset)
+            result = _sync_asset(db, client, asset, study_id=study_id)
             projects_synced += 1
             submissions_fetched += result["submissions_fetched"]
             new_submissions += result["new_submissions"]
@@ -294,12 +309,18 @@ def sync_all_projects(db: Session) -> dict[str, Any]:
 
 
 def sync_project(db: Session, project_id: str) -> dict[str, Any]:
-    project = db.get(Project, project_id)
+    project = db.scalars(
+        select(Project).options(joinedload(Project.study)).where(Project.id == project_id)
+    ).first()
     if not project:
         raise LookupError("Project not found")
-    client = _configured_client(db)
+    if not project.study_id:
+        raise ValueError(
+            "Project is not assigned to a study. Assign it to a study before syncing."
+        )
+    client = _configured_client(db, project.study_id)
     asset = client.get_asset(project.uid)
-    result = _sync_asset(db, client, asset)
+    result = _sync_asset(db, client, asset, study_id=project.study_id)
     return {
         "success": True,
         "projects_synced": 1,

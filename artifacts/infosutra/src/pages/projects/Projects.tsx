@@ -67,8 +67,11 @@ export default function FormsPage() {
         }
         action={
           <Button
-            onClick={() => syncProjects.mutate()}
-            disabled={syncProjects.isPending}
+            onClick={() => {
+              if (!activeStudyId) return;
+              syncProjects.mutate({ params: { studyId: activeStudyId } });
+            }}
+            disabled={syncProjects.isPending || !activeStudyId}
             className="bg-primary text-primary-foreground"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${syncProjects.isPending ? "animate-spin" : ""}`} />

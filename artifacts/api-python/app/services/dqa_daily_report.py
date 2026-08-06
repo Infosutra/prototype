@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import AppSettings, DqaFlag, Project, Report, Study, Submission
+from app.db.models import AppSettings, DqaFlag, Project, Report, ReportProject, ReportSchedule, Study, StudyTool, Submission
 from app.integrations.openrouter import OpenRouterError, chat_completion
 from app.integrations.smtp import SmtpError, send_email
 from app.services.daily_report import day_bounds, parse_send_time
@@ -109,7 +109,7 @@ def build_daily_dqa_stats(
 ) -> dict[str, Any]:
     """Aggregate today + cumulative DQA stats for one study. Local DB only."""
     settings = settings or get_or_create_settings(db)
-    tz_name = study.timezone or settings.dqa_daily_timezone or "Asia/Kolkata"
+    tz_name = study.timezone or "Asia/Kolkata"
     date_key = report_date or _today_in_tz(tz_name)
     start_utc, end_utc = day_bounds(date_key, tz_name)
     day_n = study_day_number(study, on=date.fromisoformat(date_key))
@@ -118,10 +118,14 @@ def build_daily_dqa_stats(
         db.scalars(
             select(Project)
             .where(Project.study_id == study.id)
-            .order_by(Project.tool_code, Project.name)
+            .order_by(Project.name)
         ).all()
     )
-    targets = study.targets if isinstance(study.targets, dict) else {}
+    tools_by_code = {
+        (t.code or "").upper(): t
+        for t in db.scalars(select(StudyTool).where(StudyTool.study_id == study.id)).all()
+    }
+    targets = {code: t.target_count for code, t in tools_by_code.items()}
     project_ids = [p.id for p in projects]
     project_by_id = {p.id: p for p in projects}
 
@@ -1042,6 +1046,24 @@ def render_pdf(stats: dict[str, Any]) -> bytes:
     return buffer.getvalue()
 
 
+def _set_report_projects(db: Session, report: Report, projects: list[Project]) -> None:
+    report.report_projects.clear()
+    db.flush()
+    for project in projects:
+        report.report_projects.append(
+            ReportProject(project_id=project.id, project_name=project.name)
+        )
+
+
+def _daily_schedule_for_study(db: Session, study_id: str) -> ReportSchedule | None:
+    return db.scalars(
+        select(ReportSchedule).where(
+            ReportSchedule.study_id == study_id,
+            ReportSchedule.report_type == "daily_dqa",
+        )
+    ).first()
+
+
 def generate_daily_dqa_report(
     db: Session,
     *,
@@ -1050,7 +1072,7 @@ def generate_daily_dqa_report(
     run_ai: bool = True,
 ) -> Report:
     settings = get_or_create_settings(db)
-    sid = study_id or settings.dqa_daily_study_id or SIGHTSAVERS_2030_ID
+    sid = study_id or SIGHTSAVERS_2030_ID
     study = db.get(Study, sid)
     if not study:
         raise ValueError(f"Study not found: {sid}")
@@ -1097,8 +1119,6 @@ def generate_daily_dqa_report(
         report_date=stats["reportDate"],
         prompt_id=None,
         prompt_name="DQA Daily",
-        project_ids=[p.id for p in projects],
-        project_names=[p.name for p in projects],
         generated_content=json.dumps(payload),
         download_url=f"/api/reports/{report_id}/download",
         page_count=max(1, 2 + len(stats["redPriority"]) // 20),
@@ -1107,6 +1127,8 @@ def generate_daily_dqa_report(
         created_at=now,
     )
     db.add(row)
+    db.flush()
+    _set_report_projects(db, row, projects)
     db.commit()
     db.refresh(row)
     return row
@@ -1119,7 +1141,11 @@ def send_dqa_daily_email(
     recipients: list[str] | None = None,
 ) -> tuple[Report, list[str]]:
     settings = get_or_create_settings(db)
-    to = recipients if recipients is not None else list(settings.dqa_daily_recipients or [])
+    if recipients is not None:
+        to = list(recipients)
+    else:
+        schedule = _daily_schedule_for_study(db, report.study_id) if report.study_id else None
+        to = list(schedule.recipients or []) if schedule else []
     to = [e.strip() for e in to if e and e.strip()]
     if not to:
         raise SmtpError("No DQA Daily recipients configured")
@@ -1167,27 +1193,34 @@ def send_dqa_daily_now(
 
 
 def maybe_send_scheduled_dqa_daily(db: Session) -> bool:
-    """Scheduler tick for DQA Daily (separate from submission daily digest)."""
-    settings = get_or_create_settings(db)
-    if not settings.dqa_daily_enabled:
-        return False
-    parsed = parse_send_time(settings.dqa_daily_time or "21:30")
-    if not parsed:
-        return False
-    hour, minute = parsed
-    tz_name = settings.dqa_daily_timezone or "Asia/Kolkata"
-    now_local = datetime.now(ZoneInfo(tz_name))
-    if now_local.hour != hour or now_local.minute != minute:
-        return False
-    date_key = now_local.date().isoformat()
-    if settings.dqa_daily_last_sent_on == date_key:
-        return False
-    try:
-        send_dqa_daily_now(db, study_id=settings.dqa_daily_study_id, report_date=date_key)
-        settings.dqa_daily_last_sent_on = date_key
-        db.commit()
-        logger.info("Scheduled DQA Daily sent for %s", date_key)
-        return True
-    except Exception:
-        logger.exception("Scheduled DQA Daily failed")
-        return False
+    """Scheduler tick for DQA Daily via ReportSchedule rows."""
+    sent_any = False
+    schedules = list(
+        db.scalars(
+            select(ReportSchedule).where(
+                ReportSchedule.enabled.is_(True),
+                ReportSchedule.report_type == "daily_dqa",
+            )
+        ).all()
+    )
+    for schedule in schedules:
+        parsed = parse_send_time(schedule.time or "21:30")
+        if not parsed:
+            continue
+        hour, minute = parsed
+        tz_name = schedule.timezone or "Asia/Kolkata"
+        now_local = datetime.now(ZoneInfo(tz_name))
+        if now_local.hour != hour or now_local.minute != minute:
+            continue
+        date_key = now_local.date().isoformat()
+        if schedule.last_sent_on == date_key:
+            continue
+        try:
+            send_dqa_daily_now(db, study_id=schedule.study_id, report_date=date_key)
+            schedule.last_sent_on = date_key
+            db.commit()
+            logger.info("Scheduled DQA Daily sent for study %s on %s", schedule.study_id, date_key)
+            sent_any = True
+        except Exception:
+            logger.exception("Scheduled DQA Daily failed for study %s", schedule.study_id)
+    return sent_any

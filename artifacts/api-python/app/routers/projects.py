@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Project, Study
+from app.db.models import Project
 from app.db.session import get_db
 from app.schemas.common import StudyIdQuery
 from app.schemas.projects import ProjectOut, ProjectUpdate, SyncResult
@@ -25,7 +25,11 @@ def list_projects(
     q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ProjectOut]:
-    query = select(Project).options(joinedload(Project.study)).order_by(Project.name)
+    query = (
+        select(Project)
+        .options(joinedload(Project.study), joinedload(Project.study_tool))
+        .order_by(Project.name)
+    )
     if q.study_id:
         query = query.where(Project.study_id == q.study_id)
     rows = db.scalars(query).unique().all()
@@ -33,9 +37,16 @@ def list_projects(
 
 
 @router.post("/sync", response_model=SyncResult, operation_id="syncProjects")
-def sync_projects(db: Session = Depends(get_db)) -> SyncResult:
+def sync_projects(
+    q: Annotated[StudyIdQuery, Query()],
+    db: Session = Depends(get_db),
+) -> SyncResult:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId query parameter is required")
     try:
-        result = sync_all_projects(db)
+        result = sync_all_projects(db, q.study_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return SyncResult.model_validate(result)
@@ -44,7 +55,9 @@ def sync_projects(db: Session = Depends(get_db)) -> SyncResult:
 @router.get("/{project_id}", response_model=ProjectOut, operation_id="getProject")
 def get_project(project_id: str, db: Session = Depends(get_db)) -> ProjectOut:
     project = db.scalars(
-        select(Project).options(joinedload(Project.study)).where(Project.id == project_id)
+        select(Project)
+        .options(joinedload(Project.study), joinedload(Project.study_tool))
+        .where(Project.id == project_id)
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -84,21 +97,37 @@ def update_project(
         if study_id is None or study_id == "":
             studies_service.unassign_project(db, project)
         else:
-            study = db.get(Study, study_id)
+            study = studies_service.get_study(db, study_id)
             if not study:
                 raise HTTPException(status_code=404, detail="Study not found")
             tool = data.get("tool_code") if "tool_code" in data else project.tool_code
-            studies_service.assign_project(db, study, project, tool_code=tool)
-    elif "tool_code" in data:
-        project.tool_code = (
-            str(data["tool_code"]).strip().upper() if data["tool_code"] else None
+            study_tool_id = data.get("study_tool_id") if "study_tool_id" in data else project.study_tool_id
+            studies_service.assign_project(
+                db, study, project, tool_code=tool, study_tool_id=study_tool_id
+            )
+    elif "tool_code" in data or "study_tool_id" in data:
+        if not project.study_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Assign the project to a study before setting a tool code",
+            )
+        study = studies_service.get_study(db, project.study_id)
+        if not study:
+            raise HTTPException(status_code=404, detail="Study not found")
+        studies_service.assign_project(
+            db,
+            study,
+            project,
+            tool_code=data.get("tool_code"),
+            study_tool_id=data.get("study_tool_id"),
         )
-        db.commit()
     else:
         db.commit()
 
     project = db.scalars(
-        select(Project).options(joinedload(Project.study)).where(Project.id == project_id)
+        select(Project)
+        .options(joinedload(Project.study), joinedload(Project.study_tool))
+        .where(Project.id == project_id)
     ).first()
     return ProjectOut.model_validate(project_to_dict(project))
 

@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Project, Submission
 from app.db.session import get_db
@@ -22,11 +22,12 @@ def _iso(value: datetime) -> str:
 
 
 def _map_submission(row: Submission, responses: list[dict] | None = None) -> SubmissionOut:
+    project_name = row.project.name if row.project is not None else row.form_name
     return SubmissionOut(
         id=row.id,
         display_id=f"Submission-{row.kobo_id}",
         project_id=row.project_id,
-        project_name=row.project_name,
+        project_name=project_name,
         form_id=row.form_id,
         form_name=row.form_name,
         enumerator=row.enumerator,
@@ -63,10 +64,16 @@ def list_submissions(
     where = and_(*conditions) if conditions else None
     total = db.scalar(select(func.count()).select_from(Submission).where(where)) or 0
     offset = max(page - 1, 0) * limit
-    query = select(Submission).order_by(Submission.submitted_at.desc()).offset(offset).limit(limit)
+    query = (
+        select(Submission)
+        .options(joinedload(Submission.project))
+        .order_by(Submission.submitted_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     if where is not None:
         query = query.where(where)
-    rows = db.scalars(query).all()
+    rows = db.scalars(query).unique().all()
     return SubmissionsPage(
         data=[_map_submission(row) for row in rows],
         total=int(total),
@@ -78,10 +85,14 @@ def list_submissions(
 
 @router.get("/{submission_id}", response_model=SubmissionOut, operation_id="getSubmission")
 def get_submission(submission_id: str, db: Session = Depends(get_db)) -> SubmissionOut:
-    row = db.get(Submission, submission_id)
+    row = db.scalars(
+        select(Submission)
+        .options(joinedload(Submission.project))
+        .where(Submission.id == submission_id)
+    ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Submission not found")
-    project = db.get(Project, row.project_id)
+    project = row.project or db.get(Project, row.project_id)
     form_definition = (
         project.form_definition
         if project and isinstance(project.form_definition, dict)

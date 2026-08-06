@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import SecretError, decrypt_secret, encrypt_secret
-from app.db.models import AppSettings
+from app.db.models import AppSettings, StudyCredential
 from app.integrations.kobo import KoboApiError, KoboClient, normalize_kobo_server_url
 from app.integrations.smtp import SmtpConfig, SmtpError, send_test_email, test_smtp_connection
 from app.schemas.settings import (
     ConnectionTestResult,
     DailyReportSettings,
-    DqaDailySettings,
     GeneralSettings,
-    KoboSettings,
     SettingsOut,
     SettingsUpdate,
     SmtpSettings,
 )
+from app.schemas.studies import StudyCredentialSummary, StudyKoboUpdate
 
 
 MASK = "••••••••"
@@ -48,15 +48,6 @@ def get_or_create_settings(db: Session) -> AppSettings:
 
 def to_settings_out(row: AppSettings) -> SettingsOut:
     return SettingsOut(
-        kobo=KoboSettings(
-            server_url=row.kobo_server_url,
-            api_token=MASK if row.kobo_token_encrypted else "",
-            username=row.kobo_username,
-            auto_sync=row.kobo_auto_sync,
-            sync_interval_hours=row.kobo_sync_interval_hours,
-            connected=row.kobo_connected,
-            last_tested_at=_iso(row.kobo_last_tested_at),
-        ),
         smtp=SmtpSettings(
             host=row.smtp_host,
             port=row.smtp_port,
@@ -74,14 +65,6 @@ def to_settings_out(row: AppSettings) -> SettingsOut:
             timezone=row.daily_report_timezone or "Asia/Kolkata",
             recipients=list(row.daily_report_recipients or []),
             last_sent_on=row.daily_report_last_sent_on,
-        ),
-        dqa_daily=DqaDailySettings(
-            enabled=bool(getattr(row, "dqa_daily_enabled", False)),
-            send_time=getattr(row, "dqa_daily_time", None) or "21:30",
-            timezone=getattr(row, "dqa_daily_timezone", None) or "Asia/Kolkata",
-            recipients=list(getattr(row, "dqa_daily_recipients", None) or []),
-            last_sent_on=getattr(row, "dqa_daily_last_sent_on", None),
-            study_id=getattr(row, "dqa_daily_study_id", None),
         ),
         general=GeneralSettings(
             organization_name=row.organization_name,
@@ -106,13 +89,6 @@ def clear_undecryptable_secrets(db: Session) -> bool:
     """Drop ciphertext that no longer matches the active encryption key."""
     row = get_or_create_settings(db)
     changed = False
-    if row.kobo_token_encrypted:
-        try:
-            decrypt_secret(row.kobo_token_encrypted)
-        except SecretError:
-            row.kobo_token_encrypted = ""
-            row.kobo_connected = False
-            changed = True
     if row.smtp_password_encrypted:
         try:
             decrypt_secret(row.smtp_password_encrypted)
@@ -120,19 +96,21 @@ def clear_undecryptable_secrets(db: Session) -> bool:
             row.smtp_password_encrypted = ""
             row.smtp_connected = False
             changed = True
+
+    for cred in db.scalars(select(StudyCredential)).all():
+        if not cred.kobo_token_encrypted:
+            continue
+        try:
+            decrypt_secret(cred.kobo_token_encrypted)
+        except SecretError:
+            cred.kobo_token_encrypted = ""
+            cred.connected = False
+            changed = True
+
     if changed:
         db.commit()
         db.refresh(row)
     return changed
-
-
-def get_kobo_token(row: AppSettings) -> str:
-    if not row.kobo_token_encrypted:
-        return ""
-    try:
-        return decrypt_secret(row.kobo_token_encrypted)
-    except SecretError as exc:
-        raise ValueError(str(exc)) from exc
 
 
 def get_smtp_password(row: AppSettings) -> str:
@@ -158,31 +136,6 @@ def smtp_config_from_row(row: AppSettings, password: str) -> SmtpConfig:
 
 def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
     row = get_or_create_settings(db)
-
-    if payload.kobo is not None:
-        kobo = payload.kobo
-        server_url = (
-            normalize_kobo_server_url(kobo.server_url)
-            if kobo.server_url is not None
-            else row.kobo_server_url
-        )
-        has_new_token = bool(kobo.api_token and not _is_masked(kobo.api_token))
-        token = kobo.api_token.strip() if has_new_token else get_kobo_token(row)
-
-        if (kobo.server_url is not None or has_new_token) and not token:
-            raise ValueError("A Kobo API token is required to configure the connection")
-
-        if kobo.server_url is not None or has_new_token:
-            KoboClient(server_url, token).test_connection()
-            row.kobo_server_url = server_url
-            row.kobo_connected = True
-            row.kobo_last_tested_at = datetime.now(timezone.utc)
-
-        if has_new_token:
-            row.kobo_token_encrypted = encrypt_secret(token)
-        row.kobo_username = kobo.username
-        row.kobo_auto_sync = kobo.auto_sync
-        row.kobo_sync_interval_hours = kobo.sync_interval_hours
 
     if payload.smtp is not None:
         smtp = payload.smtp
@@ -213,14 +166,6 @@ def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
         row.daily_report_timezone = daily.timezone.strip() or "Asia/Kolkata"
         row.daily_report_recipients = list(daily.recipients or [])
 
-    if payload.dqa_daily is not None:
-        dqa = payload.dqa_daily
-        row.dqa_daily_enabled = dqa.enabled
-        row.dqa_daily_time = (dqa.send_time or "21:30").strip()
-        row.dqa_daily_timezone = (dqa.timezone or "Asia/Kolkata").strip()
-        row.dqa_daily_recipients = list(dqa.recipients or [])
-        row.dqa_daily_study_id = dqa.study_id
-
     if payload.general is not None:
         general = payload.general
         row.organization_name = general.organization_name
@@ -243,32 +188,6 @@ def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
     db.commit()
     db.refresh(row)
     return to_settings_out(row)
-
-
-def test_kobo(db: Session) -> ConnectionTestResult:
-    row = get_or_create_settings(db)
-    token = get_kobo_token(row)
-    if not token or not row.kobo_server_url:
-        return ConnectionTestResult(
-            success=False,
-            message="KoboToolbox credentials not configured",
-            details="Please enter your server URL and API token first.",
-        )
-    try:
-        KoboClient(row.kobo_server_url, token).test_connection()
-        row.kobo_connected = True
-        row.kobo_last_tested_at = datetime.now(timezone.utc)
-        db.commit()
-        return ConnectionTestResult(
-            success=True,
-            message="Connection successful",
-            details="KoboToolbox credentials are valid.",
-        )
-    except KoboApiError as exc:
-        row.kobo_connected = False
-        row.kobo_last_tested_at = datetime.now(timezone.utc)
-        db.commit()
-        return ConnectionTestResult(success=False, message="Connection test failed", details=str(exc))
 
 
 def test_smtp(db: Session) -> ConnectionTestResult:
@@ -306,4 +225,115 @@ def test_smtp(db: Session) -> ConnectionTestResult:
             success=False,
             message="SMTP connection test failed",
             details=str(exc),
+        )
+
+
+def get_study_credential(db: Session, study_id: str) -> StudyCredential | None:
+    return db.scalars(
+        select(StudyCredential).where(StudyCredential.study_id == study_id)
+    ).first()
+
+
+def get_kobo_token_from_credential(cred: StudyCredential) -> str:
+    if not cred.kobo_token_encrypted:
+        return ""
+    try:
+        return decrypt_secret(cred.kobo_token_encrypted)
+    except SecretError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def credential_to_summary(cred: StudyCredential) -> StudyCredentialSummary:
+    return StudyCredentialSummary(
+        connected=bool(cred.connected),
+        server_url=cred.kobo_server_url or "https://kf.kobotoolbox.org",
+        username=cred.kobo_username or "",
+        api_token=MASK if cred.kobo_token_encrypted else "",
+        last_tested_at=_iso(cred.last_tested_at),
+    )
+
+
+def update_study_kobo(
+    db: Session,
+    study_id: str,
+    payload: StudyKoboUpdate,
+) -> StudyCredentialSummary:
+    from app.services import studies as studies_service
+
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise LookupError("Study not found")
+    cred = study.credential
+    if cred is None:
+        cred = studies_service._ensure_credential(db, study)
+
+    server_url = (
+        normalize_kobo_server_url(payload.server_url)
+        if payload.server_url is not None
+        else cred.kobo_server_url
+    )
+    has_new_token = bool(payload.api_token and not _is_masked(payload.api_token))
+    token = (
+        payload.api_token.strip()
+        if has_new_token
+        else get_kobo_token_from_credential(cred)
+    )
+
+    if (payload.server_url is not None or has_new_token) and not token:
+        raise ValueError("A Kobo API token is required to configure the connection")
+
+    if payload.server_url is not None or has_new_token:
+        KoboClient(server_url, token).test_connection()
+        cred.kobo_server_url = server_url
+        cred.connected = True
+        cred.last_tested_at = datetime.now(timezone.utc)
+
+    if has_new_token:
+        cred.kobo_token_encrypted = encrypt_secret(token)
+    if payload.username is not None:
+        cred.kobo_username = payload.username
+
+    db.commit()
+    db.refresh(cred)
+    return credential_to_summary(cred)
+
+
+def test_study_kobo(db: Session, study_id: str) -> ConnectionTestResult:
+    cred = get_study_credential(db, study_id)
+    if not cred:
+        return ConnectionTestResult(
+            success=False,
+            message="KoboToolbox credentials not configured",
+            details="Please enter your server URL and API token for this study first.",
+        )
+    try:
+        token = get_kobo_token_from_credential(cred)
+    except ValueError as exc:
+        return ConnectionTestResult(
+            success=False,
+            message="KoboToolbox credentials not configured",
+            details=str(exc),
+        )
+    if not token or not cred.kobo_server_url:
+        return ConnectionTestResult(
+            success=False,
+            message="KoboToolbox credentials not configured",
+            details="Please enter your server URL and API token for this study first.",
+        )
+    try:
+        KoboClient(cred.kobo_server_url, token).test_connection()
+        cred.connected = True
+        cred.last_tested_at = datetime.now(timezone.utc)
+        db.commit()
+        return ConnectionTestResult(
+            success=True,
+            message="Connection successful",
+            details="KoboToolbox credentials are valid.",
+        )
+    except KoboApiError as exc:
+        cred.connected = False
+        cred.last_tested_at = datetime.now(timezone.utc)
+        db.commit()
+        return ConnectionTestResult(
+            success=False, message="Connection test failed", details=str(exc)
         )

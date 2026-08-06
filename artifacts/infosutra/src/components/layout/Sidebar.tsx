@@ -13,7 +13,7 @@ import {
   Library,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useGetProjects, useGetSettings } from "@workspace/api-client-react";
+import { useGetProjects } from "@workspace/api-client-react";
 import { useStudy } from "@/components/study/StudyProvider";
 
 const navigation = [
@@ -36,10 +36,9 @@ type SidebarNavProps = {
 
 export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
   const [location] = useLocation();
-  const settings = useGetSettings();
   const projects = useGetProjects();
   const { studies, activeStudy, activeStudyId, setActiveStudyId } = useStudy();
-  const isConnected = settings.data?.kobo.connected ?? false;
+  const isConnected = activeStudy?.credential?.connected ?? false;
   const latestSync = (projects.data ?? [])
     .map((project) => project.lastSyncAt)
     .filter((value): value is string => Boolean(value))

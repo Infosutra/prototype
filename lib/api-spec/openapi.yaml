@@ -170,6 +170,91 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/kobo:
+    get:
+      tags:
+      - studies
+      summary: Get Study Kobo
+      operationId: getStudyKobo
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyCredentialSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - studies
+      summary: Update Study Kobo
+      operationId: updateStudyKobo
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyKoboUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyCredentialSummary'
+        '400':
+          description: Bad request
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/test-kobo:
+    post:
+      tags:
+      - studies
+      summary: Test Study Kobo
+      operationId: testStudyKoboConnection
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /studies/{study_id}/projects:
     post:
       tags:
@@ -271,6 +356,15 @@ paths:
       - projects
       summary: Sync Projects
       operationId: syncProjects
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
         '200':
           description: Successful Response
@@ -278,6 +372,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /projects/{project_id}:
     get:
       tags:
@@ -1135,19 +1235,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /settings/test-kobo:
-    post:
-      tags:
-      - settings
-      summary: Test Kobo
-      operationId: testKoboConnection
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConnectionTestResult'
   /settings/test-smtp:
     post:
       tags:
@@ -1713,40 +1800,6 @@ components:
       - submissionsByStatus
       - topProjects
       title: DashboardSummary
-    DqaDailySettings:
-      properties:
-        enabled:
-          type: boolean
-          title: Enabled
-          default: false
-        sendTime:
-          type: string
-          title: Sendtime
-          default: '21:30'
-        timezone:
-          type: string
-          title: Timezone
-          default: Asia/Kolkata
-        recipients:
-          items:
-            type: string
-          type: array
-          title: Recipients
-          default: []
-        lastSentOn:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Lastsenton
-        studyId:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Studyid
-      type: object
-      title: DqaDailySettings
-      description: Separate from the submission daily digest — DQA Daily HTML+PDF
-        email.
     DqaFlagOut:
       properties:
         id:
@@ -2299,40 +2352,6 @@ components:
       - tags
       - createdAt
       title: InsightOut
-    KoboSettings:
-      properties:
-        serverUrl:
-          type: string
-          title: Serverurl
-        apiToken:
-          type: string
-          title: Apitoken
-        username:
-          type: string
-          title: Username
-        autoSync:
-          type: boolean
-          title: Autosync
-        syncIntervalHours:
-          type: integer
-          title: Syncintervalhours
-        connected:
-          type: boolean
-          title: Connected
-        lastTestedAt:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Lasttestedat
-      type: object
-      required:
-      - serverUrl
-      - apiToken
-      - username
-      - autoSync
-      - syncIntervalHours
-      - connected
-      title: KoboSettings
     OkResponse:
       properties:
         success:
@@ -2538,6 +2557,11 @@ components:
           - type: string
           - type: 'null'
           title: Studyid
+        studyToolId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studytoolid
         toolCode:
           anyOf:
           - type: string
@@ -2597,6 +2621,11 @@ components:
           - type: string
           - type: 'null'
           title: Studyid
+        studyToolId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studytoolid
         toolCode:
           anyOf:
           - type: string
@@ -2859,30 +2888,20 @@ components:
       title: RulePackUpdate
     SettingsOut:
       properties:
-        kobo:
-          $ref: '#/components/schemas/KoboSettings'
         smtp:
           $ref: '#/components/schemas/SmtpSettings'
         dailyReport:
           $ref: '#/components/schemas/DailyReportSettings'
-        dqaDaily:
-          $ref: '#/components/schemas/DqaDailySettings'
         general:
           $ref: '#/components/schemas/GeneralSettings'
       type: object
       required:
-      - kobo
       - smtp
       - dailyReport
-      - dqaDaily
       - general
       title: SettingsOut
     SettingsUpdate:
       properties:
-        kobo:
-          anyOf:
-          - $ref: '#/components/schemas/KoboSettings'
-          - type: 'null'
         smtp:
           anyOf:
           - $ref: '#/components/schemas/SmtpSettings'
@@ -2890,10 +2909,6 @@ components:
         dailyReport:
           anyOf:
           - $ref: '#/components/schemas/DailyReportSettings'
-          - type: 'null'
-        dqaDaily:
-          anyOf:
-          - $ref: '#/components/schemas/DqaDailySettings'
           - type: 'null'
         general:
           anyOf:
@@ -3003,6 +3018,11 @@ components:
           - type: string
           - type: 'null'
           title: Toolcode
+        studyToolId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studytoolid
       type: object
       required:
       - projectId
@@ -3031,22 +3051,60 @@ components:
           type: string
           title: Timezone
           default: Asia/Kolkata
-        targets:
-          additionalProperties: true
-          type: object
-          title: Targets
-          default: {}
-        formMap:
+        tools:
           items:
-            additionalProperties: true
-            type: object
+            $ref: '#/components/schemas/StudyToolIn'
           type: array
-          title: Formmap
+          title: Tools
           default: []
       type: object
       required:
       - name
       title: StudyCreate
+    StudyCredentialSummary:
+      properties:
+        connected:
+          type: boolean
+          title: Connected
+          default: false
+        serverUrl:
+          type: string
+          title: Serverurl
+          default: https://kf.kobotoolbox.org
+        username:
+          type: string
+          title: Username
+          default: ''
+        apiToken:
+          type: string
+          title: Apitoken
+          default: ''
+        lastTestedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lasttestedat
+      type: object
+      title: StudyCredentialSummary
+    StudyKoboUpdate:
+      properties:
+        serverUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serverurl
+        apiToken:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Apitoken
+        username:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Username
+      type: object
+      title: StudyKoboUpdate
     StudyOut:
       properties:
         id:
@@ -3074,18 +3132,16 @@ components:
           type: string
           title: Timezone
           default: Asia/Kolkata
-        targets:
-          additionalProperties: true
-          type: object
-          title: Targets
-          default: {}
-        formMap:
+        tools:
           items:
-            additionalProperties: true
-            type: object
+            $ref: '#/components/schemas/StudyToolOut'
           type: array
-          title: Formmap
+          title: Tools
           default: []
+        credential:
+          anyOf:
+          - $ref: '#/components/schemas/StudyCredentialSummary'
+          - type: 'null'
         dayNumber:
           anyOf:
           - type: integer
@@ -3136,6 +3192,11 @@ components:
           - type: string
           - type: 'null'
           title: Toolcode
+        studyToolId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studytoolid
         submissionCount:
           type: integer
           title: Submissioncount
@@ -3150,6 +3211,57 @@ components:
       - uid
       - name
       title: StudyProjectOut
+    StudyToolIn:
+      properties:
+        code:
+          type: string
+          title: Code
+        label:
+          type: string
+          title: Label
+          default: ''
+        targetCount:
+          type: integer
+          title: Targetcount
+          default: 0
+        sortOrder:
+          type: integer
+          title: Sortorder
+          default: 0
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+      type: object
+      required:
+      - code
+      title: StudyToolIn
+    StudyToolOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        code:
+          type: string
+          title: Code
+        label:
+          type: string
+          title: Label
+          default: ''
+        targetCount:
+          type: integer
+          title: Targetcount
+          default: 0
+        sortOrder:
+          type: integer
+          title: Sortorder
+          default: 0
+      type: object
+      required:
+      - id
+      - code
+      title: StudyToolOut
     StudyUpdate:
       properties:
         name:
@@ -3177,20 +3289,13 @@ components:
           - type: string
           - type: 'null'
           title: Timezone
-        targets:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
-          title: Targets
-        formMap:
+        tools:
           anyOf:
           - items:
-              additionalProperties: true
-              type: object
+              $ref: '#/components/schemas/StudyToolIn'
             type: array
           - type: 'null'
-          title: Formmap
+          title: Tools
       type: object
       title: StudyUpdate
     SubmissionGrid:

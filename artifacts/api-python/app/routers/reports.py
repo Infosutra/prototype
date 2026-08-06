@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Project, Prompt, Report
+from app.db.models import Project, Prompt, Report, ReportProject
 from app.db.session import get_db
 from app.integrations.smtp import SmtpError
 from app.schemas.common import OkResponse, ReportsListQuery
@@ -25,6 +25,7 @@ from app.schemas.misc import (
 from app.services import dqa_daily_report as dqa_daily
 from app.services import dqa_final_report as dqa_final
 from app.services import report_docx
+from sqlalchemy.orm import joinedload
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -60,17 +61,40 @@ def _map(row: Report) -> ReportOut:
     )
 
 
+def _attach_projects(db: Session, report: Report, project_ids: list[str]) -> None:
+    report.report_projects.clear()
+    db.flush()
+    if not project_ids:
+        return
+    projects = {
+        p.id: p
+        for p in db.scalars(select(Project).where(Project.id.in_(project_ids))).all()
+    }
+    for pid in project_ids:
+        project = projects.get(pid)
+        report.report_projects.append(
+            ReportProject(
+                project_id=pid,
+                project_name=project.name if project else None,
+            )
+        )
+
+
 @router.get("", response_model=list[ReportOut], operation_id="getReports")
 def list_reports(
     q: Annotated[ReportsListQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ReportOut]:
-    query = select(Report).order_by(Report.created_at.desc())
+    query = (
+        select(Report)
+        .options(joinedload(Report.report_projects))
+        .order_by(Report.created_at.desc())
+    )
     if q.study_id:
         query = query.where(Report.study_id == q.study_id)
     if q.report_type:
         query = query.where(Report.report_type == q.report_type)
-    return [_map(row) for row in db.scalars(query).all()]
+    return [_map(row) for row in db.scalars(query).unique().all()]
 
 
 @router.post("/dqa-daily", response_model=ReportOut, operation_id="createDqaDailyReport")
@@ -120,12 +144,6 @@ def create_dqa_final(
 
 @router.post("", response_model=ReportOut, operation_id="createReport")
 def create_report(payload: ReportInput, db: Session = Depends(get_db)) -> ReportOut:
-    names: list[str] = []
-    if payload.project_ids:
-        projects = db.scalars(
-            select(Project).where(Project.id.in_(payload.project_ids))
-        ).all()
-        names = [p.name for p in projects]
     prompt_name = None
     if payload.prompt_id:
         prompt = db.get(Prompt, payload.prompt_id)
@@ -142,11 +160,11 @@ def create_report(payload: ReportInput, db: Session = Depends(get_db)) -> Report
         report_date=payload.report_date,
         prompt_id=payload.prompt_id,
         prompt_name=prompt_name,
-        project_ids=payload.project_ids,
-        project_names=names,
         created_at=now,
     )
     db.add(row)
+    db.flush()
+    _attach_projects(db, row, list(payload.project_ids or []))
     db.commit()
     db.refresh(row)
     return _map(row)
@@ -154,7 +172,11 @@ def create_report(payload: ReportInput, db: Session = Depends(get_db)) -> Report
 
 @router.get("/{report_id}", response_model=ReportOut, operation_id="getReport")
 def get_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
-    row = db.get(Report, report_id)
+    row = db.scalars(
+        select(Report)
+        .options(joinedload(Report.report_projects))
+        .where(Report.id == report_id)
+    ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
     return _map(row)
@@ -303,8 +325,7 @@ def generate_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
             row.report_type = "daily_dqa"
             row.study_id = fresh.study_id
             row.report_date = fresh.report_date
-            row.project_ids = fresh.project_ids
-            row.project_names = fresh.project_names
+            _attach_projects(db, row, list(fresh.project_ids or []))
             row.generated_content = fresh.generated_content
             row.download_url = f"/api/reports/{row.id}/download"
             row.page_count = fresh.page_count

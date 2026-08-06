@@ -54,6 +54,7 @@ def project_to_dict(project: Project) -> dict[str, Any]:
         "label_language": label_language,
         "available_label_languages": available or ["English", "Hindi"],
         "study_id": project.study_id,
+        "study_tool_id": project.study_tool_id,
         "tool_code": project.tool_code,
         "study_name": study_name,
     }

@@ -11,8 +11,12 @@ import {
   useGetStudies,
   useUnassignStudyProject,
   useUpdateStudy,
+  useGetStudyKobo,
+  useUpdateStudyKobo,
+  useTestStudyKoboConnection,
   type StudyCreate,
   type StudyOut,
+  type StudyToolIn,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
@@ -21,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus, Save, Trash2, X } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
 
 function emptyForm(): StudyCreate {
@@ -31,9 +35,18 @@ function emptyForm(): StudyCreate {
     startDate: "",
     endDate: "",
     timezone: "Asia/Kolkata",
-    targets: {},
-    formMap: [],
+    tools: [],
   };
+}
+
+function toolsFromStudy(study: StudyOut): StudyToolIn[] {
+  return (study.tools ?? []).map((t, index) => ({
+    id: t.id,
+    code: t.code,
+    label: t.label ?? "",
+    targetCount: t.targetCount ?? 0,
+    sortOrder: t.sortOrder ?? index,
+  }));
 }
 
 type PanelMode = "idle" | "create" | "edit";
@@ -49,10 +62,15 @@ export default function StudiesPage() {
   const [panelMode, setPanelMode] = useState<PanelMode>("idle");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StudyCreate>(emptyForm());
-  const [targetKey, setTargetKey] = useState("T1");
-  const [targetValue, setTargetValue] = useState("");
+  const [toolCode, setToolCode] = useState("T1");
+  const [toolLabel, setToolLabel] = useState("");
+  const [toolTarget, setToolTarget] = useState("");
   const [assignProjectId, setAssignProjectId] = useState("");
   const [assignTool, setAssignTool] = useState("T1");
+  const [koboServerUrl, setKoboServerUrl] = useState("https://kf.kobotoolbox.org");
+  const [koboApiToken, setKoboApiToken] = useState("");
+  const [koboUsername, setKoboUsername] = useState("");
+  const [koboFeedback, setKoboFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [message, setMessage] = useState("");
   const [didAutoSelect, setDidAutoSelect] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -62,6 +80,37 @@ export default function StudiesPage() {
   const deleteStudy = useDeleteStudy();
   const assignStudyProject = useAssignStudyProject();
   const unassignStudyProject = useUnassignStudyProject();
+  const studyKoboQuery = useGetStudyKobo(editingId ?? "", {
+    query: { enabled: Boolean(editingId) } as never,
+  });
+  const updateStudyKobo = useUpdateStudyKobo({
+    mutation: {
+      onSuccess: (cred) => {
+        setKoboApiToken(cred.apiToken ?? "");
+        setKoboFeedback({ success: true, message: "Kobo settings saved and connection verified." });
+        queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
+      },
+      onError: (err) =>
+        setKoboFeedback({
+          success: false,
+          message: err instanceof Error ? err.message : "Save failed",
+        }),
+    },
+  });
+  const testStudyKobo = useTestStudyKoboConnection({
+    mutation: {
+      onSuccess: (result) =>
+        setKoboFeedback({
+          success: result.success,
+          message: result.details ?? result.message,
+        }),
+      onError: (err) =>
+        setKoboFeedback({
+          success: false,
+          message: err instanceof Error ? err.message : "Test failed",
+        }),
+    },
+  });
 
   const editing = useMemo(
     () => studies.find((s) => s.id === editingId) ?? null,
@@ -91,11 +140,11 @@ export default function StudiesPage() {
       startDate: study.startDate ?? "",
       endDate: study.endDate ?? "",
       timezone: study.timezone || "Asia/Kolkata",
-      targets: { ...(study.targets ?? {}) },
-      formMap: [...(study.formMap ?? [])],
+      tools: toolsFromStudy(study),
     });
     setMessage("");
     setActionError(null);
+    setKoboFeedback(null);
   };
 
   const cancelCreate = () => {
@@ -135,8 +184,7 @@ export default function StudiesPage() {
       startDate: study.startDate ?? "",
       endDate: study.endDate ?? "",
       timezone: study.timezone || "Asia/Kolkata",
-      targets: { ...(study.targets ?? {}) },
-      formMap: [...(study.formMap ?? [])],
+      tools: toolsFromStudy(study),
     });
     invalidateStudyQueries();
   };
@@ -210,6 +258,14 @@ export default function StudiesPage() {
     }
   };
 
+  useEffect(() => {
+    const cred = studyKoboQuery.data ?? editing?.credential;
+    if (!cred) return;
+    setKoboServerUrl(cred.serverUrl || "https://kf.kobotoolbox.org");
+    setKoboApiToken(cred.apiToken || "");
+    setKoboUsername(cred.username || "");
+  }, [studyKoboQuery.data, editing?.credential, editingId]);
+
   const unassignedProjects = projects.filter((p) => !p.studyId);
   const otherStudyProjects = projects.filter(
     (p) => p.studyId && p.studyId !== editingId,
@@ -220,7 +276,7 @@ export default function StudiesPage() {
     studiesQuery.error?.message ||
     actionError;
 
-  const targetEntries = Object.entries(form.targets ?? {});
+  const tools = form.tools ?? [];
 
   return (
     <Layout>
@@ -244,7 +300,7 @@ export default function StudiesPage() {
               </Link>{" "}
               on the Forms page
             </li>
-            <li>Create a study here, set targets, then assign each form a tool code</li>
+            <li>Create a study here, define tools and Kobo credentials, then assign forms</li>
             <li>Keep this study selected in the sidebar workspace for DQA and Reports</li>
           </ol>
         </div>
@@ -415,30 +471,44 @@ export default function StudiesPage() {
               </div>
 
               <div className="border-t pt-4 space-y-3">
-                <Label>Submission targets by tool</Label>
-                <div className="flex flex-wrap gap-2">
-                  {targetEntries.map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-2 rounded border px-2 py-1 text-sm">
-                      <span className="font-mono text-xs">{key}</span>
+                <Label>Tools (codes, labels, coverage targets)</Label>
+                <div className="space-y-2">
+                  {tools.map((tool, index) => (
+                    <div key={tool.id ?? `${tool.code}-${index}`} className="flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 text-sm">
+                      <span className="font-mono text-xs w-12">{tool.code}</span>
                       <Input
-                        className="h-8 w-24"
-                        type="number"
-                        value={Number(value) || 0}
+                        className="h-8 flex-1 min-w-[120px]"
+                        value={tool.label ?? ""}
                         onChange={(e) =>
                           setForm((f) => ({
                             ...f,
-                            targets: { ...f.targets, [key]: Number(e.target.value) },
+                            tools: (f.tools ?? []).map((t, i) =>
+                              i === index ? { ...t, label: e.target.value } : t,
+                            ),
+                          }))
+                        }
+                        placeholder="Label"
+                      />
+                      <Input
+                        className="h-8 w-24"
+                        type="number"
+                        value={tool.targetCount ?? 0}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            tools: (f.tools ?? []).map((t, i) =>
+                              i === index ? { ...t, targetCount: Number(e.target.value) } : t,
+                            ),
                           }))
                         }
                       />
                       <button
                         type="button"
                         onClick={() =>
-                          setForm((f) => {
-                            const next = { ...f.targets };
-                            delete next[key];
-                            return { ...f, targets: next };
-                          })
+                          setForm((f) => ({
+                            ...f,
+                            tools: (f.tools ?? []).filter((_, i) => i !== index),
+                          }))
                         }
                       >
                         <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -446,38 +516,139 @@ export default function StudiesPage() {
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2 max-w-md">
+                <div className="flex flex-wrap gap-2 max-w-xl">
                   <Input
                     className="w-24"
-                    value={targetKey}
-                    onChange={(e) => setTargetKey(e.target.value.toUpperCase())}
+                    value={toolCode}
+                    onChange={(e) => setToolCode(e.target.value.toUpperCase())}
                     placeholder="T1"
                   />
                   <Input
+                    className="flex-1 min-w-[120px]"
+                    value={toolLabel}
+                    onChange={(e) => setToolLabel(e.target.value)}
+                    placeholder="Label"
+                  />
+                  <Input
+                    className="w-24"
                     type="number"
-                    value={targetValue}
-                    onChange={(e) => setTargetValue(e.target.value)}
+                    value={toolTarget}
+                    onChange={(e) => setToolTarget(e.target.value)}
                     placeholder="440"
                   />
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      if (!targetKey.trim()) return;
+                      if (!toolCode.trim()) return;
                       setForm((f) => ({
                         ...f,
-                        targets: {
-                          ...f.targets,
-                          [targetKey.trim().toUpperCase()]: Number(targetValue || 0),
-                        },
+                        tools: [
+                          ...(f.tools ?? []),
+                          {
+                            code: toolCode.trim().toUpperCase(),
+                            label: toolLabel.trim() || toolCode.trim().toUpperCase(),
+                            targetCount: Number(toolTarget || 0),
+                            sortOrder: (f.tools ?? []).length,
+                          },
+                        ],
                       }));
-                      setTargetValue("");
+                      setToolLabel("");
+                      setToolTarget("");
                     }}
                   >
-                    Add
+                    Add tool
                   </Button>
                 </div>
               </div>
+
+              {panelMode === "edit" && editingId && (
+                <div className="border-t pt-4 space-y-3">
+                  <Label>KoboToolbox connection</Label>
+                  <p className="text-xs text-muted-foreground">
+                    One Kobo account per study. Sync on the Forms page uses these credentials.
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1.5 md:col-span-2">
+                      <Label className="text-xs">Server URL</Label>
+                      <Input
+                        className="font-mono text-sm"
+                        value={koboServerUrl}
+                        onChange={(e) => setKoboServerUrl(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">API token</Label>
+                      <Input
+                        type="password"
+                        className="font-mono text-sm"
+                        value={koboApiToken}
+                        onChange={(e) => setKoboApiToken(e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Username (optional)</Label>
+                      <Input
+                        value={koboUsername}
+                        onChange={(e) => setKoboUsername(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={updateStudyKobo.isPending}
+                      onClick={() => {
+                        setKoboFeedback(null);
+                        updateStudyKobo.mutate({
+                          studyId: editingId,
+                          data: {
+                            serverUrl: koboServerUrl,
+                            apiToken: koboApiToken,
+                            username: koboUsername,
+                          },
+                        });
+                      }}
+                    >
+                      {updateStudyKobo.isPending ? "Saving…" : "Save & connect"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={testStudyKobo.isPending || !koboApiToken}
+                      onClick={() => {
+                        setKoboFeedback(null);
+                        testStudyKobo.mutate({ studyId: editingId });
+                      }}
+                    >
+                      {testStudyKobo.isPending ? "Testing…" : "Test connection"}
+                    </Button>
+                    {(studyKoboQuery.data?.connected || editing?.credential?.connected) && !koboFeedback && (
+                      <span className="text-sm text-green-600 dark:text-green-400 flex items-center font-medium">
+                        <CheckCircle2 className="w-4 h-4 mr-1" /> Connected
+                      </span>
+                    )}
+                  </div>
+                  {koboFeedback && (
+                    <div
+                      className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
+                        koboFeedback.success
+                          ? "border-green-200 bg-green-50 text-green-800"
+                          : "border-destructive/30 bg-destructive/5 text-destructive"
+                      }`}
+                    >
+                      {koboFeedback.success ? (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                      ) : (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      )}
+                      {koboFeedback.message}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {panelMode === "edit" && editingId && (
                 <div className="border-t pt-4 space-y-3">

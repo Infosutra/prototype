@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Project, Report, Study
+from app.db.models import Project, Report, ReportProject, Study
 from app.services import dqa_daily_report as daily
 from app.services import triangulation as tri
 from app.services.settings import get_or_create_settings
@@ -934,7 +934,7 @@ def generate_final_dqa_report(
     run_ai: bool = True,
 ) -> Report:
     settings = get_or_create_settings(db)
-    sid = study_id or settings.dqa_daily_study_id or SIGHTSAVERS_2030_ID
+    sid = study_id or SIGHTSAVERS_2030_ID
     study = db.get(Study, sid)
     if not study:
         raise ValueError(f"Study not found: {sid}")
@@ -970,8 +970,6 @@ def generate_final_dqa_report(
         study_id=study.id,
         report_date=stats["reportDate"],
         prompt_name="Final DQA",
-        project_ids=[p.id for p in projects],
-        project_names=[p.name for p in projects],
         generated_content=json.dumps(payload),
         download_url=f"/api/reports/{report_id}/download",
         page_count=5,
@@ -980,6 +978,11 @@ def generate_final_dqa_report(
         created_at=now,
     )
     db.add(row)
+    db.flush()
+    for project in projects:
+        row.report_projects.append(
+            ReportProject(project_id=project.id, project_name=project.name)
+        )
     db.commit()
     db.refresh(row)
     return row

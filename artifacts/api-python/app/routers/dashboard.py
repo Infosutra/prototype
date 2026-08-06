@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import distinct, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Project, Report, Submission
 from app.db.session import get_db
@@ -78,14 +78,17 @@ def dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummary:
 @router.get("/activity", response_model=list[ActivityItem], operation_id="getDashboardActivity")
 def dashboard_activity(db: Session = Depends(get_db)) -> list[ActivityItem]:
     rows = db.scalars(
-        select(Submission).order_by(Submission.submitted_at.desc()).limit(20)
-    ).all()
+        select(Submission)
+        .options(joinedload(Submission.project))
+        .order_by(Submission.submitted_at.desc())
+        .limit(20)
+    ).unique().all()
     return [
         ActivityItem(
             id=row.id,
             type="submission",
-            message=f"New submission in {row.project_name}",
-            project_name=row.project_name,
+            message=f"New submission in {row.project.name if row.project else row.form_name}",
+            project_name=row.project.name if row.project else row.form_name,
             timestamp=row.submitted_at.isoformat(),
             icon="file",
         )

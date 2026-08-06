@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import DqaFlag, Project, Submission
 from app.db.session import get_db
@@ -75,7 +75,11 @@ def _flag_out(
         details=enriched or None,
         evaluated_at=_iso(flag.evaluated_at),
         enumerator=submission.enumerator if submission else None,
-        project_name=submission.project_name if submission else None,
+        project_name=(
+            submission.project.name
+            if submission and submission.project is not None
+            else None
+        ),
         kobo_id=submission.kobo_id if submission else None,
         submitted_at=_iso(submission.submitted_at) if submission and submission.submitted_at else None,
     )
@@ -246,7 +250,11 @@ def list_flags(
     sub_ids = {f.submission_id for f in flags}
     submissions = {
         s.id: s
-        for s in db.scalars(select(Submission).where(Submission.id.in_(sub_ids))).all()
+        for s in db.scalars(
+            select(Submission)
+            .options(joinedload(Submission.project))
+            .where(Submission.id.in_(sub_ids))
+        ).unique().all()
     } if sub_ids else {}
     pack_cache: dict[str, dict | None] = {}
     rule_cache: dict[tuple[str, str], dict | None] = {}

@@ -67,7 +67,7 @@ async def lifespan(_app: FastAPI):
         if clear_undecryptable_secrets(db):
             logger.warning(
                 "Cleared stored credentials that could not be decrypted with the "
-                "current encryption key. Re-enter them in Settings.",
+                "current encryption key. Re-enter them in study Kobo settings.",
             )
         study = studies_service.seed_default_study(db)
         logger.info("Study ready: %s (%s)", study.name, study.id)
@@ -76,7 +76,7 @@ async def lifespan(_app: FastAPI):
             logger.info("Seeded %s DQA rule pack(s)", seeded)
         assigned = studies_service.apply_all_study_form_maps(db)
         if assigned:
-            logger.info("Assigned %s project(s) to studies from form maps", assigned)
+            logger.info("Assigned %s project(s) to studies from seed tool links", assigned)
     finally:
         db.close()
     stop_event = asyncio.Event()

@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.db.models import Project
 from app.db.session import get_db
+from app.integrations.kobo import KoboApiError
 from app.schemas.common import OkResponse
-from app.schemas.studies import StudyAssignProject, StudyCreate, StudyOut, StudyUpdate
+from app.schemas.settings import ConnectionTestResult
+from app.schemas.studies import (
+    StudyAssignProject,
+    StudyCreate,
+    StudyCredentialSummary,
+    StudyKoboUpdate,
+    StudyOut,
+    StudyUpdate,
+)
+from app.services import settings as settings_service
 from app.services import studies as studies_service
 
 router = APIRouter(prefix="/studies", tags=["studies"])
@@ -58,6 +69,52 @@ def delete_study(study_id: str, db: Session = Depends(get_db)) -> OkResponse:
     return OkResponse(success=True)
 
 
+@router.get(
+    "/{study_id}/kobo",
+    response_model=StudyCredentialSummary,
+    operation_id="getStudyKobo",
+)
+def get_study_kobo(study_id: str, db: Session = Depends(get_db)) -> StudyCredentialSummary:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    cred = study.credential
+    if not cred:
+        return StudyCredentialSummary()
+    return settings_service.credential_to_summary(cred)
+
+
+@router.put(
+    "/{study_id}/kobo",
+    response_model=StudyCredentialSummary,
+    operation_id="updateStudyKobo",
+    responses={400: {"description": "Bad request"}},
+)
+def update_study_kobo(
+    study_id: str,
+    payload: StudyKoboUpdate,
+    db: Session = Depends(get_db),
+) -> StudyCredentialSummary:
+    try:
+        return settings_service.update_study_kobo(db, study_id, payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ValueError, KoboApiError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@router.post(
+    "/{study_id}/test-kobo",
+    response_model=ConnectionTestResult,
+    operation_id="testStudyKoboConnection",
+)
+def test_study_kobo(study_id: str, db: Session = Depends(get_db)) -> ConnectionTestResult:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    return settings_service.test_study_kobo(db, study_id)
+
+
 @router.post("/{study_id}/projects", response_model=StudyOut, operation_id="assignStudyProject")
 def assign_project(
     study_id: str,
@@ -70,8 +127,15 @@ def assign_project(
     project = db.get(Project, payload.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    studies_service.assign_project(db, study, project, tool_code=payload.tool_code)
+    studies_service.assign_project(
+        db,
+        study,
+        project,
+        tool_code=payload.tool_code,
+        study_tool_id=payload.study_tool_id,
+    )
     db.refresh(study)
+    study = studies_service.get_study(db, study_id)
     return _out(study)
 
 

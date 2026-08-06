@@ -8,7 +8,6 @@ from app.db.session import get_db
 from app.schemas.settings import ConnectionTestResult, SettingsOut, SettingsUpdate
 from app.services import daily_report as daily_report_service
 from app.services import settings as settings_service
-from app.integrations.kobo import KoboApiError
 from app.integrations.smtp import SmtpError
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -29,13 +28,8 @@ def get_settings(db: Session = Depends(get_db)) -> SettingsOut:
 def put_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> SettingsOut:
     try:
         return settings_service.update_settings(db, payload)
-    except (ValueError, KoboApiError, SmtpError) as exc:
+    except (ValueError, SmtpError) as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
-
-
-@router.post("/test-kobo", response_model=ConnectionTestResult, operation_id="testKoboConnection")
-def test_kobo(db: Session = Depends(get_db)) -> ConnectionTestResult:
-    return settings_service.test_kobo(db)
 
 
 @router.post("/test-smtp", response_model=ConnectionTestResult, operation_id="testSmtpConnection")

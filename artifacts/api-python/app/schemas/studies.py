@@ -1,14 +1,36 @@
 from __future__ import annotations
 
-from typing import Any
-
 from app.schemas.common import CamelModel
 
 
-class StudyFormMapEntry(CamelModel):
-    tool_code: str | None = None
-    project_uid: str
-    label: str | None = None
+class StudyToolOut(CamelModel):
+    id: str
+    code: str
+    label: str = ""
+    target_count: int = 0
+    sort_order: int = 0
+
+
+class StudyToolIn(CamelModel):
+    code: str
+    label: str = ""
+    target_count: int = 0
+    sort_order: int = 0
+    id: str | None = None
+
+
+class StudyCredentialSummary(CamelModel):
+    connected: bool = False
+    server_url: str = "https://kf.kobotoolbox.org"
+    username: str = ""
+    api_token: str = ""
+    last_tested_at: str | None = None
+
+
+class StudyKoboUpdate(CamelModel):
+    server_url: str | None = None
+    api_token: str | None = None
+    username: str | None = None
 
 
 class StudyProjectOut(CamelModel):
@@ -16,6 +38,7 @@ class StudyProjectOut(CamelModel):
     uid: str
     name: str
     tool_code: str | None = None
+    study_tool_id: str | None = None
     submission_count: int = 0
     sync_status: str = "never"
 
@@ -27,8 +50,8 @@ class StudyOut(CamelModel):
     start_date: str | None = None
     end_date: str | None = None
     timezone: str = "Asia/Kolkata"
-    targets: dict[str, Any] = {}
-    form_map: list[dict[str, Any]] = []
+    tools: list[StudyToolOut] = []
+    credential: StudyCredentialSummary | None = None
     day_number: int | None = None
     project_count: int = 0
     submission_count: int = 0
@@ -43,8 +66,7 @@ class StudyCreate(CamelModel):
     start_date: str | None = None
     end_date: str | None = None
     timezone: str = "Asia/Kolkata"
-    targets: dict[str, Any] = {}
-    form_map: list[dict[str, Any]] = []
+    tools: list[StudyToolIn] = []
 
 
 class StudyUpdate(CamelModel):
@@ -53,10 +75,10 @@ class StudyUpdate(CamelModel):
     start_date: str | None = None
     end_date: str | None = None
     timezone: str | None = None
-    targets: dict[str, Any] | None = None
-    form_map: list[dict[str, Any]] | None = None
+    tools: list[StudyToolIn] | None = None
 
 
 class StudyAssignProject(CamelModel):
     project_id: str
     tool_code: str | None = None
+    study_tool_id: str | None = None

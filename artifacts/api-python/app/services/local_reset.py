@@ -18,7 +18,6 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
-from app.db.base import Base
 from app.db.models import AppSettings  # noqa: F401 — register models
 from app.db import models as _models  # noqa: F401
 from app.services.studies import seed_default_study
@@ -113,6 +112,9 @@ def reset_local_database(*, database_path: str | None = None) -> dict[str, Any]:
                 logger.info("Removed %s", sibling)
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    from alembic import command
+    from alembic.config import Config
+
     engine = create_engine(
         f"sqlite:///{path}",
         connect_args={"check_same_thread": False},
@@ -121,7 +123,30 @@ def reset_local_database(*, database_path: str | None = None) -> dict[str, Any]:
     with engine.connect() as conn:
         conn.execute(text("PRAGMA foreign_keys=ON"))
         conn.commit()
-    Base.metadata.create_all(bind=engine)
+    engine.dispose()
+
+    # Apply Alembic migrations to recreate schema
+    api_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(api_root / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{path}")
+    # Temporarily point settings at this path for env.py
+    previous = os.environ.get("DATABASE_PATH")
+    os.environ["DATABASE_PATH"] = str(path)
+    try:
+        get_settings.cache_clear()
+        command.upgrade(cfg, "head")
+    finally:
+        if previous is None:
+            os.environ.pop("DATABASE_PATH", None)
+        else:
+            os.environ["DATABASE_PATH"] = previous
+        get_settings.cache_clear()
+
+    engine = create_engine(
+        f"sqlite:///{path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
     SessionNew = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
     with SessionNew() as db:

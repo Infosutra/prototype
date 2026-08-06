@@ -76,7 +76,7 @@ def _link(sub: Submission | None) -> TriangulationLink | None:
         kobo_id=sub.kobo_id,
         enumerator=sub.enumerator,
         submitted_at=_iso(sub.submitted_at),
-        project_name=sub.project_name,
+        project_name=sub.project.name if sub.project is not None else sub.form_name,
     )
 
 
@@ -109,18 +109,26 @@ def _observed(value: Any) -> bool:
 
 def _project(db: Session, tool: str, *, study_id: str | None = None) -> Project | None:
     """Resolve a study form by tool code (T1/T2/T3). Prefer active study membership."""
+    from app.db.models import StudyTool
+
     code = tool.strip().upper()
     sid = study_id or SIGHTSAVERS_2030_ID
 
     if sid:
         row = db.scalars(
-            select(Project).where(Project.study_id == sid, Project.tool_code == code)
+            select(Project)
+            .join(StudyTool, Project.study_tool_id == StudyTool.id)
+            .where(Project.study_id == sid, StudyTool.code == code)
         ).first()
         if row:
             return row
 
     # Any form with this tool code
-    row = db.scalars(select(Project).where(Project.tool_code == code)).first()
+    row = db.scalars(
+        select(Project)
+        .join(StudyTool, Project.study_tool_id == StudyTool.id)
+        .where(StudyTool.code == code)
+    ).first()
     if row:
         return row
 
@@ -172,7 +180,10 @@ def _build_tr5(db: Session, *, study_id: str | None = None) -> TriangulationView
             udise = str(get_value(data, facility_pack, "udise") or "").strip()
             if not udise:
                 continue
-            name = str(get_value(data, facility_pack, "institution_name") or row.project_name)
+            name = str(
+                get_value(data, facility_pack, "institution_name")
+                or (row.project.name if row.project is not None else row.form_name)
+            )
             existing = facility_by_udise.get(udise)
             if existing is None or _is_newer(row, existing[0]):
                 facility_by_udise[udise] = (row, name)

@@ -31,6 +31,7 @@ class ProjectOut(CamelModel):
     label_language: str
     available_label_languages: list[str]
     study_id: str | None = None
+    study_tool_id: str | None = None
     tool_code: str | None = None
     study_name: str | None = None
 
@@ -38,6 +39,7 @@ class ProjectOut(CamelModel):
 class ProjectUpdate(CamelModel):
     label_language: str | None = None
     study_id: str | None = None
+    study_tool_id: str | None = None
     tool_code: str | None = None
 
 

@@ -65,11 +65,14 @@ import type {
   ShareResult,
   StudyAssignProject,
   StudyCreate,
+  StudyCredentialSummary,
+  StudyKoboUpdate,
   StudyOut,
   StudyUpdate,
   SubmissionGrid,
   SubmissionOut,
   SubmissionsPage,
+  SyncProjectsParams,
   SyncResult,
   TrendPoint,
   TriangulationViewInfo,
@@ -699,6 +702,224 @@ export const useDeleteStudy = <TError = ErrorType<HTTPValidationError>,
       return useMutation(getDeleteStudyMutationOptions(options));
     }
 
+export const getGetStudyKoboUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/kobo`
+}
+
+/**
+ * @summary Get Study Kobo
+ */
+export const getStudyKobo = async (studyId: string, options?: RequestInit): Promise<StudyCredentialSummary> => {
+
+  return customFetch<StudyCredentialSummary>(getGetStudyKoboUrl(studyId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudyKoboQueryKey = (studyId: string,) => {
+    return [
+    `/api/studies/${studyId}/kobo`
+    ] as const;
+    }
+
+
+export const getGetStudyKoboQueryOptions = <TData = Awaited<ReturnType<typeof getStudyKobo>>, TError = ErrorType<HTTPValidationError>>(studyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudyKobo>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudyKoboQueryKey(studyId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudyKobo>>> = ({ signal }) => getStudyKobo(studyId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: studyId !== null && studyId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudyKobo>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudyKoboQueryResult = NonNullable<Awaited<ReturnType<typeof getStudyKobo>>>
+export type GetStudyKoboQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Study Kobo
+ */
+
+export function useGetStudyKobo<TData = Awaited<ReturnType<typeof getStudyKobo>>, TError = ErrorType<HTTPValidationError>>(
+ studyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudyKobo>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudyKoboQueryOptions(studyId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateStudyKoboUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/kobo`
+}
+
+/**
+ * @summary Update Study Kobo
+ */
+export const updateStudyKobo = async (studyId: string,
+    studyKoboUpdate: StudyKoboUpdate, options?: RequestInit): Promise<StudyCredentialSummary> => {
+
+  return customFetch<StudyCredentialSummary>(getUpdateStudyKoboUrl(studyId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(studyKoboUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateStudyKoboMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStudyKobo>>, TError,{studyId: string;data: BodyType<StudyKoboUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateStudyKobo>>, TError,{studyId: string;data: BodyType<StudyKoboUpdate>}, TContext> => {
+
+const mutationKey = ['updateStudyKobo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateStudyKobo>>, {studyId: string;data: BodyType<StudyKoboUpdate>}> = (props) => {
+          const {studyId,data} = props ?? {};
+
+          return  updateStudyKobo(studyId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateStudyKoboMutationResult = NonNullable<Awaited<ReturnType<typeof updateStudyKobo>>>
+    export type UpdateStudyKoboMutationBody = BodyType<StudyKoboUpdate>
+    export type UpdateStudyKoboMutationError = ErrorType<void | HTTPValidationError>
+
+    /**
+ * @summary Update Study Kobo
+ */
+export const useUpdateStudyKobo = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStudyKobo>>, TError,{studyId: string;data: BodyType<StudyKoboUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateStudyKobo>>,
+        TError,
+        {studyId: string;data: BodyType<StudyKoboUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateStudyKoboMutationOptions(options));
+    }
+
+export const getTestStudyKoboConnectionUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/test-kobo`
+}
+
+/**
+ * @summary Test Study Kobo
+ */
+export const testStudyKoboConnection = async (studyId: string, options?: RequestInit): Promise<ConnectionTestResult> => {
+
+  return customFetch<ConnectionTestResult>(getTestStudyKoboConnectionUrl(studyId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTestStudyKoboConnectionMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testStudyKoboConnection>>, TError,{studyId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testStudyKoboConnection>>, TError,{studyId: string}, TContext> => {
+
+const mutationKey = ['testStudyKoboConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testStudyKoboConnection>>, {studyId: string}> = (props) => {
+          const {studyId} = props ?? {};
+
+          return  testStudyKoboConnection(studyId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestStudyKoboConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof testStudyKoboConnection>>>
+
+    export type TestStudyKoboConnectionMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Test Study Kobo
+ */
+export const useTestStudyKoboConnection = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testStudyKoboConnection>>, TError,{studyId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testStudyKoboConnection>>,
+        TError,
+        {studyId: string},
+        TContext
+      > => {
+      return useMutation(getTestStudyKoboConnectionMutationOptions(options));
+    }
+
 export const getAssignStudyProjectUrl = (studyId: string,) => {
 
 
@@ -926,20 +1147,27 @@ export function useGetProjects<TData = Awaited<ReturnType<typeof getProjects>>, 
 
 
 
-export const getSyncProjectsUrl = () => {
+export const getSyncProjectsUrl = (params?: SyncProjectsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/projects/sync`
+  return stringifiedParams.length > 0 ? `/api/projects/sync?${stringifiedParams}` : `/api/projects/sync`
 }
 
 /**
  * @summary Sync Projects
  */
-export const syncProjects = async ( options?: RequestInit): Promise<SyncResult> => {
+export const syncProjects = async (params?: SyncProjectsParams, options?: RequestInit): Promise<SyncResult> => {
 
-  return customFetch<SyncResult>(getSyncProjectsUrl(),
+  return customFetch<SyncResult>(getSyncProjectsUrl(params),
   {
     ...options,
     method: 'POST'
@@ -951,9 +1179,9 @@ export const syncProjects = async ( options?: RequestInit): Promise<SyncResult> 
 
 
 
-export const getSyncProjectsMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncProjects>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof syncProjects>>, TError,void, TContext> => {
+export const getSyncProjectsMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncProjects>>, TError,{params?: SyncProjectsParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncProjects>>, TError,{params?: SyncProjectsParams}, TContext> => {
 
 const mutationKey = ['syncProjects'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -965,10 +1193,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncProjects>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncProjects>>, {params?: SyncProjectsParams}> = (props) => {
+          const {params} = props ?? {};
 
-
-          return  syncProjects(requestOptions)
+          return  syncProjects(params,requestOptions)
         }
 
 
@@ -980,17 +1208,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SyncProjectsMutationResult = NonNullable<Awaited<ReturnType<typeof syncProjects>>>
 
-    export type SyncProjectsMutationError = ErrorType<unknown>
+    export type SyncProjectsMutationError = ErrorType<HTTPValidationError>
 
     /**
  * @summary Sync Projects
  */
-export const useSyncProjects = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncProjects>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSyncProjects = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncProjects>>, TError,{params?: SyncProjectsParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof syncProjects>>,
         TError,
-        void,
+        {params?: SyncProjectsParams},
         TContext
       > => {
       return useMutation(getSyncProjectsMutationOptions(options));
@@ -3262,76 +3490,6 @@ export const useUpdateSettings = <TError = ErrorType<void | HTTPValidationError>
         TContext
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
-    }
-
-export const getTestKoboConnectionUrl = () => {
-
-
-
-
-  return `/api/settings/test-kobo`
-}
-
-/**
- * @summary Test Kobo
- */
-export const testKoboConnection = async ( options?: RequestInit): Promise<ConnectionTestResult> => {
-
-  return customFetch<ConnectionTestResult>(getTestKoboConnectionUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-export const getTestKoboConnectionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testKoboConnection>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof testKoboConnection>>, TError,void, TContext> => {
-
-const mutationKey = ['testKoboConnection'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testKoboConnection>>, void> = () => {
-
-
-          return  testKoboConnection(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TestKoboConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof testKoboConnection>>>
-
-    export type TestKoboConnectionMutationError = ErrorType<unknown>
-
-    /**
- * @summary Test Kobo
- */
-export const useTestKoboConnection = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testKoboConnection>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof testKoboConnection>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getTestKoboConnectionMutationOptions(options));
     }
 
 export const getTestSmtpConnectionUrl = () => {

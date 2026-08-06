@@ -75,18 +75,6 @@ export interface DashboardSummary {
   topProjects: ProjectSummary[];
 }
 
-/**
- * Separate from the submission daily digest — DQA Daily HTML+PDF email.
- */
-export interface DqaDailySettings {
-  enabled?: boolean;
-  sendTime?: string;
-  timezone?: string;
-  recipients?: string[];
-  lastSentOn?: string | null;
-  studyId?: string | null;
-}
-
 export type DqaFlagOutDetails = { [key: string]: unknown } | null;
 
 export interface DqaFlagOut {
@@ -258,16 +246,6 @@ export interface InsightOut {
   createdAt: string;
 }
 
-export interface KoboSettings {
-  serverUrl: string;
-  apiToken: string;
-  username: string;
-  autoSync: boolean;
-  syncIntervalHours: number;
-  connected: boolean;
-  lastTestedAt?: string | null;
-}
-
 export interface OkResponse {
   success?: boolean;
 }
@@ -322,6 +300,7 @@ export interface ProjectOut {
   labelLanguage: string;
   availableLabelLanguages: string[];
   studyId?: string | null;
+  studyToolId?: string | null;
   toolCode?: string | null;
   studyName?: string | null;
 }
@@ -329,6 +308,7 @@ export interface ProjectOut {
 export interface ProjectUpdate {
   labelLanguage?: string | null;
   studyId?: string | null;
+  studyToolId?: string | null;
   toolCode?: string | null;
 }
 
@@ -417,18 +397,14 @@ export interface SmtpSettings {
 }
 
 export interface SettingsOut {
-  kobo: KoboSettings;
   smtp: SmtpSettings;
   dailyReport: DailyReportSettings;
-  dqaDaily: DqaDailySettings;
   general: GeneralSettings;
 }
 
 export interface SettingsUpdate {
-  kobo?: KoboSettings | null;
   smtp?: SmtpSettings | null;
   dailyReport?: DailyReportSettings | null;
-  dqaDaily?: DqaDailySettings | null;
   general?: GeneralSettings | null;
 }
 
@@ -447,11 +423,16 @@ export interface ShareResult {
 export interface StudyAssignProject {
   projectId: string;
   toolCode?: string | null;
+  studyToolId?: string | null;
 }
 
-export type StudyCreateTargets = { [key: string]: unknown };
-
-export type StudyCreateFormMapItem = { [key: string]: unknown };
+export interface StudyToolIn {
+  code: string;
+  label?: string;
+  targetCount?: number;
+  sortOrder?: number;
+  id?: string | null;
+}
 
 export interface StudyCreate {
   name: string;
@@ -459,19 +440,37 @@ export interface StudyCreate {
   startDate?: string | null;
   endDate?: string | null;
   timezone?: string;
-  targets?: StudyCreateTargets;
-  formMap?: StudyCreateFormMapItem[];
+  tools?: StudyToolIn[];
 }
 
-export type StudyOutTargets = { [key: string]: unknown };
+export interface StudyCredentialSummary {
+  connected?: boolean;
+  serverUrl?: string;
+  username?: string;
+  apiToken?: string;
+  lastTestedAt?: string | null;
+}
 
-export type StudyOutFormMapItem = { [key: string]: unknown };
+export interface StudyKoboUpdate {
+  serverUrl?: string | null;
+  apiToken?: string | null;
+  username?: string | null;
+}
+
+export interface StudyToolOut {
+  id: string;
+  code: string;
+  label?: string;
+  targetCount?: number;
+  sortOrder?: number;
+}
 
 export interface StudyProjectOut {
   id: string;
   uid: string;
   name: string;
   toolCode?: string | null;
+  studyToolId?: string | null;
   submissionCount?: number;
   syncStatus?: string;
 }
@@ -483,8 +482,8 @@ export interface StudyOut {
   startDate?: string | null;
   endDate?: string | null;
   timezone?: string;
-  targets?: StudyOutTargets;
-  formMap?: StudyOutFormMapItem[];
+  tools?: StudyToolOut[];
+  credential?: StudyCredentialSummary | null;
   dayNumber?: number | null;
   projectCount?: number;
   submissionCount?: number;
@@ -493,18 +492,13 @@ export interface StudyOut {
   updatedAt?: string | null;
 }
 
-export type StudyUpdateTargets = { [key: string]: unknown } | null;
-
-export type StudyUpdateFormMap = { [key: string]: unknown }[] | null;
-
 export interface StudyUpdate {
   name?: string | null;
   description?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   timezone?: string | null;
-  targets?: StudyUpdateTargets;
-  formMap?: StudyUpdateFormMap;
+  tools?: StudyToolIn[] | null;
 }
 
 export interface SubmissionGrid {
@@ -624,6 +618,10 @@ export interface AppSchemasDqaEnumeratorStat {
 }
 
 export type GetProjectsParams = {
+studyId?: string | null;
+};
+
+export type SyncProjectsParams = {
 studyId?: string | null;
 };
 
