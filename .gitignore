@@ -1,12 +1,8 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
 # compiled output
 dist
 tmp
 out-tsc
 *.tsbuildinfo
-.expo
-.expo-shared
 
 # dependencies
 node_modules
@@ -31,6 +27,10 @@ node_modules
 /.sass-cache
 /connect.lock
 /coverage
+/data/*.sqlite*
+/data/reports/
+.env
+.env.local
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log
@@ -41,9 +41,8 @@ testem.log
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
+# Local tooling / secrets / Python venv
 .cache/
 .local/
+artifacts/api-python/.venv/
+*.log
