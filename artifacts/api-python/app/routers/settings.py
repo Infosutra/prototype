@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.settings import ConnectionTestResult, SettingsOut, SettingsUpdate
 from app.services import daily_report as daily_report_service
+from app.services import dqa_daily_email as dqa_daily_email
 from app.services import settings as settings_service
 from app.integrations.smtp import SmtpError
 
@@ -73,10 +74,8 @@ def send_daily_report(db: Session = Depends(get_db)) -> ConnectionTestResult:
 )
 def send_dqa_daily_report(db: Session = Depends(get_db)) -> ConnectionTestResult:
     """Generate and email today's DQA Daily (separate from submission digest)."""
-    from app.services import dqa_daily_report as dqa_daily
-
     try:
-        report, recipients = dqa_daily.send_dqa_daily_now(db)
+        report, recipients = dqa_daily_email.send_dqa_daily_now(db)
         return ConnectionTestResult(
             success=True,
             message="DQA Daily sent",

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from statistics import median
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
-from app.db.models import DqaFlag, Project, Submission
+from app.db.models import Project
 from app.db.session import get_db
+from app.repositories import dqa as dqa_repo
 from app.schemas.common import DqaFlagsQuery, ProjectIdQuery, StudyIdQuery, StudyProjectQuery
 from app.schemas.dqa import (
     DqaFlagOut,
@@ -24,9 +24,10 @@ from app.schemas.dqa import (
     TriangulationViewInfo,
     TriangulationViewOut,
 )
-from app.services.triangulation import TriangulationError
 from app.services import dqa_engine
 from app.services.dqa_engine import list_form_fields
+from app.services import triangulation as tri
+from app.services.triangulation import TriangulationError
 
 router = APIRouter(prefix="/dqa", tags=["dqa"])
 
@@ -38,12 +39,12 @@ def _iso(value: datetime | None) -> str:
 
 
 def _flag_out(
-    flag: DqaFlag,
-    submission: Submission | None = None,
+    flag,
+    submission=None,
     *,
     pack: dict | None = None,
     rule: dict | None = None,
-    project_rows: list[Submission] | None = None,
+    project_rows: list | None = None,
 ) -> DqaFlagOut:
     details = flag.details if isinstance(flag.details, dict) else {}
     data = submission.data if submission and isinstance(submission.data, dict) else {}
@@ -91,57 +92,29 @@ def dqa_summary(
     q: Annotated[StudyProjectQuery, Query()],
     db: Session = Depends(get_db),
 ) -> DqaSummary:
-    project_id = q.project_id
-    study_id = q.study_id
-    sub_q = select(Submission)
-    flag_q = select(DqaFlag)
-    if study_id and not project_id:
-        project_ids = [
-            p.id
-            for p in db.scalars(select(Project).where(Project.study_id == study_id)).all()
-        ]
-        if not project_ids:
-            return DqaSummary(
-                project_id=None,
-                total_submissions=0,
-                flagged_submissions=0,
-                flagged_pct=0.0,
-                red_flags=0,
-                amber_flags=0,
-                by_rule=[],
-            )
-        sub_q = sub_q.where(Submission.project_id.in_(project_ids))
-        flag_q = flag_q.where(DqaFlag.project_id.in_(project_ids))
-    elif project_id:
-        sub_q = sub_q.where(Submission.project_id == project_id)
-        flag_q = flag_q.where(DqaFlag.project_id == project_id)
-
-    submissions = list(db.scalars(sub_q).all())
-    flags = list(db.scalars(flag_q).all())
-    flagged_ids = {f.submission_id for f in flags}
-    red = sum(1 for f in flags if f.severity == "red")
-    amber = sum(1 for f in flags if f.severity == "amber")
-    by_rule: dict[str, DqaRuleCount] = {}
-    for flag in flags:
-        key = flag.rule_id
-        if key not in by_rule:
-            by_rule[key] = DqaRuleCount(
-                rule_id=flag.rule_id,
-                title=flag.title,
-                severity=flag.severity,
-                count=0,
-            )
-        by_rule[key].count += 1
-    total = len(submissions)
-    flagged = len(flagged_ids)
+    loaded = dqa_repo.load_submissions_and_flags(
+        db, project_id=q.project_id, study_id=q.study_id
+    )
+    if loaded is None:
+        return DqaSummary(
+            project_id=None,
+            total_submissions=0,
+            flagged_submissions=0,
+            flagged_pct=0.0,
+            red_flags=0,
+            amber_flags=0,
+            by_rule=[],
+        )
+    submissions, flags = loaded
+    agg = dqa_repo.aggregate_summary(submissions, flags)
     return DqaSummary(
-        project_id=project_id,
-        total_submissions=total,
-        flagged_submissions=flagged,
-        flagged_pct=round((flagged / total) * 100, 1) if total else 0.0,
-        red_flags=red,
-        amber_flags=amber,
-        by_rule=sorted(by_rule.values(), key=lambda r: (-r.count, r.rule_id)),
+        project_id=q.project_id,
+        total_submissions=agg["total_submissions"],
+        flagged_submissions=agg["flagged_submissions"],
+        flagged_pct=agg["flagged_pct"],
+        red_flags=agg["red_flags"],
+        amber_flags=agg["amber_flags"],
+        by_rule=[DqaRuleCount(**r) for r in agg["by_rule"]],
     )
 
 
@@ -151,71 +124,9 @@ def dqa_by_project(
     db: Session = Depends(get_db),
 ) -> list[ProjectDqaStat]:
     """Per-project DQA metrics aligned with the Data Quality dashboard."""
-    study_id = q.study_id
-    project_q = select(Project).order_by(Project.name)
-    if study_id:
-        project_q = project_q.where(Project.study_id == study_id)
-    projects = list(db.scalars(project_q).all())
-    project_ids = [p.id for p in projects]
-    submissions = list(
-        db.scalars(
-            select(Submission).where(Submission.project_id.in_(project_ids))
-            if project_ids
-            else select(Submission).where(False)
-        ).all()
-    )
-    flags = list(
-        db.scalars(
-            select(DqaFlag).where(DqaFlag.project_id.in_(project_ids))
-            if project_ids
-            else select(DqaFlag).where(False)
-        ).all()
-    )
-
-    subs_by_project: dict[str, list[Submission]] = {}
-    for sub in submissions:
-        subs_by_project.setdefault(sub.project_id, []).append(sub)
-
-    flags_by_sub: dict[str, list[DqaFlag]] = {}
-    for flag in flags:
-        flags_by_sub.setdefault(flag.submission_id, []).append(flag)
-
-    results: list[ProjectDqaStat] = []
-    for project in projects:
-        project_subs = subs_by_project.get(project.id, [])
-        total = len(project_subs)
-        clean = 0
-        amber_subs = 0
-        red_subs = 0
-        red_flags = 0
-        amber_flags = 0
-        for sub in project_subs:
-            sub_flags = flags_by_sub.get(sub.id, [])
-            red_n = sum(1 for f in sub_flags if f.severity == "red")
-            amber_n = sum(1 for f in sub_flags if f.severity == "amber")
-            red_flags += red_n
-            amber_flags += amber_n
-            if red_n > 0:
-                red_subs += 1
-            elif amber_n > 0:
-                amber_subs += 1
-            else:
-                clean += 1
-        flagged = amber_subs + red_subs
-        results.append(
-            ProjectDqaStat(
-                project_id=project.id,
-                project_name=project.name,
-                total_submissions=total,
-                clean_submissions=clean,
-                amber_submissions=amber_subs,
-                red_submissions=red_subs,
-                red_flags=red_flags,
-                amber_flags=amber_flags,
-                flagged_pct=round((flagged / total) * 100, 1) if total else 0.0,
-            )
-        )
-    return sorted(results, key=lambda r: (-r.flagged_pct, -r.total_submissions, r.project_name))
+    projects, submissions, flags = dqa_repo.load_projects_with_dqa(db, study_id=q.study_id)
+    rows = dqa_repo.aggregate_by_project(projects, submissions, flags)
+    return [ProjectDqaStat(**r) for r in rows]
 
 
 @router.get("/flags", response_model=list[DqaFlagOut], operation_id="getDqaFlags")
@@ -223,47 +134,27 @@ def list_flags(
     params: Annotated[DqaFlagsQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[DqaFlagOut]:
-    project_id = params.project_id
-    study_id = params.study_id
-    submission_id = params.submission_id
-    rule_id = params.rule_id
-    severity = params.severity
-    enumerator = params.enumerator
-    limit = params.limit
-    q = select(DqaFlag).order_by(DqaFlag.evaluated_at.desc()).limit(limit)
-    if study_id and not project_id:
-        project_ids = [
-            p.id
-            for p in db.scalars(select(Project).where(Project.study_id == study_id)).all()
-        ]
-        if not project_ids:
-            return []
-        q = q.where(DqaFlag.project_id.in_(project_ids))
-    elif project_id:
-        q = q.where(DqaFlag.project_id == project_id)
-    if submission_id:
-        q = q.where(DqaFlag.submission_id == submission_id)
-    if rule_id:
-        q = q.where(DqaFlag.rule_id == rule_id)
-    if severity:
-        q = q.where(DqaFlag.severity == severity.lower())
-    flags = list(db.scalars(q).all())
-    sub_ids = {f.submission_id for f in flags}
-    submissions = {
-        s.id: s
-        for s in db.scalars(
-            select(Submission)
-            .options(joinedload(Submission.project))
-            .where(Submission.id.in_(sub_ids))
-        ).unique().all()
-    } if sub_ids else {}
+    flags = dqa_repo.load_flags_filtered(
+        db,
+        project_id=params.project_id,
+        study_id=params.study_id,
+        submission_id=params.submission_id,
+        rule_id=params.rule_id,
+        severity=params.severity,
+        limit=params.limit,
+    )
+    if flags is None:
+        return []
+    submissions = dqa_repo.load_submissions_by_ids(db, {f.submission_id for f in flags})
     pack_cache: dict[str, dict | None] = {}
     rule_cache: dict[tuple[str, str], dict | None] = {}
-    project_rows_cache: dict[str, list[Submission]] = {}
+    project_rows_cache: dict[str, list] = {}
     results: list[DqaFlagOut] = []
     for flag in flags:
         sub = submissions.get(flag.submission_id)
-        if enumerator and (not sub or enumerator.lower() not in (sub.enumerator or "").lower()):
+        if params.enumerator and (
+            not sub or params.enumerator.lower() not in (sub.enumerator or "").lower()
+        ):
             continue
         if flag.project_id not in pack_cache:
             pack_cache[flag.project_id] = dqa_engine.get_pack_for_project(db, flag.project_id)
@@ -288,8 +179,8 @@ def list_flags(
         ):
             needs_related = True
         if needs_related and flag.project_id not in project_rows_cache:
-            project_rows_cache[flag.project_id] = list(
-                db.scalars(select(Submission).where(Submission.project_id == flag.project_id)).all()
+            project_rows_cache[flag.project_id] = dqa_repo.load_project_submissions(
+                db, flag.project_id
             )
         results.append(
             _flag_out(
@@ -308,71 +199,14 @@ def enumerator_stats(
     q: Annotated[StudyProjectQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[EnumeratorStat]:
-    project_id = q.project_id
-    study_id = q.study_id
-    sub_q = select(Submission)
-    flag_q = select(DqaFlag)
-    if study_id and not project_id:
-        project_ids = [
-            p.id
-            for p in db.scalars(select(Project).where(Project.study_id == study_id)).all()
-        ]
-        if not project_ids:
-            return []
-        sub_q = sub_q.where(Submission.project_id.in_(project_ids))
-        flag_q = flag_q.where(DqaFlag.project_id.in_(project_ids))
-    elif project_id:
-        sub_q = sub_q.where(Submission.project_id == project_id)
-        flag_q = flag_q.where(DqaFlag.project_id == project_id)
-    submissions = list(db.scalars(sub_q).all())
-    flags = list(db.scalars(flag_q).all())
-    flags_by_sub: dict[str, list[DqaFlag]] = {}
-    for flag in flags:
-        flags_by_sub.setdefault(flag.submission_id, []).append(flag)
-
-    buckets: dict[str, dict] = {}
-    for sub in submissions:
-        name = sub.enumerator or "Unknown"
-        bucket = buckets.setdefault(
-            name,
-            {"submissions": 0, "flagged": 0, "red": 0, "amber": 0, "durations": []},
-        )
-        bucket["submissions"] += 1
-        sub_flags = flags_by_sub.get(sub.id, [])
-        if sub_flags:
-            bucket["flagged"] += 1
-        bucket["red"] += sum(1 for f in sub_flags if f.severity == "red")
-        bucket["amber"] += sum(1 for f in sub_flags if f.severity == "amber")
-        data = sub.data if isinstance(sub.data, dict) else {}
-        start = data.get("start")
-        end = data.get("end")
-        try:
-            if start and end:
-                from datetime import datetime
-
-                s = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
-                e = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
-                bucket["durations"].append((e - s).total_seconds() / 60.0)
-        except ValueError:
-            pass
-
-    result: list[EnumeratorStat] = []
-    for name, bucket in buckets.items():
-        total = bucket["submissions"]
-        flagged = bucket["flagged"]
-        durations = bucket["durations"]
-        result.append(
-            EnumeratorStat(
-                enumerator=name,
-                submissions=total,
-                flagged=flagged,
-                flagged_pct=round((flagged / total) * 100, 1) if total else 0.0,
-                red_flags=bucket["red"],
-                amber_flags=bucket["amber"],
-                median_duration_minutes=round(median(durations), 1) if durations else None,
-            )
-        )
-    return sorted(result, key=lambda r: (-r.flagged_pct, -r.submissions, r.enumerator))
+    loaded = dqa_repo.load_submissions_and_flags(
+        db, project_id=q.project_id, study_id=q.study_id
+    )
+    if loaded is None:
+        return []
+    submissions, flags = loaded
+    rows = dqa_repo.aggregate_enumerators(submissions, flags)
+    return [EnumeratorStat(**r) for r in rows]
 
 
 @router.post("/recompute", response_model=DqaRecomputeResult, operation_id="recomputeDqa")
@@ -405,8 +239,6 @@ def list_triangulation_views(
     db: Session = Depends(get_db),
 ) -> list[TriangulationViewInfo]:
     """List triangulation views defined for a study. studyId is required."""
-    from app.services import triangulation as tri
-
     try:
         return [TriangulationViewInfo.model_validate(v) for v in tri.list_views(db, q.study_id)]
     except TriangulationError as exc:
@@ -424,8 +256,6 @@ def triangulation_view(
     db: Session = Depends(get_db),
 ) -> TriangulationViewOut:
     """Evaluate a study-defined triangulation view. studyId is required."""
-    from app.services import triangulation as tri
-
     try:
         return tri.build_view(db, view_id, study_id=q.study_id)
     except TriangulationError as exc:

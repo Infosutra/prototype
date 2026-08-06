@@ -22,9 +22,11 @@ from app.schemas.misc import (
     ShareReportInput,
     ShareResult,
 )
+from app.rendering import docx as report_docx
+from app.services import dqa_daily_email as dqa_daily_email
 from app.services import dqa_daily_report as dqa_daily
 from app.services import dqa_final_report as dqa_final
-from app.services import report_docx
+from app.services.report_storage import docx_path_for, pdf_path_for
 from sqlalchemy.orm import joinedload
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -110,7 +112,7 @@ def create_dqa_daily(
             run_ai=payload.run_ai,
         )
         if payload.send_email:
-            dqa_daily.send_dqa_daily_email(db, report)
+            dqa_daily_email.send_dqa_daily_email(db, report)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SmtpError as exc:
@@ -132,7 +134,7 @@ def create_dqa_final(
             run_ai=payload.run_ai,
         )
         if payload.send_email:
-            dqa_daily.send_dqa_daily_email(db, report)
+            dqa_daily_email.send_dqa_daily_email(db, report)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SmtpError as exc:
@@ -230,7 +232,7 @@ def download_report(
         or "report"
     )
     if format == "pdf":
-        path = dqa_daily.pdf_path_for(report_id)
+        path = pdf_path_for(report_id)
         if not path.is_file():
             raise HTTPException(status_code=404, detail="PDF file not found — regenerate the report")
         return FileResponse(
@@ -239,7 +241,7 @@ def download_report(
             filename=f"{ascii_title}.pdf",
         )
 
-    path = dqa_daily.docx_path_for(report_id)
+    path = docx_path_for(report_id)
     if path.is_file():
         return FileResponse(
             path,
@@ -279,8 +281,8 @@ def delete_report(report_id: str, db: Session = Depends(get_db)) -> OkResponse:
     row = db.get(Report, report_id)
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
-    pdf_path = dqa_daily.pdf_path_for(report_id)
-    docx_path = dqa_daily.docx_path_for(report_id)
+    pdf_path = pdf_path_for(report_id)
+    docx_path = docx_path_for(report_id)
     db.delete(row)
     db.commit()
     if pdf_path.is_file():
@@ -309,13 +311,13 @@ def generate_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         # Replace draft with generated row metadata on the same id if draft.
         if row.status == "draft":
-            path_old = dqa_daily.pdf_path_for(fresh.id)
-            path_new = dqa_daily.pdf_path_for(row.id)
+            path_old = pdf_path_for(fresh.id)
+            path_new = pdf_path_for(row.id)
             if path_old.is_file():
                 path_new.write_bytes(path_old.read_bytes())
                 path_old.unlink(missing_ok=True)
-            docx_old = dqa_daily.docx_path_for(fresh.id)
-            docx_new = dqa_daily.docx_path_for(row.id)
+            docx_old = docx_path_for(fresh.id)
+            docx_new = docx_path_for(row.id)
             if docx_old.is_file():
                 docx_new.write_bytes(docx_old.read_bytes())
                 docx_old.unlink(missing_ok=True)
@@ -377,7 +379,7 @@ def share_report(
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
     try:
-        _, recipients = dqa_daily.send_dqa_daily_email(
+        _, recipients = dqa_daily_email.send_dqa_daily_email(
             db, row, recipients=payload.recipients
         )
     except SmtpError as exc:

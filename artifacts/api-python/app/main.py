@@ -28,7 +28,7 @@ from app.routers import (
     submissions,
 )
 from app.services.daily_report import maybe_send_scheduled_report
-from app.services.dqa_daily_report import maybe_send_scheduled_dqa_daily
+from app.services.dqa_daily_email import maybe_send_scheduled_dqa_daily
 
 logger = logging.getLogger(__name__)
 

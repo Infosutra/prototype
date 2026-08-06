@@ -4,13 +4,14 @@ import html
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Project, Submission
+from app.domain.reporting.helpers import day_bounds
 from app.integrations.smtp import SmtpError, send_email
 from app.services.form_labels import extract_enumerator_name
 from app.services.settings import (
@@ -58,16 +59,6 @@ def parse_send_time(value: str) -> tuple[int, int] | None:
     if hour > 23 or minute > 59:
         return None
     return hour, minute
-
-
-def day_bounds(date_key: str, tz_name: str) -> tuple[datetime, datetime]:
-    tz = ZoneInfo(tz_name)
-    year, month, day = (int(p) for p in date_key.split("-"))
-    start_local = datetime(year, month, day, 0, 0, 0, tzinfo=tz)
-    end_local = start_local + timedelta(days=1) - timedelta(microseconds=1)
-    return start_local.astimezone(timezone.utc).replace(tzinfo=None), end_local.astimezone(
-        timezone.utc
-    ).replace(tzinfo=None)
 
 
 def _find_field(data: dict, field_name: str):
