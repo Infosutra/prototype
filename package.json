@@ -4,14 +4,15 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "build": "pnpm run typecheck && pnpm run api:spec:check && pnpm -r --if-present run build && bash -c 'cd artifacts/api-python && uv run pytest -q'",
+    "test": "pnpm run typecheck && pnpm run api:spec:check && bash -c 'cd artifacts/api-python && uv run pytest -q && uv run ruff check app/domain app/repositories app/seeds'",
     "start:local": "bash ./scripts/start-local.sh",
     "sync:rpi": "bash ./scripts/sync-to-rpi.sh",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/infosutra\" --filter \"./scripts\" --if-present run typecheck",
     "api:spec": "cd artifacts/api-python && uv run python scripts/export_openapi.py",
     "api:client": "pnpm run api:spec && pnpm --filter @workspace/api-spec run codegen",
-    "api:spec:check": "pnpm run api:spec && git diff --exit-code lib/api-spec/openapi.yaml"
+    "api:spec:check": "bash -c 'tmp=$(mktemp) && cp lib/api-spec/openapi.yaml \"$tmp\" && pnpm run api:spec && diff -q \"$tmp\" lib/api-spec/openapi.yaml; status=$?; rm -f \"$tmp\"; exit $status'"
   },
   "private": true,
   "devDependencies": {

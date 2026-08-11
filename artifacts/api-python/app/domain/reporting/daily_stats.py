@@ -53,7 +53,6 @@ def compute_daily_dqa_stats(
         tool = (project.tool_code or "—").upper()
         p_all = [s for s in all_subs if s.project_id == project.id]
         p_today = [s for s in today_subs if s.project_id == project.id]
-        p_all_ids = {s.id for s in p_all}
         p_today_ids = {s.id for s in p_today}
         p_flags = [f for f in all_flags if f.project_id == project.id]
         p_today_flags = [f for f in p_flags if f.submission_id in p_today_ids]
@@ -157,7 +156,7 @@ def compute_daily_dqa_stats(
     top_rules_all = sorted(rule_all.values(), key=lambda r: (-r["count"], r["ruleId"]))[:12]
 
     # RED items grouped by rule (Daily §1.2 / Final style)
-    def _group_red_flags(flags: list[DqaFlag]) -> list[dict[str, Any]]:
+    def _group_red_flags(flags: list[Any]) -> list[dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = {}
         for flag in flags:
             if flag.severity != "red":

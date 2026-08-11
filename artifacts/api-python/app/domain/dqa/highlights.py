@@ -11,6 +11,7 @@ from app.domain.dqa.values import (
     resolve_alias,
 )
 
+
 def collect_field_refs(node: Any, out: list[str] | None = None) -> list[str]:
     """Walk a check/details tree and collect logical field references."""
     if out is None:

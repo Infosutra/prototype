@@ -256,3 +256,90 @@ def test_tr5_and_tr3_cross_form(db: Session):
     # school active (meetings>0 and cwd) but parents neither attended nor issues
     assert tr3.mismatch_count == 1
     assert tr3.rows[0].mismatch is True
+
+
+def test_cross_study_isolation(db: Session):
+    """Study A triangulation must not see Study B submissions (even with same UDISE)."""
+    study_a = _seed_study(db)
+
+    study_b = Study(
+        id="study-other",
+        name="Other Study",
+        description=None,
+        start_date=None,
+        end_date=None,
+        timezone="UTC",
+    )
+    db.add(study_b)
+    tool_b = StudyTool(
+        id="tool-b-t2", study_id=study_b.id, code="T2", label="Teachers", sort_order=0
+    )
+    db.add(tool_b)
+    db.flush()
+    proj_b = Project(
+        id="proj-b-t2",
+        uid="uid-b-t2",
+        name="Teachers B",
+        study_id=study_b.id,
+        study_tool_id=tool_b.id,
+    )
+    db.add(proj_b)
+    from app.db.models import RulePack
+
+    db.add(
+        RulePack(
+            project_id=proj_b.id,
+            pack={
+                "join_key": "udise",
+                "fields": {
+                    "udise": "UDISE",
+                    "institution_name": "NAME",
+                    "has_cwd": "D1",
+                    "practice_d4": "D4",
+                    "observe_front_seating": "CO1",
+                    "observe_differentiated": "CO2",
+                    "observe_multi_sensory": "CO3",
+                    "observe_peer_group": "CO4",
+                    "observe_adapted_materials": "CO8",
+                },
+            },
+        )
+    )
+    # Extra teacher row that would inflate Study A counts if leaked
+    db.add(
+        Submission(
+            id="sub-b-t2-1",
+            project_id=proj_b.id,
+            kobo_id="999",
+            form_id="uid-b-t2",
+            form_name="Teachers B",
+            enumerator="Ex",
+            submitted_at=datetime(2026, 8, 1, 15, 0, 0),
+            data={
+                "UDISE": "222",
+                "NAME": "School B Leak",
+                "D1": "0",
+                "D4": "e a",
+                "CO1": "3",
+                "CO2": "3",
+                "CO3": "1",
+                "CO4": "1",
+                "CO8": "1",
+            },
+        )
+    )
+    db.commit()
+
+    view_a = tri.build_view(db, "TR-1", study_id=study_a.id)
+    assert view_a.mismatch_count == 1
+    assert len(view_a.rows) == 1
+    assert all(
+        "School B Leak" not in str(getattr(c, "value", ""))
+        for row in view_a.rows
+        for c in row.cells
+    )
+    by_id = {p.id: p for p in view_a.practices}
+    # Still only Study A's single teacher submission in the denominator
+    assert by_id["front_seating"].n == 1
+    assert by_id["differentiated"].n == 1
+    assert by_id["front_seating"].claimed_count == 1

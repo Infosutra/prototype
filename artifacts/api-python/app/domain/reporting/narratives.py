@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+
 def _fallback_headline(stats: dict[str, Any]) -> str:
     t = stats["totals"]
     day = stats.get("dayNumber")

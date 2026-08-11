@@ -31,7 +31,27 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.16.1",
+]
 
 [tool.uv]
 package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+# Pre-existing noise across the Phase 5 split; tighten later.
+ignore = ["E501", "UP017"]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-export modules often look unsorted to isort; keep intentional public order.
+"app/domain/**/__init__.py" = ["I001"]
+"app/rendering/**/__init__.py" = ["I001"]
+"app/repositories/**/__init__.py" = ["I001"]
+"app/seeds/**/__init__.py" = ["I001"]
+"app/domain/reporting/__init__.py" = ["F401", "I001"]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+
 def prefer_label_text(label: Any) -> str:
     """Pick a readable label from Kobo bilingual arrays (prefer English when last)."""
     if label is None:
