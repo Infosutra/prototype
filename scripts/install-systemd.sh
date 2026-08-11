@@ -14,7 +14,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_NAME="infosutra"
 UNIT_SRC="$ROOT_DIR/scripts/systemd/infosutra.service"
 UNIT_DST="/etc/systemd/system/${SERVICE_NAME}.service"
-EXPECTED_ROOT="/home/sarath/work/Infosutra/DataInsightshub"
+EXPECTED_ROOT="/home/sarath/work/Infosutra"
 
 SKIP_BUILD=0
 NO_START=0

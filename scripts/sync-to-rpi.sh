@@ -17,7 +17,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 RPI_USER="${RPI_USER:-sarath}"
 RPI_HOST="${RPI_HOST:-192.168.1.253}"
-RPI_PATH="${RPI_PATH:-~/work/Infosutra/DataInsightshub}"
+RPI_PATH="${RPI_PATH:-~/work/Infosutra}"
 
 WITH_DATA=0
 DRY_RUN=0

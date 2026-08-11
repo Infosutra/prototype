@@ -1,6 +1,6 @@
 [Unit]
 Description=Infosutra (API + production UI)
-Documentation=file:///home/sarath/work/Infosutra/DataInsightshub/artifacts/api-python/README.md
+Documentation=file:///home/sarath/work/Infosutra/artifacts/api-python/README.md
 After=network-online.target
 Wants=network-online.target
 
@@ -8,8 +8,8 @@ Wants=network-online.target
 Type=simple
 User=sarath
 Group=sarath
-WorkingDirectory=/home/sarath/work/Infosutra/DataInsightshub
-ExecStart=/home/sarath/work/Infosutra/DataInsightshub/scripts/run-production.sh
+WorkingDirectory=/home/sarath/work/Infosutra
+ExecStart=/home/sarath/work/Infosutra/scripts/run-production.sh
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
