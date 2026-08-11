@@ -31,6 +31,7 @@ import type {
   FormFieldOut,
   GenerateDqaDailyInput,
   GenerateDqaFinalInput,
+  GetAnalyticsOverviewParams,
   GetDqaByProjectParams,
   GetDqaEnumeratorsParams,
   GetDqaFlagsParams,
@@ -45,6 +46,7 @@ import type {
   GetTriangulationViewsParams,
   HTTPValidationError,
   HealthStatus,
+  InsightGenerateInput,
   InsightInput,
   InsightOut,
   OkResponse,
@@ -58,6 +60,8 @@ import type {
   RecomputeDqaParams,
   ReportInput,
   ReportOut,
+  ReportScheduleOut,
+  ReportScheduleUpdate,
   RulePackOut,
   RulePackUpdate,
   SettingsOut,
@@ -704,6 +708,154 @@ export const useDeleteStudy = <TError = ErrorType<HTTPValidationError>,
         TContext
       > => {
       return useMutation(getDeleteStudyMutationOptions(options));
+    }
+
+export const getGetStudyScheduleUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/schedules/daily-dqa`
+}
+
+/**
+ * @summary Get Study Schedule
+ */
+export const getStudySchedule = async (studyId: string, options?: RequestInit): Promise<ReportScheduleOut> => {
+
+  return customFetch<ReportScheduleOut>(getGetStudyScheduleUrl(studyId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudyScheduleQueryKey = (studyId: string,) => {
+    return [
+    `/api/studies/${studyId}/schedules/daily-dqa`
+    ] as const;
+    }
+
+
+export const getGetStudyScheduleQueryOptions = <TData = Awaited<ReturnType<typeof getStudySchedule>>, TError = ErrorType<HTTPValidationError>>(studyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudySchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudyScheduleQueryKey(studyId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudySchedule>>> = ({ signal }) => getStudySchedule(studyId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: studyId !== null && studyId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudySchedule>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudyScheduleQueryResult = NonNullable<Awaited<ReturnType<typeof getStudySchedule>>>
+export type GetStudyScheduleQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Study Schedule
+ */
+
+export function useGetStudySchedule<TData = Awaited<ReturnType<typeof getStudySchedule>>, TError = ErrorType<HTTPValidationError>>(
+ studyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudySchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudyScheduleQueryOptions(studyId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateStudyScheduleUrl = (studyId: string,) => {
+
+
+
+
+  return `/api/studies/${studyId}/schedules/daily-dqa`
+}
+
+/**
+ * @summary Update Study Schedule
+ */
+export const updateStudySchedule = async (studyId: string,
+    reportScheduleUpdate: ReportScheduleUpdate, options?: RequestInit): Promise<ReportScheduleOut> => {
+
+  return customFetch<ReportScheduleOut>(getUpdateStudyScheduleUrl(studyId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reportScheduleUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateStudyScheduleMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStudySchedule>>, TError,{studyId: string;data: BodyType<ReportScheduleUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateStudySchedule>>, TError,{studyId: string;data: BodyType<ReportScheduleUpdate>}, TContext> => {
+
+const mutationKey = ['updateStudySchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateStudySchedule>>, {studyId: string;data: BodyType<ReportScheduleUpdate>}> = (props) => {
+          const {studyId,data} = props ?? {};
+
+          return  updateStudySchedule(studyId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateStudyScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof updateStudySchedule>>>
+    export type UpdateStudyScheduleMutationBody = BodyType<ReportScheduleUpdate>
+    export type UpdateStudyScheduleMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Study Schedule
+ */
+export const useUpdateStudySchedule = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStudySchedule>>, TError,{studyId: string;data: BodyType<ReportScheduleUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateStudySchedule>>,
+        TError,
+        {studyId: string;data: BodyType<ReportScheduleUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateStudyScheduleMutationOptions(options));
     }
 
 export const getGetStudyKoboUrl = (studyId: string,) => {
@@ -2072,20 +2224,27 @@ export function useGetSubmission<TData = Awaited<ReturnType<typeof getSubmission
 
 
 
-export const getGetAnalyticsOverviewUrl = () => {
+export const getGetAnalyticsOverviewUrl = (params?: GetAnalyticsOverviewParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/analytics/overview`
+  return stringifiedParams.length > 0 ? `/api/analytics/overview?${stringifiedParams}` : `/api/analytics/overview`
 }
 
 /**
  * @summary Analytics Overview
  */
-export const getAnalyticsOverview = async ( options?: RequestInit): Promise<AnalyticsOverview> => {
+export const getAnalyticsOverview = async (params?: GetAnalyticsOverviewParams, options?: RequestInit): Promise<AnalyticsOverview> => {
 
-  return customFetch<AnalyticsOverview>(getGetAnalyticsOverviewUrl(),
+  return customFetch<AnalyticsOverview>(getGetAnalyticsOverviewUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2098,23 +2257,23 @@ export const getAnalyticsOverview = async ( options?: RequestInit): Promise<Anal
 
 
 
-export const getGetAnalyticsOverviewQueryKey = () => {
+export const getGetAnalyticsOverviewQueryKey = (params?: GetAnalyticsOverviewParams,) => {
     return [
-    `/api/analytics/overview`
+    `/api/analytics/overview`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetAnalyticsOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getAnalyticsOverview>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetAnalyticsOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getAnalyticsOverview>>, TError = ErrorType<HTTPValidationError>>(params?: GetAnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetAnalyticsOverviewQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetAnalyticsOverviewQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAnalyticsOverview>>> = ({ signal }) => getAnalyticsOverview({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAnalyticsOverview>>> = ({ signal }) => getAnalyticsOverview(params, { signal, ...requestOptions });
 
 
 
@@ -2124,19 +2283,19 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetAnalyticsOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAnalyticsOverview>>>
-export type GetAnalyticsOverviewQueryError = ErrorType<unknown>
+export type GetAnalyticsOverviewQueryError = ErrorType<HTTPValidationError>
 
 
 /**
  * @summary Analytics Overview
  */
 
-export function useGetAnalyticsOverview<TData = Awaited<ReturnType<typeof getAnalyticsOverview>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetAnalyticsOverview<TData = Awaited<ReturnType<typeof getAnalyticsOverview>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetAnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetAnalyticsOverviewQueryOptions(options)
+  const queryOptions = getGetAnalyticsOverviewQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2462,6 +2621,76 @@ export const useCreateInsight = <TError = ErrorType<HTTPValidationError>,
         TContext
       > => {
       return useMutation(getCreateInsightMutationOptions(options));
+    }
+
+export const getGenerateInsightUrl = () => {
+
+
+
+
+  return `/api/ai/insights/generate`
+}
+
+/**
+ * @summary Generate Insight
+ */
+export const generateInsight = async (insightGenerateInput: InsightGenerateInput, options?: RequestInit): Promise<InsightOut> => {
+
+  return customFetch<InsightOut>(getGenerateInsightUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(insightGenerateInput)
+  }
+);}
+
+
+
+
+export const getGenerateInsightMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateInsight>>, TError,{data: BodyType<InsightGenerateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateInsight>>, TError,{data: BodyType<InsightGenerateInput>}, TContext> => {
+
+const mutationKey = ['generateInsight'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateInsight>>, {data: BodyType<InsightGenerateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateInsight(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateInsightMutationResult = NonNullable<Awaited<ReturnType<typeof generateInsight>>>
+    export type GenerateInsightMutationBody = BodyType<InsightGenerateInput>
+    export type GenerateInsightMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Generate Insight
+ */
+export const useGenerateInsight = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateInsight>>, TError,{data: BodyType<InsightGenerateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateInsight>>,
+        TError,
+        {data: BodyType<InsightGenerateInput>},
+        TContext
+      > => {
+      return useMutation(getGenerateInsightMutationOptions(options));
     }
 
 export const getGetInsightUrl = (insightId: string,) => {

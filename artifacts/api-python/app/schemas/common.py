@@ -52,6 +52,7 @@ class ReportsListQuery(CamelModel):
 
 class SubmissionsListQuery(CamelModel):
     project_id: str | None = None
+    study_id: str | None = None
     status: str | None = None
     date_from: str | None = None
     date_to: str | None = None

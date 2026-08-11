@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Project
+from app.db.models import Project, ReportSchedule
 from app.db.session import get_db
 from app.integrations.kobo import KoboApiError
 from app.schemas.common import OkResponse
@@ -14,6 +17,7 @@ from app.schemas.dqa import (
     TriangulationViewDefinitionOut,
     TriangulationViewDefinitionUpdate,
 )
+from app.schemas.misc import ReportScheduleOut, ReportScheduleUpdate
 from app.schemas.studies import (
     StudyAssignProject,
     StudyCreate,
@@ -31,6 +35,45 @@ router = APIRouter(prefix="/studies", tags=["studies"])
 
 def _out(study) -> StudyOut:
     return StudyOut.model_validate(studies_service.study_to_dict(study))
+
+
+def _schedule_out(row: ReportSchedule) -> ReportScheduleOut:
+    return ReportScheduleOut(
+        id=row.id,
+        study_id=row.study_id,
+        report_type=row.report_type,
+        enabled=bool(row.enabled),
+        time=row.time or "21:30",
+        timezone=row.timezone or "Asia/Kolkata",
+        recipients=list(row.recipients or []),
+        last_sent_on=row.last_sent_on,
+    )
+
+
+def _get_or_create_daily_schedule(db: Session, study_id: str) -> ReportSchedule:
+    row = db.scalars(
+        select(ReportSchedule).where(
+            ReportSchedule.study_id == study_id,
+            ReportSchedule.report_type == "daily_dqa",
+        )
+    ).first()
+    if row:
+        return row
+    study = studies_service.get_study(db, study_id)
+    row = ReportSchedule(
+        id=str(uuid.uuid4()),
+        study_id=study_id,
+        report_type="daily_dqa",
+        enabled=False,
+        time="21:30",
+        timezone=(study.timezone if study and study.timezone else "Asia/Kolkata"),
+        recipients=[],
+        last_sent_on=None,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @router.get("", response_model=list[StudyOut], operation_id="getStudies")
@@ -73,6 +116,45 @@ def delete_study(study_id: str, db: Session = Depends(get_db)) -> OkResponse:
         raise HTTPException(status_code=404, detail="Study not found")
     studies_service.delete_study(db, study)
     return OkResponse(success=True)
+
+
+@router.get(
+    "/{study_id}/schedules/daily-dqa",
+    response_model=ReportScheduleOut,
+    operation_id="getStudySchedule",
+)
+def get_study_schedule(study_id: str, db: Session = Depends(get_db)) -> ReportScheduleOut:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    return _schedule_out(_get_or_create_daily_schedule(db, study_id))
+
+
+@router.put(
+    "/{study_id}/schedules/daily-dqa",
+    response_model=ReportScheduleOut,
+    operation_id="updateStudySchedule",
+)
+def update_study_schedule(
+    study_id: str,
+    payload: ReportScheduleUpdate,
+    db: Session = Depends(get_db),
+) -> ReportScheduleOut:
+    study = studies_service.get_study(db, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    row = _get_or_create_daily_schedule(db, study_id)
+    if payload.enabled is not None:
+        row.enabled = payload.enabled
+    if payload.time is not None:
+        row.time = payload.time.strip() or row.time
+    if payload.timezone is not None:
+        row.timezone = payload.timezone.strip() or row.timezone
+    if payload.recipients is not None:
+        row.recipients = [e.strip() for e in payload.recipients if e and e.strip()]
+    db.commit()
+    db.refresh(row)
+    return _schedule_out(row)
 
 
 @router.get(

@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ShieldAlert,
   Library,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGetProjects } from "@workspace/api-client-react";
@@ -18,6 +19,7 @@ import { useStudy } from "@/components/study/StudyProvider";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Activity },
+  { name: "Portfolio", href: "/portfolio", icon: LayoutGrid },
   { name: "Studies", href: "/studies", icon: Library },
   { name: "Forms", href: "/forms", icon: FolderGit2 },
   { name: "Data Quality", href: "/dqa", icon: ShieldAlert },

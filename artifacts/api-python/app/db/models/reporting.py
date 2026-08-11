@@ -110,6 +110,9 @@ class Insight(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     type: Mapped[str] = mapped_column(String, nullable=False, default="summary")
+    study_id: Mapped[str | None] = mapped_column(
+        ForeignKey("studies.id", ondelete="SET NULL"), nullable=True
+    )
     project_id: Mapped[str | None] = mapped_column(String, nullable=True)
     project_name: Mapped[str | None] = mapped_column(String, nullable=True)
     severity: Mapped[str] = mapped_column(String, nullable=False, default="info")

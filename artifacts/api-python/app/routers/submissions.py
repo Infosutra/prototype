@@ -46,6 +46,7 @@ def list_submissions(
     db: Session = Depends(get_db),
 ) -> SubmissionsPage:
     project_id = params.project_id
+    study_id = params.study_id
     status = params.status
     date_from = params.date_from
     date_to = params.date_to
@@ -54,6 +55,10 @@ def list_submissions(
     conditions = []
     if project_id:
         conditions.append(Submission.project_id == project_id)
+    elif study_id:
+        conditions.append(
+            Submission.project_id.in_(select(Project.id).where(Project.study_id == study_id))
+        )
     if status and status != "all":
         conditions.append(Submission.status == status)
     if date_from:

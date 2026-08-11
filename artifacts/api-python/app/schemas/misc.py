@@ -88,6 +88,7 @@ class InsightOut(CamelModel):
     summary: str
     content: str
     type: str
+    study_id: str | None = None
     project_id: str | None = None
     project_name: str | None = None
     severity: str
@@ -100,10 +101,35 @@ class InsightInput(CamelModel):
     summary: str = ""
     content: str = ""
     type: str = "summary"
+    study_id: str | None = None
     project_id: str | None = None
     project_name: str | None = None
     severity: str = "info"
     tags: list[str] = []
+
+
+class InsightGenerateInput(CamelModel):
+    question: str
+    study_id: str
+    project_id: str | None = None
+
+
+class ReportScheduleOut(CamelModel):
+    id: str
+    study_id: str
+    report_type: str
+    enabled: bool
+    time: str
+    timezone: str
+    recipients: list[str]
+    last_sent_on: str | None = None
+
+
+class ReportScheduleUpdate(CamelModel):
+    enabled: bool | None = None
+    time: str | None = None
+    timezone: str | None = None
+    recipients: list[str] | None = None
 
 
 class PromptOut(CamelModel):

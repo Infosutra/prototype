@@ -222,11 +222,18 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface InsightGenerateInput {
+  question: string;
+  studyId: string;
+  projectId?: string | null;
+}
+
 export interface InsightInput {
   title: string;
   summary?: string;
   content?: string;
   type?: string;
+  studyId?: string | null;
   projectId?: string | null;
   projectName?: string | null;
   severity?: string;
@@ -239,6 +246,7 @@ export interface InsightOut {
   summary: string;
   content: string;
   type: string;
+  studyId?: string | null;
   projectId?: string | null;
   projectName?: string | null;
   severity: string;
@@ -369,6 +377,24 @@ export interface ReportOut {
   fileSizeKb?: number | null;
   generatedAt?: string | null;
   createdAt: string;
+}
+
+export interface ReportScheduleOut {
+  id: string;
+  studyId: string;
+  reportType: string;
+  enabled: boolean;
+  time: string;
+  timezone: string;
+  recipients: string[];
+  lastSentOn?: string | null;
+}
+
+export interface ReportScheduleUpdate {
+  enabled?: boolean | null;
+  time?: string | null;
+  timezone?: string | null;
+  recipients?: string[] | null;
 }
 
 export type RulePackOutPack = { [key: string]: unknown };
@@ -674,6 +700,7 @@ enumerator?: string | null;
 
 export type GetSubmissionsParams = {
 projectId?: string | null;
+studyId?: string | null;
 status?: string | null;
 dateFrom?: string | null;
 dateTo?: string | null;
@@ -685,12 +712,18 @@ page?: number;
 limit?: number;
 };
 
+export type GetAnalyticsOverviewParams = {
+studyId?: string | null;
+};
+
 export type GetSubmissionTrendsParams = {
 period?: string;
+studyId?: string | null;
 };
 
 export type GetInsightsParams = {
-project_id?: string | null;
+studyId?: string | null;
+projectId?: string | null;
 };
 
 export type GetReportsParams = {

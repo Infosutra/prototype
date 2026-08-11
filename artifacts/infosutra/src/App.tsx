@@ -20,6 +20,7 @@ import DqaDashboard from './pages/dqa/DqaDashboard';
 import RulePackEditor from './pages/dqa/RulePackEditor';
 import TriangulationViewEditor from './pages/dqa/TriangulationViewEditor';
 import Studies from './pages/studies/Studies';
+import Portfolio from './pages/portfolio/Portfolio';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +35,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/portfolio" component={Portfolio} />
       <Route path="/studies" component={Studies} />
       <Route path="/forms" component={FormsPage} />
       <Route path="/forms/:id/submissions" component={ProjectSubmissions} />
@@ -62,12 +64,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <StudyProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <StudyProvider>
             <Router />
-          </WouterRouter>
-          <Toaster />
-        </StudyProvider>
+            <Toaster />
+          </StudyProvider>
+        </WouterRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );

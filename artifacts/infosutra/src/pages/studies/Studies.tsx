@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetProjectsQueryKey,
   getGetStudiesQueryKey,
+  getGetStudyScheduleQueryKey,
   useAssignStudyProject,
   useCreateStudy,
   useDeleteStudy,
@@ -14,6 +15,8 @@ import {
   useGetStudyKobo,
   useUpdateStudyKobo,
   useTestStudyKoboConnection,
+  useGetStudySchedule,
+  useUpdateStudySchedule,
   type StudyCreate,
   type StudyOut,
   type StudyToolIn,
@@ -25,8 +28,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, CheckCircle2, Plus, Save, Trash2, X } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
+
+function parseRecipientInput(value: string): string[] {
+  return [...new Set(value.split(/[,;\n]+/).map((item) => item.trim()).filter(Boolean))];
+}
 
 function emptyForm(): StudyCreate {
   return {
@@ -71,6 +80,11 @@ export default function StudiesPage() {
   const [koboApiToken, setKoboApiToken] = useState("");
   const [koboUsername, setKoboUsername] = useState("");
   const [koboFeedback, setKoboFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState("21:30");
+  const [scheduleTimezone, setScheduleTimezone] = useState("Asia/Kolkata");
+  const [scheduleRecipients, setScheduleRecipients] = useState("");
+  const [scheduleFeedback, setScheduleFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [message, setMessage] = useState("");
   const [didAutoSelect, setDidAutoSelect] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -81,6 +95,9 @@ export default function StudiesPage() {
   const assignStudyProject = useAssignStudyProject();
   const unassignStudyProject = useUnassignStudyProject();
   const studyKoboQuery = useGetStudyKobo(editingId ?? "", {
+    query: { enabled: Boolean(editingId) } as never,
+  });
+  const studyScheduleQuery = useGetStudySchedule(editingId ?? "", {
     query: { enabled: Boolean(editingId) } as never,
   });
   const updateStudyKobo = useUpdateStudyKobo({
@@ -111,6 +128,36 @@ export default function StudiesPage() {
         }),
     },
   });
+  const updateStudySchedule = useUpdateStudySchedule({
+    mutation: {
+      onSuccess: (schedule) => {
+        setScheduleEnabled(Boolean(schedule.enabled));
+        setScheduleTime(schedule.time || "21:30");
+        setScheduleTimezone(schedule.timezone || "Asia/Kolkata");
+        setScheduleRecipients((schedule.recipients ?? []).join("\n"));
+        setScheduleFeedback({ success: true, message: "Daily DQA schedule saved." });
+        if (editingId) {
+          queryClient.invalidateQueries({
+            queryKey: getGetStudyScheduleQueryKey(editingId),
+          });
+        }
+      },
+      onError: (err) =>
+        setScheduleFeedback({
+          success: false,
+          message: err instanceof Error ? err.message : "Schedule save failed",
+        }),
+    },
+  });
+
+  useEffect(() => {
+    const schedule = studyScheduleQuery.data;
+    if (!schedule || !editingId) return;
+    setScheduleEnabled(Boolean(schedule.enabled));
+    setScheduleTime(schedule.time || "21:30");
+    setScheduleTimezone(schedule.timezone || "Asia/Kolkata");
+    setScheduleRecipients((schedule.recipients ?? []).join("\n"));
+  }, [studyScheduleQuery.data, editingId]);
 
   const editing = useMemo(
     () => studies.find((s) => s.id === editingId) ?? null,
@@ -145,6 +192,7 @@ export default function StudiesPage() {
     setMessage("");
     setActionError(null);
     setKoboFeedback(null);
+    setScheduleFeedback(null);
   };
 
   const cancelCreate = () => {
@@ -645,6 +693,90 @@ export default function StudiesPage() {
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                       )}
                       {koboFeedback.message}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {panelMode === "edit" && editingId && (
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label>Daily DQA email schedule</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Per-study schedule for the daily DQA report. SMTP stays in Settings.
+                      </p>
+                    </div>
+                    <Switch checked={scheduleEnabled} onCheckedChange={setScheduleEnabled} />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Send time (HH:MM)</Label>
+                      <Input
+                        className="font-mono text-sm"
+                        value={scheduleTime}
+                        onChange={(e) => setScheduleTime(e.target.value)}
+                        placeholder="21:30"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Timezone</Label>
+                      <Input
+                        value={scheduleTimezone}
+                        onChange={(e) => setScheduleTimezone(e.target.value)}
+                        placeholder="Asia/Kolkata"
+                      />
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <Label className="text-xs">Recipients (one per line or comma-separated)</Label>
+                      <Textarea
+                        className="min-h-[80px] font-mono text-sm"
+                        value={scheduleRecipients}
+                        onChange={(e) => setScheduleRecipients(e.target.value)}
+                        placeholder="analyst@example.org"
+                      />
+                    </div>
+                  </div>
+                  {studyScheduleQuery.data?.lastSentOn && (
+                    <p className="text-xs text-muted-foreground">
+                      Last sent: {studyScheduleQuery.data.lastSentOn}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={updateStudySchedule.isPending}
+                      onClick={() => {
+                        setScheduleFeedback(null);
+                        updateStudySchedule.mutate({
+                          studyId: editingId,
+                          data: {
+                            enabled: scheduleEnabled,
+                            time: scheduleTime,
+                            timezone: scheduleTimezone,
+                            recipients: parseRecipientInput(scheduleRecipients),
+                          },
+                        });
+                      }}
+                    >
+                      {updateStudySchedule.isPending ? "Saving…" : "Save schedule"}
+                    </Button>
+                  </div>
+                  {scheduleFeedback && (
+                    <div
+                      className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
+                        scheduleFeedback.success
+                          ? "border-green-200 bg-green-50 text-green-800"
+                          : "border-destructive/30 bg-destructive/5 text-destructive"
+                      }`}
+                    >
+                      {scheduleFeedback.success ? (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                      ) : (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      )}
+                      {scheduleFeedback.message}
                     </div>
                   )}
                 </div>

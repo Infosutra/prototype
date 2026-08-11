@@ -170,6 +170,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /studies/{study_id}/schedules/daily-dqa:
+    get:
+      tags:
+      - studies
+      summary: Get Study Schedule
+      operationId: getStudySchedule
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportScheduleOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - studies
+      summary: Update Study Schedule
+      operationId: updateStudySchedule
+      parameters:
+      - name: study_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Study Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportScheduleUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportScheduleOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /studies/{study_id}/kobo:
     get:
       tags:
@@ -697,6 +754,14 @@ paths:
           - type: string
           - type: 'null'
           title: Projectid
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       - name: status
         in: query
         required: false
@@ -782,6 +847,15 @@ paths:
       - analytics
       summary: Analytics Overview
       operationId: getAnalyticsOverview
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
         '200':
           description: Successful Response
@@ -789,6 +863,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalyticsOverview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /analytics/projects/{project_id}:
     get:
       tags:
@@ -829,6 +909,14 @@ paths:
           type: string
           default: 30d
           title: Period
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
         '200':
           description: Successful Response
@@ -852,14 +940,22 @@ paths:
       summary: List Insights
       operationId: getInsights
       parameters:
-      - name: project_id
+      - name: studyId
         in: query
         required: false
         schema:
           anyOf:
           - type: string
           - type: 'null'
-          title: Project Id
+          title: Studyid
+      - name: projectId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
       responses:
         '200':
           description: Successful Response
@@ -887,6 +983,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InsightInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ai/insights/generate:
+    post:
+      tags:
+      - ai
+      summary: Generate Insight
+      operationId: generateInsight
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsightGenerateInput'
+        required: true
       responses:
         '200':
           description: Successful Response
@@ -2437,6 +2558,24 @@ components:
       required:
       - status
       title: HealthStatus
+    InsightGenerateInput:
+      properties:
+        question:
+          type: string
+          title: Question
+        studyId:
+          type: string
+          title: Studyid
+        projectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Projectid
+      type: object
+      required:
+      - question
+      - studyId
+      title: InsightGenerateInput
     InsightInput:
       properties:
         title:
@@ -2454,6 +2593,11 @@ components:
           type: string
           title: Type
           default: summary
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
         projectId:
           anyOf:
           - type: string
@@ -2495,6 +2639,11 @@ components:
         type:
           type: string
           title: Type
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
         projectId:
           anyOf:
           - type: string
@@ -3037,6 +3186,72 @@ components:
       - projectNames
       - createdAt
       title: ReportOut
+    ReportScheduleOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        studyId:
+          type: string
+          title: Studyid
+        reportType:
+          type: string
+          title: Reporttype
+        enabled:
+          type: boolean
+          title: Enabled
+        time:
+          type: string
+          title: Time
+        timezone:
+          type: string
+          title: Timezone
+        recipients:
+          items:
+            type: string
+          type: array
+          title: Recipients
+        lastSentOn:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsenton
+      type: object
+      required:
+      - id
+      - studyId
+      - reportType
+      - enabled
+      - time
+      - timezone
+      - recipients
+      title: ReportScheduleOut
+    ReportScheduleUpdate:
+      properties:
+        enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enabled
+        time:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Time
+        timezone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Timezone
+        recipients:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Recipients
+      type: object
+      title: ReportScheduleUpdate
     RulePackOut:
       properties:
         projectId:

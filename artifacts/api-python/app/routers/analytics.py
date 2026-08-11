@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Project, Submission
 from app.db.session import get_db
+from app.schemas.common import StudyIdQuery
 from app.schemas.misc import (
     AnalyticsOverview,
     ChartDataPoint,
@@ -20,24 +23,51 @@ from app.schemas.misc import (
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+def _submission_study_filter(study_id: str | None):
+    """Restrict submission aggregates to projects in a study when studyId is set."""
+    if not study_id:
+        return None
+    return Submission.project_id.in_(
+        select(Project.id).where(Project.study_id == study_id)
+    )
+
+
 @router.get("/overview", response_model=AnalyticsOverview, operation_id="getAnalyticsOverview")
-def analytics_overview(db: Session = Depends(get_db)) -> AnalyticsOverview:
-    total = db.scalar(select(func.count()).select_from(Submission)) or 0
-    by_status = db.execute(
-        select(Submission.status, func.count()).group_by(Submission.status)
-    ).all()
-    by_project = db.execute(
+def analytics_overview(
+    q: Annotated[StudyIdQuery, Query()],
+    db: Session = Depends(get_db),
+) -> AnalyticsOverview:
+    study_filter = _submission_study_filter(q.study_id)
+    total_q = select(func.count()).select_from(Submission)
+    if study_filter is not None:
+        total_q = total_q.where(study_filter)
+    total = db.scalar(total_q) or 0
+
+    status_q = select(Submission.status, func.count()).group_by(Submission.status)
+    if study_filter is not None:
+        status_q = status_q.where(study_filter)
+    by_status = db.execute(status_q).all()
+
+    project_q = (
         select(Project.name, func.count())
         .join(Submission, Submission.project_id == Project.id)
         .group_by(Project.name)
         .order_by(func.count().desc())
-    ).all()
-    by_enumerator = db.execute(
+    )
+    if q.study_id:
+        project_q = project_q.where(Project.study_id == q.study_id)
+    by_project = db.execute(project_q).all()
+
+    enum_q = (
         select(Submission.enumerator, func.count())
         .group_by(Submission.enumerator)
         .order_by(func.count().desc())
         .limit(20)
-    ).all()
+    )
+    if study_filter is not None:
+        enum_q = enum_q.where(study_filter)
+    by_enumerator = db.execute(enum_q).all()
+
     return AnalyticsOverview(
         total_submissions=int(total),
         submissions_by_status=[
@@ -95,17 +125,22 @@ def project_analytics(project_id: str, db: Session = Depends(get_db)) -> Project
 @router.get("/trends", response_model=list[TrendPoint], operation_id="getSubmissionTrends")
 def submission_trends(
     period: str = Query(default="30d"),
+    study_id: str | None = Query(default=None, alias="studyId"),
     db: Session = Depends(get_db),
 ) -> list[TrendPoint]:
     days = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}.get(period, 30)
     start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    study_filter = _submission_study_filter(study_id)
+    conditions = [Submission.submitted_at >= start]
+    if study_filter is not None:
+        conditions.append(study_filter)
     rows = db.execute(
         select(
             func.date(Submission.submitted_at),
             func.count(),
             func.count(func.distinct(Submission.project_id)),
         )
-        .where(Submission.submitted_at >= start)
+        .where(*conditions)
         .group_by(func.date(Submission.submitted_at))
         .order_by(func.date(Submission.submitted_at))
     ).all()

@@ -44,7 +44,9 @@ export default function Dashboard() {
   const { activeStudy, activeStudyId } = useStudy();
   const summaryQuery = useGetDashboardSummary();
   const activityQuery = useGetDashboardActivity();
-  const trendsQuery = useGetSubmissionTrends({ period: "30d" });
+  const trendsQuery = useGetSubmissionTrends(
+    activeStudyId ? { period: "30d", studyId: activeStudyId } : { period: "30d" },
+  );
   const dqaByProjectQuery = useGetDqaByProject(
     activeStudyId ? { studyId: activeStudyId } : undefined,
   );
