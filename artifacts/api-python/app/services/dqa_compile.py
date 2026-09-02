@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from typing import Any
@@ -11,12 +12,20 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AppSettings, Project
 from app.domain.dqa.form_fields import list_form_fields
+from app.domain.dqa.rule_audit import attach_compile_audit, sanitize_english
 from app.domain.dqa.validate import ValidationResult, validate_rule
-from app.integrations.llm import LlmError, chat_completion, llm_compile_config_from_app_settings
+from app.integrations.llm import (
+    LlmError,
+    chat_completion_detailed,
+    llm_compile_config_from_app_settings,
+)
+from app.services.dqa_compile_audit import CompileSessionRecorder
 from app.services.dqa_compile_prompt import build_compiler_messages, load_compile_prompt
 from app.services.dqa_preview import preview_rule
 from app.services.dqa_relationships import build_relationship_schema, relationships_for_source_project
 from app.services.dqa_rule_packs import get_pack_for_project
+
+logger = logging.getLogger(__name__)
 
 MAX_LLM_ATTEMPTS = 3
 COMPILE_TEMPERATURE = 0.1
@@ -61,8 +70,21 @@ def _finalize_rule(
         "severity": str(proposal.get("severity") or "amber").lower(),
         "title": str(proposal.get("title") or english[:80] or "DQA rule"),
         "message": str(proposal.get("message") or english),
-        "english": english,
+        "english": sanitize_english(english),
         "check": proposal.get("check"),
+    }
+
+
+def _meta_from_recorder(recorder: CompileSessionRecorder, *, prompt_id: str | None) -> dict[str, Any]:
+    return {
+        "session_id": recorder.session_id,
+        "model": recorder.model,
+        "provider": recorder.provider,
+        "attempts": recorder.attempts,
+        "prompt_id": prompt_id,
+        "latency_ms": int(round(recorder.latency_ms_total)),
+        "prompt_tokens": recorder.prompt_tokens,
+        "completion_tokens": recorder.completion_tokens,
     }
 
 
@@ -76,7 +98,7 @@ def compile_dqa_rule(
     preview_limit: int = 50,
     settings: AppSettings,
 ) -> dict[str, Any]:
-    text = (english or "").strip()
+    text = sanitize_english(english)
     if not text:
         raise CompileError("english is required", status_code=400)
 
@@ -116,6 +138,22 @@ def compile_dqa_rule(
         )
 
     system_prompt, prompt_id = load_compile_prompt(db)
+    recorder = CompileSessionRecorder(
+        db,
+        project_id=project.id,
+        study_id=study_id,
+        english=text,
+        conversation_turns=len(conversation or []),
+        provider=llm.provider,
+        model=llm.model,
+        prompt_id=prompt_id,
+    )
+    recorder.metadata = {
+        "relationship_count": len(rel_catalog),
+        "source_relationships": source_relationships,
+        "form_field_count": len(form_fields),
+    }
+
     last_proposal: dict[str, Any] | None = None
     repair_context: dict[str, Any] | None = None
     attempts = 0
@@ -124,6 +162,7 @@ def compile_dqa_rule(
     while attempts < MAX_LLM_ATTEMPTS:
         attempts += 1
         temperature = REPAIR_TEMPERATURE if repair_context else COMPILE_TEMPERATURE
+        phase = "repair" if repair_context else "compile"
         messages = build_compiler_messages(
             system_prompt=system_prompt,
             form_fields=form_fields,
@@ -136,14 +175,27 @@ def compile_dqa_rule(
             source_relationships=source_relationships,
         )
         try:
-            raw = chat_completion(
+            completion = chat_completion_detailed(
                 llm,
                 messages,
                 temperature=temperature,
                 max_tokens=int(settings.ai_max_tokens or 2048),
                 timeout_seconds=float(settings.ai_timeout_seconds or 60),
             )
+            recorder.record_llm_call(
+                latency_ms=completion.latency_ms,
+                prompt_tokens=completion.usage.prompt_tokens,
+                completion_tokens=completion.usage.completion_tokens,
+                attempt=attempts,
+                phase=phase,
+            )
+            raw = completion.text
         except LlmError as exc:
+            recorder.finalize(
+                status="error",
+                error_code="provider_error",
+                error_message=str(exc),
+            )
             raise CompileError(str(exc), status_code=502, code="provider_error") from exc
 
         payload = _parse_compiler_payload(raw)
@@ -154,25 +206,35 @@ def compile_dqa_rule(
             }
             continue
         if not payload:
+            session = recorder.finalize(
+                status="invalid",
+                validation_valid=False,
+                error_code="invalid_json",
+                error_message="Compiler returned unparseable output",
+                extra_metadata={"last_proposal": last_proposal},
+            )
             return _invalid_response(
                 message="Compiler returned unparseable output",
-                validation=ValidationResult(
-                    valid=False,
-                    errors=[],
-                    warnings=[],
-                ),
+                validation=ValidationResult(valid=False, errors=[], warnings=[]),
                 last_proposal=last_proposal,
                 attempts=attempts,
-                model=llm.model,
+                recorder=recorder,
+                prompt_id=prompt_id,
+                session=session,
             )
 
         question = payload.get("clarifying_question")
         if isinstance(question, str) and question.strip():
+            session = recorder.finalize(
+                status="needs_clarification",
+                extra_metadata={"question": question.strip()},
+            )
             return {
                 "status": "needs_clarification",
                 "question": question.strip(),
                 "partial_explanation": payload.get("explanation"),
-                "meta": {"model": llm.model, "attempts": attempts, "prompt_id": prompt_id},
+                "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
+                "session_id": session.id,
             }
 
         proposal = payload.get("rule")
@@ -189,12 +251,20 @@ def compile_dqa_rule(
                     "proposal": payload,
                 }
                 continue
+            session = recorder.finalize(
+                status="invalid",
+                validation_valid=False,
+                error_code="missing_rule",
+                error_message="Compiler did not return a valid rule",
+            )
             return _invalid_response(
                 message="Compiler did not return a valid rule",
                 validation=ValidationResult(valid=False, errors=[], warnings=[]),
                 last_proposal=payload,
                 attempts=attempts,
-                model=llm.model,
+                recorder=recorder,
+                prompt_id=prompt_id,
+                session=session,
             )
 
         last_proposal = proposal
@@ -209,17 +279,28 @@ def compile_dqa_rule(
         last_validation = validation
         if validation.valid:
             preview = preview_rule(db, project.id, rule, limit=preview_limit)
+            audited_rule = attach_compile_audit(
+                rule,
+                english=text,
+                compile_session_id=recorder.session_id,
+                model=recorder.model,
+                provider=recorder.provider,
+                prompt_id=prompt_id,
+            )
+            session = recorder.finalize(
+                status="success",
+                validation_valid=True,
+                rule=audited_rule,
+                preview=preview,
+            )
             return {
                 "status": "success",
-                "rule": rule,
+                "rule": audited_rule,
                 "explanation": str(payload.get("explanation") or rule["message"]),
                 "validation": validation.to_dict(),
                 "preview": preview,
-                "meta": {
-                    "model": llm.model,
-                    "attempts": attempts,
-                    "promptId": prompt_id,
-                },
+                "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
+                "session_id": session.id,
             }
 
         if attempts < MAX_LLM_ATTEMPTS:
@@ -229,13 +310,22 @@ def compile_dqa_rule(
             }
             continue
 
+    session = recorder.finalize(
+        status="invalid",
+        validation_valid=False,
+        validation_errors=(last_validation.to_dict()["errors"] if last_validation else []),
+        rule=last_proposal if isinstance(last_proposal, dict) else None,
+        error_code="validation_exhausted",
+        error_message="Could not compile a valid rule after repair attempts",
+    )
     return _invalid_response(
         message="Could not compile a valid rule after repair attempts",
         validation=last_validation or ValidationResult(valid=False, errors=[], warnings=[]),
         last_proposal=last_proposal,
         attempts=attempts,
-        model=llm.model,
+        recorder=recorder,
         prompt_id=prompt_id,
+        session=session,
     )
 
 
@@ -276,13 +366,15 @@ def _invalid_response(
     validation: ValidationResult,
     last_proposal: dict[str, Any] | None,
     attempts: int,
-    model: str,
+    recorder: CompileSessionRecorder,
     prompt_id: str | None = None,
+    session: Any = None,
 ) -> dict[str, Any]:
     return {
         "status": "invalid",
         "message": message,
         "validation": validation.to_dict(),
         "last_proposal": last_proposal,
-        "meta": {"model": model, "attempts": attempts, "prompt_id": prompt_id},
+        "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
+        "session_id": getattr(session, "id", recorder.session_id),
     }

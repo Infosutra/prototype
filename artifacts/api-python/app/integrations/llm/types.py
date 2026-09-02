@@ -30,3 +30,23 @@ class CompletionParams:
     temperature: float = 0.3
     max_tokens: int = 2048
     timeout_seconds: float = 60.0
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+@dataclass(frozen=True)
+class CompletionResult:
+    """Provider completion with telemetry for observability."""
+
+    text: str
+    model: str
+    provider: str
+    latency_ms: float
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    request_id: str | None = None
+    raw_usage: dict[str, Any] = field(default_factory=dict)

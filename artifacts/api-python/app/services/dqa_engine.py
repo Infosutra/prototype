@@ -26,6 +26,8 @@ from app.services.dqa_evaluation import evaluate_project, evaluate_project_casca
 from app.services.dqa_rule_packs import (
     SEED_DIR,
     get_pack_for_project,
+    get_pack_version,
+    list_pack_versions,
     load_seed_packs,
     save_pack,
     seed_rule_packs,
@@ -50,7 +52,8 @@ __all__ = [
     "evaluate_project",
     "evaluate_project_cascade",
     "load_seed_packs",
-    "get_pack_for_project",
+    "get_pack_version",
+    "list_pack_versions",
     "seed_rule_packs",
     "save_pack",
     "prefer_label_text",

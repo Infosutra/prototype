@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.repositories import dqa as dqa_repo
 from app.schemas.common import DqaFlagsQuery, ProjectIdQuery, StudyIdQuery, StudyProjectQuery
 from app.schemas.dqa import (
+    DqaCompileSessionOut,
     DqaCompileInput,
     DqaCompileInvalid,
     DqaCompileNeedsClarification,
@@ -31,10 +32,12 @@ from app.schemas.dqa import (
     ProjectDqaStat,
     RulePackOut,
     RulePackUpdate,
+    RulePackVersionOut,
     TriangulationViewInfo,
     TriangulationViewOut,
 )
 from app.services import dqa_engine
+from app.services.dqa_compile_audit import get_compile_session, list_compile_sessions
 from app.services.dqa_compile import CompileError, compile_dqa_rule, validate_dqa_rule_for_project
 from app.services.dqa_relationships import (
     RelationshipError,
@@ -44,6 +47,7 @@ from app.services.dqa_relationships import (
     update_relationship,
     validate_relationship_payload,
 )
+from app.services.dqa_rule_packs import get_pack_version, list_pack_versions
 from app.domain.dqa.form_fields import list_form_fields
 from app.domain.dqa.validate import validate_pack_rules
 from app.services.settings import get_or_create_settings
@@ -398,7 +402,11 @@ def get_rule_pack(project_id: str, db: Session = Depends(get_db)) -> RulePackOut
         "thresholds": {},
         "rules": [],
     }
-    return RulePackOut(project_id=project_id, pack=pack)
+    return RulePackOut(
+        project_id=project_id,
+        pack=pack,
+        version=get_pack_version(db, project_id) or pack.get("pack_version") or 1,
+    )
 
 
 @projects_router.put(
@@ -432,8 +440,109 @@ def put_rule_pack(
                 "validation": validation.to_dict(),
             },
         )
-    saved = dqa_engine.save_pack(db, project_id, payload.pack)
-    return RulePackOut(project_id=project_id, pack=saved)
+    try:
+        saved = dqa_engine.save_pack(db, project_id, payload.pack, source="manual")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RulePackOut(
+        project_id=project_id,
+        pack=saved,
+        version=int(saved.get("pack_version") or get_pack_version(db, project_id) or 1),
+    )
+
+
+@projects_router.get(
+    "/{project_id}/rule-pack/versions",
+    response_model=list[RulePackVersionOut],
+    operation_id="listProjectRulePackVersions",
+)
+def list_rule_pack_versions(
+    project_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[RulePackVersionOut]:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    rows = list_pack_versions(db, project_id, limit=limit)
+    return [
+        RulePackVersionOut(
+            id=row.id,
+            project_id=row.project_id,
+            version=row.version,
+            status=row.status,
+            source=row.source,
+            compile_session_id=row.compile_session_id,
+            change_note=row.change_note,
+            created_at=_iso(row.created_at),
+            rule_count=len((row.pack or {}).get("rules") or []),
+        )
+        for row in rows
+    ]
+
+
+@projects_router.get(
+    "/{project_id}/dqa/compile-sessions/{session_id}",
+    response_model=DqaCompileSessionOut,
+    operation_id="getDqaCompileSession",
+)
+def get_dqa_compile_session(
+    project_id: str,
+    session_id: str,
+    db: Session = Depends(get_db),
+) -> DqaCompileSessionOut:
+    row = get_compile_session(db, session_id)
+    if not row or row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Compile session not found")
+    return DqaCompileSessionOut(
+        id=row.id,
+        project_id=row.project_id,
+        study_id=row.study_id,
+        status=row.status,
+        english=row.english,
+        provider=row.provider,
+        model=row.model,
+        attempts=row.attempts,
+        latency_ms_total=row.latency_ms_total,
+        prompt_tokens=row.prompt_tokens,
+        completion_tokens=row.completion_tokens,
+        rule_id=row.rule_id,
+        created_at=_iso(row.created_at),
+    )
+
+
+@projects_router.get(
+    "/{project_id}/dqa/compile-sessions",
+    response_model=list[DqaCompileSessionOut],
+    operation_id="listDqaCompileSessions",
+)
+def list_dqa_compile_sessions(
+    project_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[DqaCompileSessionOut]:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    rows = list_compile_sessions(db, project_id, limit=limit)
+    return [
+        DqaCompileSessionOut(
+            id=row.id,
+            project_id=row.project_id,
+            study_id=row.study_id,
+            status=row.status,
+            english=row.english,
+            provider=row.provider,
+            model=row.model,
+            attempts=row.attempts,
+            latency_ms_total=row.latency_ms_total,
+            prompt_tokens=row.prompt_tokens,
+            completion_tokens=row.completion_tokens,
+            rule_id=row.rule_id,
+            created_at=_iso(row.created_at),
+        )
+        for row in rows
+    ]
 
 
 @projects_router.post(

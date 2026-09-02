@@ -16,6 +16,49 @@ class FormFieldOut(CamelModel):
 class RulePackOut(CamelModel):
     project_id: str
     pack: dict[str, Any]
+    version: int = 1
+
+
+class RulePackVersionOut(CamelModel):
+    id: str
+    project_id: str
+    version: int
+    status: str
+    source: str
+    compile_session_id: str | None = None
+    change_note: str | None = None
+    created_at: str
+    rule_count: int = 0
+
+
+class DqaCompileSessionOut(CamelModel):
+    id: str
+    project_id: str
+    study_id: str | None = None
+    status: str
+    english: str
+    provider: str
+    model: str
+    attempts: int
+    latency_ms_total: int
+    prompt_tokens: int
+    completion_tokens: int
+    rule_id: str | None = None
+    created_at: str
+
+
+class DqaEvaluationMetrics(CamelModel):
+    duration_ms: float = 0.0
+    submissions: int = 0
+    rules_evaluated: int = 0
+    flags_produced: int = 0
+    flagged_submissions: int = 0
+    relationship_lookups: int = 0
+    relationship_lookup_ms: float = 0.0
+    evaluation_errors: list[str] = []
+    slow_rules: list[dict[str, Any]] = []
+    cascade_projects: list[str] = []
+    pack_version: int | None = None
 
 
 class RulePackUpdate(CamelModel):
@@ -73,6 +116,7 @@ class DqaRecomputeResult(CamelModel):
     flagged_submissions: int
     flags: int
     cascade_projects: list[str] | None = None
+    metrics: DqaEvaluationMetrics | None = None
 
 
 class DqaRelationshipOut(CamelModel):
@@ -244,6 +288,11 @@ class DqaCompileMeta(CamelModel):
     model: str
     attempts: int
     prompt_id: str | None = None
+    session_id: str | None = None
+    provider: str | None = None
+    latency_ms: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
 
 
 class DqaCompileSuccess(CamelModel):

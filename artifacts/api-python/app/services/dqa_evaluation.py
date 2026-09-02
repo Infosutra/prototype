@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -11,17 +13,27 @@ from sqlalchemy.orm import Session
 
 from app.db.models import DqaFlag, Project, Submission
 from app.domain.dqa.eval import eval_check
+from app.domain.dqa.evaluation_metrics import EvaluationMetrics
 from app.domain.dqa.highlights import resolve_highlight_fields
 from app.services.dqa_relationship_resolver import (
     build_related_context,
     load_study_relationships,
     source_projects_for_target,
 )
-from app.services.dqa_rule_packs import get_pack_for_project
+from app.services.dqa_rule_packs import get_pack_for_project, get_pack_version
+
+logger = logging.getLogger(__name__)
+
+DQA_FLAG_NAMESPACE = uuid.UUID("a3f7c2e1-4b5d-4e6f-9a0b-1c2d3e4f5a6b")
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def stable_flag_id(submission_id: str, rule_id: str) -> str:
+    """Deterministic flag id for idempotent re-evaluation."""
+    return str(uuid.uuid5(DQA_FLAG_NAMESPACE, f"{submission_id}:{rule_id}"))
 
 
 def evaluate_rule(
@@ -33,20 +45,40 @@ def evaluate_rule(
     current: Submission,
     related: dict | None = None,
     study_id: str | None = None,
+    pack_version: int | None = None,
+    metrics: EvaluationMetrics | None = None,
 ) -> DqaFlag | None:
-
+    rule_id = str(rule.get("id") or "unknown")
+    started = time.perf_counter()
     check = rule.get("check")
     if check is None and rule.get("checks"):
         check = {"op": "all", "checks": rule["checks"]}
-    ok, details = eval_check(
-        check,
-        data=data,
-        pack=pack,
-        project_rows=project_rows,
-        current=current,
-        related=related,
-        study_id=study_id,
-    )
+    try:
+        ok, details = eval_check(
+            check,
+            data=data,
+            pack=pack,
+            project_rows=project_rows,
+            current=current,
+            related=related,
+            study_id=study_id,
+        )
+    except Exception as exc:
+        logger.exception(
+            "DQA evaluation failed submission_id=%s rule_id=%s",
+            current.id,
+            rule_id,
+        )
+        if metrics is not None:
+            metrics.evaluation_errors.append(f"{rule_id}: {exc}")
+        return None
+    finally:
+        if metrics is not None:
+            metrics.rules_evaluated += 1
+            metrics.rule_timings_ms[rule_id] = metrics.rule_timings_ms.get(rule_id, 0.0) + (
+                (time.perf_counter() - started) * 1000.0
+            )
+
     flag_when = str(rule.get("flag_when") or "fail").lower()
     should_flag = (not ok) if flag_when == "fail" else ok
     if not should_flag:
@@ -58,17 +90,30 @@ def evaluate_rule(
     enriched = dict(details or {})
     if highlight:
         enriched["highlightFields"] = highlight
-    return DqaFlag(
-        id=str(uuid.uuid4()),
+    enriched["provenance"] = {
+        "pack_version": pack_version,
+        "rule_id": rule_id,
+        "evaluated_at": _now().isoformat(),
+        "submission_id": current.id,
+    }
+    if related:
+        enriched["provenance"]["related_resolutions"] = {
+            code: res.status for code, res in related.items()
+        }
+    flag = DqaFlag(
+        id=stable_flag_id(current.id, rule_id),
         submission_id=current.id,
         project_id=current.project_id,
-        rule_id=str(rule.get("id") or "unknown"),
+        rule_id=rule_id,
         severity=str(rule.get("severity") or "amber").lower(),
         title=str(rule.get("title") or rule.get("id") or "Flag"),
         message=str(rule.get("message") or rule.get("title") or "Rule failed"),
         details=enriched,
         evaluated_at=_now(),
     )
+    if metrics is not None:
+        metrics.flags_produced += 1
+    return flag
 
 
 def evaluate_submission(
@@ -82,6 +127,8 @@ def evaluate_submission(
     rel_map: dict | None = None,
     target_rows_cache: dict[str, list[Submission]] | None = None,
     target_pack_cache: dict[str, dict[str, Any]] | None = None,
+    pack_version: int | None = None,
+    metrics: EvaluationMetrics | None = None,
 ) -> list[DqaFlag]:
     pack = pack or get_pack_for_project(db, submission.project_id)
     db.execute(delete(DqaFlag).where(DqaFlag.submission_id == submission.id))
@@ -106,8 +153,10 @@ def evaluate_submission(
         check = rule.get("check")
         if check is None and rule.get("checks"):
             check = {"op": "all", "checks": rule["checks"]}
-        related = (
-            build_related_context(
+        related = {}
+        if study_id:
+            rel_started = time.perf_counter()
+            related = build_related_context(
                 db,
                 current=submission,
                 source_pack=pack,
@@ -117,9 +166,9 @@ def evaluate_submission(
                 target_rows_cache=target_rows_cache,
                 target_pack_cache=target_pack_cache,
             )
-            if study_id
-            else {}
-        )
+            if metrics is not None:
+                metrics.relationship_lookups += 1
+                metrics.relationship_lookup_ms += (time.perf_counter() - rel_started) * 1000.0
         flag = evaluate_rule(
             rule,
             data=data,
@@ -128,6 +177,8 @@ def evaluate_submission(
             current=submission,
             related=related,
             study_id=study_id,
+            pack_version=pack_version,
+            metrics=metrics,
         )
         if flag:
             flags.append(flag)
@@ -144,8 +195,14 @@ def evaluate_submission(
     return flags
 
 
-def evaluate_project(db: Session, project_id: str) -> dict[str, int]:
+def evaluate_project(
+    db: Session, project_id: str, *, metrics: EvaluationMetrics | None = None
+) -> dict[str, Any]:
+    started = time.perf_counter()
+    local_metrics = metrics or EvaluationMetrics()
     pack = get_pack_for_project(db, project_id)
+    pack_version = get_pack_version(db, project_id) or (pack or {}).get("pack_version")
+    local_metrics.pack_version = int(pack_version) if pack_version else None
     project = db.get(Project, project_id)
     study_id = project.study_id if project else None
     rel_map = load_study_relationships(db, study_id) if study_id else {}
@@ -157,40 +214,64 @@ def evaluate_project(db: Session, project_id: str) -> dict[str, int]:
         ).all()
     )
     flagged_submissions = 0
-    total_flags = 0
     for submission in rows:
-        flags = evaluate_submission(
-            db,
-            submission,
-            pack=pack,
-            project_rows=rows,
-            commit=False,
-            study_id=study_id,
-            rel_map=rel_map,
-            target_rows_cache=target_rows_cache,
-            target_pack_cache=target_pack_cache,
-        )
-        total_flags += len(flags)
+        try:
+            flags = evaluate_submission(
+                db,
+                submission,
+                pack=pack,
+                project_rows=rows,
+                commit=True,
+                study_id=study_id,
+                rel_map=rel_map,
+                target_rows_cache=target_rows_cache,
+                target_pack_cache=target_pack_cache,
+                pack_version=local_metrics.pack_version,
+                metrics=local_metrics,
+            )
+        except Exception as exc:
+            logger.exception(
+                "DQA submission evaluation failed project_id=%s submission_id=%s",
+                project_id,
+                submission.id,
+            )
+            local_metrics.evaluation_errors.append(f"{submission.id}: {exc}")
+            continue
         if flags:
             flagged_submissions += 1
-    db.commit()
-    return {
-        "submissions": len(rows),
-        "flagged_submissions": flagged_submissions,
-        "flags": total_flags,
+    local_metrics.submissions = len(rows)
+    local_metrics.flagged_submissions = flagged_submissions
+    local_metrics.duration_ms = (time.perf_counter() - started) * 1000.0
+    logger.info(
+        "DQA evaluate project_id=%s submissions=%s flags=%s duration_ms=%.1f errors=%s",
+        project_id,
+        local_metrics.submissions,
+        local_metrics.flags_produced,
+        local_metrics.duration_ms,
+        len(local_metrics.evaluation_errors),
+    )
+    result = {
+        "submissions": local_metrics.submissions,
+        "flagged_submissions": local_metrics.flagged_submissions,
+        "flags": local_metrics.flags_produced,
+        "metrics": local_metrics.to_dict(),
     }
+    return result
 
 
 def evaluate_project_cascade(db: Session, project_id: str) -> dict[str, Any]:
     """Recompute project and source projects that depend on it as a relationship target."""
-    stats = evaluate_project(db, project_id)
+    aggregate = EvaluationMetrics()
+    stats = evaluate_project(db, project_id, metrics=aggregate)
     cascade_projects = [project_id]
     for source_id in source_projects_for_target(db, project_id):
         if source_id in cascade_projects:
             continue
-        source_stats = evaluate_project(db, source_id)
+        source_stats = evaluate_project(db, source_id, metrics=aggregate)
         cascade_projects.append(source_id)
         for key in ("submissions", "flagged_submissions", "flags"):
             stats[key] = stats.get(key, 0) + source_stats.get(key, 0)
+    aggregate.cascade_projects = cascade_projects
     stats["cascade_projects"] = cascade_projects
+    stats["metrics"] = aggregate.to_dict()
     return stats

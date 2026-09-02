@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.models import AppSettings, Project, Study, StudyTool
+from app.integrations.llm.types import CompletionResult, TokenUsage
 from app.services.dqa_compile import compile_dqa_rule
 
 
@@ -63,6 +64,16 @@ def _seed_project(db: Session) -> Project:
     return project
 
 
+def _mock_completion(payload: dict) -> CompletionResult:
+    return CompletionResult(
+        text=json.dumps(payload),
+        model="test-model",
+        provider="openrouter",
+        latency_ms=1.0,
+        usage=TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+    )
+
+
 def test_compile_needs_clarification(db: Session):
     project = _seed_project(db)
     settings = db.get(AppSettings, "singleton")
@@ -71,7 +82,10 @@ def test_compile_needs_clarification(db: Session):
         "rule": None,
         "explanation": None,
     }
-    with patch("app.services.dqa_compile.chat_completion", return_value=__import__("json").dumps(payload)):
+    with patch(
+        "app.services.dqa_compile.chat_completion_detailed",
+        return_value=_mock_completion(payload),
+    ):
         result = compile_dqa_rule(
             db,
             project,
@@ -80,6 +94,7 @@ def test_compile_needs_clarification(db: Session):
         )
     assert result["status"] == "needs_clarification"
     assert "fields" in result["question"].lower() or "field" in result["question"].lower()
+    assert result.get("session_id")
 
 
 def test_compile_success_with_valid_rule(db: Session):
@@ -95,7 +110,10 @@ def test_compile_success_with_valid_rule(db: Session):
         },
         "explanation": "Flags when B22 exceeds B21.",
     }
-    with patch("app.services.dqa_compile.chat_completion", return_value=__import__("json").dumps(payload)):
+    with patch(
+        "app.services.dqa_compile.chat_completion_detailed",
+        return_value=_mock_completion(payload),
+    ):
         result = compile_dqa_rule(
             db,
             project,
@@ -105,6 +123,7 @@ def test_compile_success_with_valid_rule(db: Session):
     assert result["status"] == "success"
     assert result["rule"]["check"]["op"] == "gt"
     assert result["preview"]["submissions_checked"] == 0
+    assert result["meta"]["prompt_tokens"] == 10
 
 
 def test_compile_invalid_after_repair_exhausted(db: Session):
@@ -121,8 +140,8 @@ def test_compile_invalid_after_repair_exhausted(db: Session):
         "explanation": "bad",
     }
     with patch(
-        "app.services.dqa_compile.chat_completion",
-        return_value=__import__("json").dumps(payload),
+        "app.services.dqa_compile.chat_completion_detailed",
+        return_value=_mock_completion(payload),
     ) as mocked:
         result = compile_dqa_rule(
             db,
