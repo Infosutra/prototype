@@ -15,6 +15,7 @@ from app.domain.dqa.validate import ValidationResult, validate_rule
 from app.integrations.llm import LlmError, chat_completion, llm_compile_config_from_app_settings
 from app.services.dqa_compile_prompt import build_compiler_messages, load_compile_prompt
 from app.services.dqa_preview import preview_rule
+from app.services.dqa_relationships import build_relationship_schema, relationships_for_source_project
 from app.services.dqa_rule_packs import get_pack_for_project
 
 MAX_LLM_ATTEMPTS = 3
@@ -97,6 +98,16 @@ def compile_dqa_rule(
     form_fields = list_form_fields(
         project.form_definition if isinstance(project.form_definition, dict) else None
     )
+    study_id = project.study_id
+    rel_catalog, related_field_map = (
+        build_relationship_schema(db, study_id) if study_id else ([], {})
+    )
+    source_relationships = [
+        row.code
+        for row in (
+            relationships_for_source_project(db, study_id, project.id) if study_id else []
+        )
+    ]
     if len(form_fields) > 500:
         raise CompileError(
             "Form schema is too large to compile",
@@ -121,6 +132,8 @@ def compile_dqa_rule(
             conversation=conversation,
             existing_rule=existing_rule,
             repair_context=repair_context,
+            relationships=rel_catalog,
+            source_relationships=source_relationships,
         )
         try:
             raw = chat_completion(
@@ -186,7 +199,13 @@ def compile_dqa_rule(
 
         last_proposal = proposal
         rule = _finalize_rule(proposal, english=text, existing_rule=existing_rule)
-        validation = validate_rule(rule, form_fields=form_fields, pack=pack, for_compile=True)
+        validation = validate_rule(
+            rule,
+            form_fields=form_fields,
+            pack=pack,
+            for_compile=True,
+            related_fields=related_field_map,
+        )
         last_validation = validation
         if validation.valid:
             preview = preview_rule(db, project.id, rule, limit=preview_limit)
@@ -231,7 +250,15 @@ def validate_dqa_rule_for_project(
     form_fields = list_form_fields(
         project.form_definition if isinstance(project.form_definition, dict) else None
     )
-    validation = validate_rule(rule, form_fields=form_fields, pack=pack)
+    related_field_map: dict[str, set[str]] = {}
+    if project.study_id:
+        _, related_field_map = build_relationship_schema(db, project.study_id)
+    validation = validate_rule(
+        rule,
+        form_fields=form_fields,
+        pack=pack,
+        related_fields=related_field_map,
+    )
     body: dict[str, Any] = {
         "status": "success" if validation.valid else "invalid",
         "validation": validation.to_dict(),

@@ -18,6 +18,7 @@ from app.domain.dqa.catalog import (
     STRING_COMPARE_OPS,
 )
 from app.domain.dqa.eval import eval_check
+from app.domain.dqa.operands import is_related_field_operand
 
 
 @dataclass
@@ -71,12 +72,75 @@ def _is_scoped_ref(value: Any) -> bool:
     return bool(text) and "." in text
 
 
+def _operand_present(value: Any) -> bool:
+    if is_related_field_operand(value):
+        return bool(str(value.get("field") or "").strip())
+    return bool(str(value or "").strip())
+
+
+def _validate_operand(
+    value: Any,
+    *,
+    path: str,
+    allowed_fields: set[str],
+    related_fields: dict[str, set[str]] | None,
+    result: ValidationResult,
+) -> None:
+    if is_related_field_operand(value):
+        code = str(value.get("relationship") or "").strip()
+        field = str(value.get("field") or "").strip()
+        if not related_fields or code not in related_fields:
+            result.valid = False
+            result.errors.append(
+                ValidationIssue(
+                    path,
+                    "unknown_relationship",
+                    f"Unknown relationship: {code or '(missing)'}",
+                )
+            )
+            return
+        if not field:
+            result.valid = False
+            result.errors.append(
+                ValidationIssue(path, "missing_field", "related_field requires field")
+            )
+            return
+        if field not in related_fields[code]:
+            result.valid = False
+            result.errors.append(
+                ValidationIssue(
+                    path,
+                    "unknown_related_field",
+                    f"Unknown field on relationship {code}: {field}",
+                )
+            )
+        return
+
+    if _is_scoped_ref(value):
+        result.valid = False
+        result.errors.append(
+            ValidationIssue(
+                path,
+                "scoped_ref",
+                "Use related_field objects for inter-form references, not dotted scoped refs",
+            )
+        )
+        return
+    ref_text = str(value or "").strip()
+    if ref_text and ref_text not in allowed_fields:
+        result.valid = False
+        result.errors.append(
+            ValidationIssue(path, "unknown_field", f"Unknown field reference: {ref_text}")
+        )
+
+
 def validate_rule(
     rule: dict[str, Any] | None,
     *,
     form_fields: list[dict[str, Any]] | None = None,
     pack: dict[str, Any] | None = None,
     for_compile: bool = False,
+    related_fields: dict[str, set[str]] | None = None,
 ) -> ValidationResult:
     result = ValidationResult(valid=True)
     if not isinstance(rule, dict):
@@ -106,6 +170,7 @@ def validate_rule(
         allowed_fields=allowed,
         thresholds=thresholds if isinstance(thresholds, dict) else {},
         allowed_ops=allowed_ops,
+        related_fields=related_fields,
     )
     result.errors.extend(check_result.errors)
     result.warnings.extend(check_result.warnings)
@@ -132,6 +197,7 @@ def validate_check(
     depth: int = 0,
     node_count: list[int] | None = None,
     allowed_ops: frozenset[str] | None = None,
+    related_fields: dict[str, set[str]] | None = None,
 ) -> ValidationResult:
     if node_count is None:
         node_count = [0]
@@ -174,42 +240,26 @@ def validate_check(
         if key not in check:
             continue
         ref = check.get(key)
-        ref_path = f"{path}.{key}"
-        if _is_scoped_ref(ref):
-            result.valid = False
-            result.errors.append(
-                ValidationIssue(
-                    ref_path,
-                    "scoped_ref",
-                    "Inter-form scoped field references are not supported",
-                )
-            )
-            continue
-        ref_text = str(ref or "").strip()
-        if ref_text and ref_text not in allowed_fields:
-            result.valid = False
-            result.errors.append(
-                ValidationIssue(ref_path, "unknown_field", f"Unknown field reference: {ref_text}")
-            )
+        _validate_operand(
+            ref,
+            path=f"{path}.{key}",
+            allowed_fields=allowed_fields,
+            related_fields=related_fields,
+            result=result,
+        )
 
     for key in FIELD_LIST_KEYS:
         for idx, item in enumerate(check.get(key) or []):
-            item_path = f"{path}.{key}[{idx}]"
-            if _is_scoped_ref(item):
-                result.valid = False
-                result.errors.append(
-                    ValidationIssue(item_path, "scoped_ref", "Inter-form scoped refs not supported")
-                )
-            elif str(item or "").strip() and str(item).strip() not in allowed_fields:
-                result.valid = False
-                result.errors.append(
-                    ValidationIssue(
-                        item_path, "unknown_field", f"Unknown field reference: {item}"
-                    )
-                )
+            _validate_operand(
+                item,
+                path=f"{path}.{key}[{idx}]",
+                allowed_fields=allowed_fields,
+                related_fields=related_fields,
+                result=result,
+            )
 
     if op in NUMERIC_COMPARE_OPS:
-        has_field_b = bool(str(check.get("field_b") or "").strip())
+        has_field_b = _operand_present(check.get("field_b"))
         has_value = check.get("value") is not None or check.get("threshold") is not None
         if has_field_b and has_value:
             result.valid = False
@@ -231,7 +281,7 @@ def validate_check(
                 result.warnings.append(f"Threshold key '{key}' not defined in pack.thresholds")
 
     if op in STRING_COMPARE_OPS:
-        has_field_b = bool(str(check.get("field_b") or "").strip())
+        has_field_b = _operand_present(check.get("field_b"))
         has_value = check.get("value") is not None
         if has_field_b and has_value:
             result.valid = False
@@ -306,6 +356,7 @@ def validate_check(
                     depth=depth + 1,
                     node_count=node_count,
                     allowed_ops=allowed_ops,
+                    related_fields=related_fields,
                 )
                 _merge_results(result, child_result)
 
@@ -318,6 +369,7 @@ def validate_check(
             depth=depth + 1,
             node_count=node_count,
             allowed_ops=allowed_ops,
+            related_fields=related_fields,
         )
         _merge_results(result, child_result)
 
@@ -331,6 +383,7 @@ def validate_check(
                 depth=depth + 1,
                 node_count=node_count,
                 allowed_ops=allowed_ops,
+                related_fields=related_fields,
             )
             _merge_results(result, child_result)
 

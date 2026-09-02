@@ -22,7 +22,7 @@ from app.domain.dqa.values import (
     get_value,
     resolve_alias,
 )
-from app.services.dqa_evaluation import evaluate_project, evaluate_rule, evaluate_submission
+from app.services.dqa_evaluation import evaluate_project, evaluate_project_cascade, evaluate_rule, evaluate_submission
 from app.services.dqa_rule_packs import (
     SEED_DIR,
     get_pack_for_project,
@@ -48,6 +48,7 @@ __all__ = [
     "evaluate_rule",
     "evaluate_submission",
     "evaluate_project",
+    "evaluate_project_cascade",
     "load_seed_packs",
     "get_pack_for_project",
     "seed_rule_packs",

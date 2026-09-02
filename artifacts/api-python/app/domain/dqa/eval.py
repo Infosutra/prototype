@@ -6,9 +6,10 @@ import logging
 import re
 from typing import Any
 
-from app.domain.dqa.context import EvaluationContext
+from app.domain.dqa.context import EvaluationContext, RelatedResolution
 from app.domain.dqa.refs import (
-    eval_numeric_relation,
+    enrich_details_with_related,
+    eval_compare,
     resolve_field_value,
     resolve_numeric_operands,
     resolve_string_operands,
@@ -35,6 +36,8 @@ def eval_check(
     pack: dict[str, Any],
     project_rows: list[Any] | None = None,
     current: Any | None = None,
+    related: dict[str, RelatedResolution] | None = None,
+    study_id: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Return (passes, details). Flag when passes is False."""
     if not check or not isinstance(check, dict):
@@ -44,46 +47,48 @@ def eval_check(
         pack=pack,
         project_rows=project_rows,
         current=current,
+        related=related,
+        study_id=study_id,
     )
+    eval_args = {
+        "data": ctx.data,
+        "pack": ctx.pack,
+        "project_rows": ctx.project_rows,
+        "current": ctx.current,
+        "related": ctx.related,
+        "study_id": ctx.study_id,
+    }
     op = str(check.get("op") or "").strip()
     details: dict[str, Any] = {"op": op}
 
     if op == "all":
         for child in check.get("checks") or []:
-            ok, child_details = eval_check(
-                child, data=data, pack=pack, project_rows=project_rows, current=current
-            )
+            ok, child_details = eval_check(child, **eval_args)
             if not ok:
-                return False, {"op": op, "failed": child_details}
-        return True, details
+                return False, enrich_details_with_related(
+                    {"op": op, "failed": child_details}, ctx
+                )
+        return True, enrich_details_with_related(details, ctx)
 
     if op == "any":
         for child in check.get("checks") or []:
-            ok, child_details = eval_check(
-                child, data=data, pack=pack, project_rows=project_rows, current=current
-            )
+            ok, child_details = eval_check(child, **eval_args)
             if ok:
-                return True, details
-        return False, details
+                return True, enrich_details_with_related(details, ctx)
+        return False, enrich_details_with_related(details, ctx)
 
     if op == "not":
-        ok, child_details = eval_check(
-            check.get("check"), data=data, pack=pack, project_rows=project_rows, current=current
-        )
-        return (not ok), {"op": op, "inner": child_details}
+        ok, child_details = eval_check(check.get("check"), **eval_args)
+        return (not ok), enrich_details_with_related({"op": op, "inner": child_details}, ctx)
 
     if op == "if_then":
-        if_ok, if_details = eval_check(
-            check.get("if"), data=data, pack=pack, project_rows=project_rows, current=current
-        )
-        # if condition is the "trigger" in natural language; when trigger holds, then must hold.
-        # Convention: `if` check PASSES when the antecedent is true.
+        if_ok, if_details = eval_check(check.get("if"), **eval_args)
         if not if_ok:
-            return True, details  # antecedent false → rule N/A
-        then_ok, then_details = eval_check(
-            check.get("then"), data=data, pack=pack, project_rows=project_rows, current=current
+            return True, enrich_details_with_related(details, ctx)
+        then_ok, then_details = eval_check(check.get("then"), **eval_args)
+        return then_ok, enrich_details_with_related(
+            {"op": op, "if": if_details, "then": then_details}, ctx
         )
-        return then_ok, {"op": op, "if": if_details, "then": then_details}
 
     if op == "required":
         value = get_value(data, pack, check.get("field"))
@@ -103,11 +108,13 @@ def eval_check(
         return filled, details
 
     if op == "equals":
-        left, right, cmp_details = resolve_string_operands(ctx, check)
+        left, right, cmp_details, na = resolve_string_operands(ctx, check)
         details.update(cmp_details)
         if cmp_details.get("error"):
-            return False, details
-        return left == right, details
+            return False, enrich_details_with_related(details, ctx)
+        if na is True:
+            return True, enrich_details_with_related(details, ctx)
+        return left == right, enrich_details_with_related(details, ctx)
 
     if op == "equals_any":
         value = _as_str(get_value(data, pack, check.get("field"))).lower()
@@ -116,11 +123,13 @@ def eval_check(
         return value in values, details
 
     if op == "not_equals":
-        left, right, cmp_details = resolve_string_operands(ctx, check)
+        left, right, cmp_details, na = resolve_string_operands(ctx, check)
         details.update(cmp_details)
         if cmp_details.get("error"):
-            return False, details
-        return left != right, details
+            return False, enrich_details_with_related(details, ctx)
+        if na is True:
+            return True, enrich_details_with_related(details, ctx)
+        return left != right, enrich_details_with_related(details, ctx)
 
     if op == "in":
         value = _as_str(get_value(data, pack, check.get("field"))).lower()
@@ -161,11 +170,13 @@ def eval_check(
         return True, details
 
     if op in {"gt", "lt", "gte", "lte"}:
-        left, right, cmp_details = resolve_numeric_operands(ctx, check)
+        left, right, cmp_details, na = resolve_numeric_operands(ctx, check)
         details.update(cmp_details)
         if cmp_details.get("error"):
-            return False, details
-        return eval_numeric_relation(left, right, op), details
+            return False, enrich_details_with_related(details, ctx)
+        if na is True:
+            return True, enrich_details_with_related(details, ctx)
+        return eval_compare(left, right, op), enrich_details_with_related(details, ctx)
 
     if op == "integer":
         text = _as_str(get_value(data, pack, check.get("field")))
@@ -354,4 +365,4 @@ def eval_check(
         return True, details
 
     logger.warning("Unknown DQA operator: %s", op)
-    return True, details
+    return True, enrich_details_with_related(details, ctx)

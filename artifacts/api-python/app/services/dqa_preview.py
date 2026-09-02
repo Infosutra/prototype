@@ -7,8 +7,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Submission
+from app.db.models import Project, Submission
 from app.services.dqa_evaluation import evaluate_rule
+from app.services.dqa_relationship_resolver import build_related_context, load_study_relationships
 from app.services.dqa_rule_packs import get_pack_for_project
 
 
@@ -20,6 +21,11 @@ def preview_rule(
     limit: int = 50,
 ) -> dict[str, Any]:
     pack = get_pack_for_project(db, project_id) or {}
+    project = db.get(Project, project_id)
+    study_id = project.study_id if project else None
+    rel_map = load_study_relationships(db, study_id) if study_id else {}
+    target_rows_cache: dict[str, list[Submission]] = {}
+    target_pack_cache: dict[str, dict[str, Any]] = {}
     limit = max(1, min(int(limit or 50), 200))
     all_rows = list(
         db.scalars(select(Submission).where(Submission.project_id == project_id)).all()
@@ -30,6 +36,10 @@ def preview_rule(
         reverse=True,
     )[:limit]
 
+    check = rule.get("check")
+    if check is None and rule.get("checks"):
+        check = {"op": "all", "checks": rule["checks"]}
+
     flag_count = 0
     pass_count = 0
     not_applicable_count = 0
@@ -39,19 +49,34 @@ def preview_rule(
 
     for submission in submissions:
         data = submission.data if isinstance(submission.data, dict) else {}
+        related = (
+            build_related_context(
+                db,
+                current=submission,
+                source_pack=pack,
+                check=check,
+                study_id=study_id,
+                relationships=rel_map,
+                target_rows_cache=target_rows_cache,
+                target_pack_cache=target_pack_cache,
+            )
+            if study_id
+            else {}
+        )
         flag = evaluate_rule(
             rule,
             data=data,
             pack=pack,
             project_rows=all_rows,
             current=submission,
+            related=related,
+            study_id=study_id,
         )
         would_flag = flag is not None
         if would_flag:
             flag_count += 1
         else:
             pass_count += 1
-            check = rule.get("check")
             if isinstance(check, dict) and check.get("op") == "if_then":
                 not_applicable_count += 1
 

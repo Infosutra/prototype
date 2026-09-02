@@ -1,7 +1,7 @@
 """ORM models — re-exported for convenient imports."""
 
 from app.db.models.audio import AudioRecording, UsageEvent
-from app.db.models.dqa import DqaFlag, RulePack, TriangulationView
+from app.db.models.dqa import DqaFlag, DqaRelationship, RulePack, TriangulationView
 from app.db.models.project import Project
 from app.db.models.reporting import Insight, Prompt, Report, ReportProject, ReportSchedule
 from app.db.models.settings import AppSettings
@@ -12,6 +12,7 @@ __all__ = [
     "AudioRecording",
     "AppSettings",
     "DqaFlag",
+    "DqaRelationship",
     "Insight",
     "Project",
     "Prompt",

@@ -78,7 +78,7 @@ def operator_catalog_for_prompt() -> list[dict[str, Any]]:
         {"op": "not_equals", "params": ["field", "value|field_b"]},
         {"op": "in", "params": ["field", "values[]"]},
         {"op": "not_in", "params": ["field", "values[]"]},
-        {"op": "gt|lt|gte|lte", "params": ["field", "value|field_b|threshold"]},
+        {"op": "gt|lt|gte|lte", "params": ["field", "value|field_b|related_field|threshold"]},
         {"op": "between", "params": ["field", "min|min_threshold", "max|max_threshold"]},
         {"op": "required", "params": ["field"]},
         {"op": "blank", "params": ["field"]},

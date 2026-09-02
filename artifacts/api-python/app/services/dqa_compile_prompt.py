@@ -24,9 +24,10 @@ Your job is to translate natural-language data quality requirements into a struc
 Rules:
 - Output ONLY valid JSON matching the response schema below.
 - Use field names exactly as provided in the form schema. Never invent field names.
-- Intra-form only: do not use scoped refs like register.A10.
-- Prefer simple check trees using the supported operators catalog.
-- For field-to-field comparisons use field_b (e.g. gt with field + field_b).
+- Intra-form fields use plain string refs. Inter-form fields use related_field objects only.
+- Never invent relationship codes. Use only relationships listed in context.relationships.
+- related_field shape: {"type":"related_field","relationship":"<code>","field":"<target_field>"}
+- For field-to-field comparisons use field_b (e.g. gt with field + field_b or related_field).
 - For duration bands use duration_minutes_gte with start_field, end_field, optional min and max.
 - If the requirement is ambiguous, set clarifying_question to a single concise question and set rule to null.
 - If you can compile, set clarifying_question to null and provide rule + explanation.
@@ -125,6 +126,8 @@ def build_compiler_messages(
     conversation: list[dict[str, str]] | None = None,
     existing_rule: dict[str, Any] | None = None,
     repair_context: dict[str, Any] | None = None,
+    relationships: list[dict[str, Any]] | None = None,
+    source_relationships: list[str] | None = None,
 ) -> list[dict[str, str]]:
     schema, _ = compact_form_schema(form_fields)
     context_payload: dict[str, Any] = {
@@ -132,6 +135,13 @@ def build_compiler_messages(
         "form_fields": schema,
         "pack_fields": (pack or {}).get("fields") or {},
         "thresholds": (pack or {}).get("thresholds") or {},
+        "relationships": relationships or [],
+        "source_relationships": source_relationships or [],
+        "related_field_operand": {
+            "type": "related_field",
+            "relationship": "<relationship_code>",
+            "field": "<field_on_target_form>",
+        },
     }
     if existing_rule:
         context_payload["existing_rule"] = {

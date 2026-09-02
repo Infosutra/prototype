@@ -10,7 +10,46 @@ from sqlalchemy.types import JSON
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.db.models.project import Project
     from app.db.models.study import Study
+
+
+class DqaRelationship(Base):
+    """Study-scoped join between two form projects for inter-form DQA."""
+
+    __tablename__ = "dqa_relationships"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    study_id: Mapped[str] = mapped_column(
+        ForeignKey("studies.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False, default="")
+    source_project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    target_project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    source_join_field: Mapped[str] = mapped_column(String, nullable=False)
+    target_join_field: Mapped[str] = mapped_column(String, nullable=False)
+    # one: require exactly one match; flag if ambiguous. latest: pick newest if many.
+    cardinality: Mapped[str] = mapped_column(String, nullable=False, default="one")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    study: Mapped[Study] = relationship(back_populates="dqa_relationships")
+    source_project: Mapped[Project] = relationship(foreign_keys=[source_project_id])
+    target_project: Mapped[Project] = relationship(foreign_keys=[target_project_id])
+
+    __table_args__ = (
+        UniqueConstraint("study_id", "code", name="dqa_relationships_study_code_uidx"),
+        Index("dqa_relationships_study_idx", "study_id"),
+    )
 
 
 class RulePack(Base):

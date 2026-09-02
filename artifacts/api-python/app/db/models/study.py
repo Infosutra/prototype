@@ -20,7 +20,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.audio import AudioRecording
-    from app.db.models.dqa import TriangulationView
+    from app.db.models.dqa import DqaRelationship, TriangulationView
     from app.db.models.project import Project
     from app.db.models.reporting import ReportSchedule
 
@@ -55,6 +55,9 @@ class Study(Base):
         back_populates="study", cascade="all, delete-orphan"
     )
     triangulation_views: Mapped[list[TriangulationView]] = relationship(
+        back_populates="study", cascade="all, delete-orphan"
+    )
+    dqa_relationships: Mapped[list[DqaRelationship]] = relationship(
         back_populates="study", cascade="all, delete-orphan"
     )
     audio_recordings: Mapped[list[AudioRecording]] = relationship(

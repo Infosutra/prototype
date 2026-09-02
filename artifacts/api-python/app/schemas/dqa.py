@@ -72,6 +72,39 @@ class DqaRecomputeResult(CamelModel):
     submissions: int
     flagged_submissions: int
     flags: int
+    cascade_projects: list[str] | None = None
+
+
+class DqaRelationshipOut(CamelModel):
+    id: str
+    study_id: str
+    code: str
+    title: str
+    source_project_id: str
+    target_project_id: str
+    source_join_field: str
+    target_join_field: str
+    cardinality: str
+
+
+class DqaRelationshipCreate(CamelModel):
+    code: str
+    title: str = ""
+    source_project_id: str
+    target_project_id: str
+    source_join_field: str
+    target_join_field: str
+    cardinality: str = "one"
+
+
+class DqaRelationshipUpdate(CamelModel):
+    code: str | None = None
+    title: str | None = None
+    source_project_id: str | None = None
+    target_project_id: str | None = None
+    source_join_field: str | None = None
+    target_join_field: str | None = None
+    cardinality: str | None = None
 
 
 class EnumeratorStat(CamelModel):

@@ -18,6 +18,9 @@ from app.schemas.dqa import (
     DqaCompileNeedsClarification,
     DqaCompileSuccess,
     DqaFlagOut,
+    DqaRelationshipCreate,
+    DqaRelationshipOut,
+    DqaRelationshipUpdate,
     DqaRecomputeResult,
     DqaRuleCount,
     DqaSummary,
@@ -33,6 +36,14 @@ from app.schemas.dqa import (
 )
 from app.services import dqa_engine
 from app.services.dqa_compile import CompileError, compile_dqa_rule, validate_dqa_rule_for_project
+from app.services.dqa_relationships import (
+    RelationshipError,
+    create_relationship,
+    delete_relationship,
+    list_relationships,
+    update_relationship,
+    validate_relationship_payload,
+)
 from app.domain.dqa.form_fields import list_form_fields
 from app.domain.dqa.validate import validate_pack_rules
 from app.services.settings import get_or_create_settings
@@ -228,7 +239,7 @@ def recompute(
     if project_id:
         if not db.get(Project, project_id):
             raise HTTPException(status_code=404, detail="Project not found")
-        stats = dqa_engine.evaluate_project(db, project_id)
+        stats = dqa_engine.evaluate_project_cascade(db, project_id)
         return DqaRecomputeResult(project_id=project_id, **stats)
 
     totals = {"submissions": 0, "flagged_submissions": 0, "flags": 0}
@@ -237,6 +248,86 @@ def recompute(
         for key in totals:
             totals[key] += stats[key]
     return DqaRecomputeResult(project_id=None, **totals)
+
+
+@router.get(
+    "/relationships",
+    response_model=list[DqaRelationshipOut],
+    operation_id="listDqaRelationships",
+)
+def list_dqa_relationships(
+    q: Annotated[StudyIdQuery, Query()],
+    db: Session = Depends(get_db),
+) -> list[DqaRelationshipOut]:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
+    rows = list_relationships(db, q.study_id)
+    return [DqaRelationshipOut.model_validate(row, from_attributes=True) for row in rows]
+
+
+@router.post(
+    "/relationships",
+    response_model=DqaRelationshipOut,
+    operation_id="createDqaRelationship",
+)
+def create_dqa_relationship(
+    q: Annotated[StudyIdQuery, Query()],
+    payload: DqaRelationshipCreate,
+    db: Session = Depends(get_db),
+) -> DqaRelationshipOut:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
+    validation = validate_relationship_payload(db, q.study_id, payload.model_dump())
+    if not validation.valid:
+        raise HTTPException(status_code=400, detail=validation.to_dict())
+    try:
+        row = create_relationship(db, q.study_id, payload.model_dump())
+    except RelationshipError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return DqaRelationshipOut.model_validate(row, from_attributes=True)
+
+
+@router.put(
+    "/relationships/{relationship_id}",
+    response_model=DqaRelationshipOut,
+    operation_id="updateDqaRelationship",
+)
+def update_dqa_relationship(
+    relationship_id: str,
+    q: Annotated[StudyIdQuery, Query()],
+    payload: DqaRelationshipUpdate,
+    db: Session = Depends(get_db),
+) -> DqaRelationshipOut:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
+    try:
+        row = update_relationship(
+            db,
+            q.study_id,
+            relationship_id,
+            payload.model_dump(exclude_unset=True),
+        )
+    except RelationshipError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return DqaRelationshipOut.model_validate(row, from_attributes=True)
+
+
+@router.delete(
+    "/relationships/{relationship_id}",
+    operation_id="deleteDqaRelationship",
+)
+def delete_dqa_relationship(
+    relationship_id: str,
+    q: Annotated[StudyIdQuery, Query()],
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
+    try:
+        delete_relationship(db, q.study_id, relationship_id)
+    except RelationshipError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return {"status": "deleted"}
 
 
 @router.get(
