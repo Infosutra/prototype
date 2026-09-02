@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "wouter";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetDqaFlagsQueryKey,
@@ -13,11 +13,11 @@ import {
   type FormFieldOut,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
-import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Plus, Save, Trash2 } from "lucide-react";
+import { useFormRouteId } from "@/lib/use-form-route-id";
 
 const STANDARD_ALIASES = [
   "consent",
@@ -128,9 +128,7 @@ function editableToRule(rule: EditableRule): Record<string, unknown> {
   };
 }
 
-export default function RulePackEditor() {
-  const params = useParams<{ id: string }>();
-  const projectId = params.id;
+export function RulePackPanel({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const projectQuery = useGetProject(projectId);
   const fieldsQuery = useGetProjectFormFields(projectId, {
@@ -220,7 +218,7 @@ export default function RulePackEditor() {
   }) {
     return (
       <select
-        className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+        className="field-control h-9 w-full px-2 text-sm"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -235,29 +233,25 @@ export default function RulePackEditor() {
   }
 
   return (
-    <Layout>
-      <Header
-        title="Rule pack editor"
-        description={projectQuery.data?.name || "Configure DQA aliases, thresholds, and constraints"}
-        action={
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/dqa">Back to DQA</Link>
-            </Button>
-            <Button
-              onClick={() => void saveAndRecompute()}
-              disabled={isSaving}
-              className="bg-primary text-primary-foreground"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save & recompute
-            </Button>
-          </div>
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">DQA rules</h2>
+          <p className="text-sm text-muted-foreground">
+            {projectQuery.data?.name || "Configure aliases, thresholds, and constraints for this form"}
+          </p>
+        </div>
+        <Button
+          onClick={() => void saveAndRecompute()}
+          disabled={isSaving}
+          className="bg-primary text-primary-foreground shrink-0"
+        >
+          <Save className="w-4 h-4 mr-2" />
+          Save & recompute
+        </Button>
+      </div>
 
-      <div className="flex-1 overflow-auto p-4 md:p-6 bg-muted/30 space-y-6">
-        {error && (
+      {error && (
           <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5" />
             {error}
@@ -427,7 +421,7 @@ export default function RulePackEditor() {
                     }
                   />
                   <select
-                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    className="field-control h-9 px-2 text-sm"
                     value={rule.severity}
                     onChange={(e) =>
                       setRules((prev) =>
@@ -441,7 +435,7 @@ export default function RulePackEditor() {
                     <option value="amber">AMBER</option>
                   </select>
                   <select
-                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    className="field-control h-9 px-2 text-sm"
                     value={rule.op}
                     onChange={(e) =>
                       setRules((prev) => prev.map((r, i) => (i === index ? { ...r, op: e.target.value } : r)))
@@ -505,6 +499,25 @@ export default function RulePackEditor() {
             ))}
           </CardContent>
         </Card>
+    </div>
+  );
+}
+
+export default function RulePackEditor() {
+  const projectId = useFormRouteId();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const target = projectId
+      ? `/dqa?projectId=${encodeURIComponent(projectId)}&tab=rules`
+      : "/dqa?tab=rules";
+    setLocation(target);
+  }, [projectId, setLocation]);
+
+  return (
+    <Layout>
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Redirecting to Data Quality…
       </div>
     </Layout>
   );

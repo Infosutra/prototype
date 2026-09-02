@@ -12,6 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Library, FolderGit2, Database, ShieldAlert } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
 
+const workspaceButtonClass =
+  "bg-green-600 text-white border-green-700 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 dark:border-green-600";
+
 export default function Portfolio() {
   const { setActiveStudyId } = useStudy();
   const studiesQuery = useGetStudies();
@@ -173,6 +176,7 @@ export default function Portfolio() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className={workspaceButtonClass}
                             onClick={() => setActiveStudyId(study.id)}
                           >
                             Open workspace

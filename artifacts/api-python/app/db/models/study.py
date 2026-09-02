@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.db.models.audio import AudioRecording
     from app.db.models.dqa import TriangulationView
     from app.db.models.project import Project
     from app.db.models.reporting import ReportSchedule
@@ -54,6 +55,9 @@ class Study(Base):
         back_populates="study", cascade="all, delete-orphan"
     )
     triangulation_views: Mapped[list[TriangulationView]] = relationship(
+        back_populates="study", cascade="all, delete-orphan"
+    )
+    audio_recordings: Mapped[list[AudioRecording]] = relationship(
         back_populates="study", cascade="all, delete-orphan"
     )
 

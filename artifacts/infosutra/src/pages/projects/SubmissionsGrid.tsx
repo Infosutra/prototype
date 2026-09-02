@@ -188,7 +188,7 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
       <Card className="p-3">
         <div className="flex flex-wrap items-center gap-2">
           <select
-            className="h-9 rounded-md border bg-background px-2 text-sm"
+            className="field-control h-9 px-2 text-sm"
             value={severity}
             onChange={(event) => {
               setSeverity(event.target.value);
@@ -208,7 +208,7 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
             className="h-9 w-full sm:w-52"
           />
           <select
-            className="h-9 rounded-md border bg-background px-2 text-sm"
+            className="field-control h-9 px-2 text-sm"
             value={limit}
             onChange={(event) => {
               setLimit(Number(event.target.value));

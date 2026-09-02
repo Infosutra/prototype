@@ -25,15 +25,21 @@ import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
+import { DqaChecksPanel } from "@/pages/dqa/DqaChecksPanel";
 
 const TABS = [
   { id: "coverage", label: "Coverage" },
   { id: "flags", label: "DQA flags" },
   { id: "enumerators", label: "Enumerators" },
+  { id: "rules", label: "Rules" },
   { id: "triangulation", label: "Triangulation" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+function isTabId(value: string | null): value is TabId {
+  return TABS.some((item) => item.id === value);
+}
 
 type DrillRule = { ruleId: string; title: string; severity: string; count: number };
 
@@ -87,11 +93,12 @@ function cellByKey(cells: TriangulationCell[] | undefined, key: string) {
 }
 
 export default function DqaDashboard() {
-  const [tab, setTab] = useState<TabId>("coverage");
   const initialParams =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search)
       : new URLSearchParams();
+  const initialTab = initialParams.get("tab");
+  const [tab, setTab] = useState<TabId>(isTabId(initialTab) ? initialTab : "coverage");
   const [projectId, setProjectId] = useState<string>(initialParams.get("projectId") || "");
   const [severity, setSeverity] = useState<string>("");
   const [drillRuleId, setDrillRuleId] = useState<string | null>(initialParams.get("ruleId"));
@@ -104,6 +111,30 @@ export default function DqaDashboard() {
       const url = new URL(window.location.href);
       if (ruleId) url.searchParams.set("ruleId", ruleId);
       else url.searchParams.delete("ruleId");
+      window.history.replaceState({}, "", url);
+    }
+  };
+
+  const setTabWithUrl = (next: TabId) => {
+    setTab(next);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (next === "coverage") url.searchParams.delete("tab");
+      else url.searchParams.set("tab", next);
+      if (next !== "coverage") openRule(null);
+      window.history.replaceState({}, "", url);
+    } else if (next !== "coverage") {
+      openRule(null);
+    }
+  };
+
+  const setProjectIdWithUrl = (nextProjectId: string) => {
+    setProjectId(nextProjectId);
+    openRule(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (nextProjectId) url.searchParams.set("projectId", nextProjectId);
+      else url.searchParams.delete("projectId");
       window.history.replaceState({}, "", url);
     }
   };
@@ -230,28 +261,20 @@ export default function DqaDashboard() {
             : "Per-form DQA flags, enumerator monitors, and UDISE triangulation"
         }
         action={
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={projectId ? `/forms/${projectId}/rules` : "/forms"}>
-                <span className="hidden sm:inline">Rule packs</span>
-                <span className="sm:hidden">Rules</span>
-              </Link>
-            </Button>
-            <Button
-              size="sm"
-              onClick={() =>
-                recompute.mutate({
-                  params: projectId ? { projectId } : undefined,
-                })
-              }
-              disabled={recompute.isPending || !activeStudyId}
-              className="bg-primary text-primary-foreground"
-              aria-label="Recompute DQA"
-            >
-              <RefreshCw className={`w-4 h-4 sm:mr-2 ${recompute.isPending ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Recompute DQA</span>
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            onClick={() =>
+              recompute.mutate({
+                params: projectId ? { projectId } : undefined,
+              })
+            }
+            disabled={recompute.isPending || !activeStudyId}
+            className="bg-primary text-primary-foreground"
+            aria-label="Recompute DQA"
+          >
+            <RefreshCw className={`w-4 h-4 sm:mr-2 ${recompute.isPending ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Recompute DQA</span>
+          </Button>
         }
       />
 
@@ -262,12 +285,9 @@ export default function DqaDashboard() {
       <div className="flex-1 overflow-auto p-4 md:p-6 bg-muted/30 space-y-6">
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center">
           <select
-            className="h-9 w-full sm:w-auto rounded-md border bg-card px-3 text-sm"
+            className="h-9 w-full sm:w-auto field-control px-3 text-sm"
             value={projectId}
-            onChange={(e) => {
-              setProjectId(e.target.value);
-              openRule(null);
-            }}
+            onChange={(e) => setProjectIdWithUrl(e.target.value)}
           >
             <option value="">All study forms</option>
             {projects.map((p) => (
@@ -282,10 +302,7 @@ export default function DqaDashboard() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  setTab(item.id);
-                  if (item.id !== "coverage") openRule(null);
-                }}
+                onClick={() => setTabWithUrl(item.id)}
                 className={`px-3 py-1.5 text-sm rounded whitespace-nowrap shrink-0 ${
                   tab === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground"
                 }`}
@@ -445,7 +462,7 @@ export default function DqaDashboard() {
                 <ShieldAlert className="w-4 h-4" /> Flagged records
               </CardTitle>
               <select
-                className="h-8 rounded-md border bg-background px-2 text-xs"
+                className="field-control h-8 px-2 text-xs"
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
               >
@@ -546,11 +563,23 @@ export default function DqaDashboard() {
           </Card>
         )}
 
+        {tab === "rules" && (
+          projectId ? (
+            <DqaChecksPanel projectId={projectId} />
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Select a form above to configure DQA rules for that form.
+              </CardContent>
+            </Card>
+          )
+        )}
+
         {tab === "triangulation" && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
               <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                className="field-control h-9 px-3 text-sm"
                 value={triViewId}
                 onChange={(e) => setTriViewId(e.target.value)}
               >

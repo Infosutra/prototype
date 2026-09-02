@@ -16,6 +16,7 @@ from app.core.logging import setup_logging
 from app.db.session import SessionLocal, init_db
 from app.routers import (
     analytics,
+    audio,
     dashboard,
     dqa,
     health,
@@ -26,9 +27,11 @@ from app.routers import (
     settings,
     studies,
     submissions,
+    usage,
 )
 from app.services.daily_report import maybe_send_scheduled_report
 from app.services.dqa_daily_email import maybe_send_scheduled_dqa_daily
+from app.services.transcription_job import drain_pending_transcriptions
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +49,7 @@ async def _scheduler_loop(stop_event: asyncio.Event) -> None:
                 maybe_send_scheduled_dqa_daily(db)
             finally:
                 db.close()
+            drain_pending_transcriptions()
         except Exception:
             logger.exception("Daily report scheduler tick failed")
         try:
@@ -102,6 +106,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Accept-Ranges", "Content-Range", "Content-Length", "Content-Type"],
     )
 
     @app.exception_handler(Exception)
@@ -122,6 +127,8 @@ def create_app() -> FastAPI:
     app.include_router(settings.router, prefix=prefix)
     app.include_router(dqa.router, prefix=prefix)
     app.include_router(dqa.projects_router, prefix=prefix)
+    app.include_router(audio.router, prefix=prefix)
+    app.include_router(usage.router, prefix=prefix)
 
     # Production UI only (Pi/systemd). Local start-local uses Vite on :5173.
     serve_frontend = os.environ.get("SERVE_FRONTEND", "").strip().lower() in {

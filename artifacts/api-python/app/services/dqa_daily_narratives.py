@@ -8,7 +8,7 @@ from typing import Any
 
 from app.db.models import AppSettings
 from app.domain.reporting.narratives import _fallback_coverage, _fallback_headline
-from app.integrations.openrouter import OpenRouterError, chat_completion
+from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,8 @@ def generate_ai_narratives(stats: dict[str, Any], settings: AppSettings) -> dict
             "aiCoverageNote": _fallback_coverage(stats),
             "aiSource": "fallback",
         }
-    api_key = (settings.ai_api_key or "").strip()
-    if not api_key:
+    llm = llm_config_from_app_settings(settings)
+    if not llm.api_key:
         return {
             "aiHeadline": _fallback_headline(stats),
             "aiCoverageNote": _fallback_coverage(stats),
@@ -67,13 +67,11 @@ def generate_ai_narratives(stats: dict[str, Any], settings: AppSettings) -> dict
     )
     try:
         text = chat_completion(
-            api_key=api_key,
-            messages=[
+            llm,
+            [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            model=settings.ai_model or "nvidia/nemotron-3-super-120b-a12b:free",
-            base_url=settings.ai_base_url or "https://openrouter.ai/api/v1",
             temperature=float(settings.ai_temperature or 0.3),
             max_tokens=int(settings.ai_max_tokens or 2048),
             timeout_seconds=float(settings.ai_timeout_seconds or 60),
@@ -81,8 +79,8 @@ def generate_ai_narratives(stats: dict[str, Any], settings: AppSettings) -> dict
         parts = [p.strip() for p in text.split("\n\n") if p.strip()]
         headline = parts[0] if parts else _fallback_headline(stats)
         coverage = parts[1] if len(parts) > 1 else _fallback_coverage(stats)
-        return {"aiHeadline": headline, "aiCoverageNote": coverage, "aiSource": "openrouter"}
-    except OpenRouterError:
+        return {"aiHeadline": headline, "aiCoverageNote": coverage, "aiSource": llm.provider}
+    except LlmError:
         logger.exception("OpenRouter narrative failed; using fallback")
         return {
             "aiHeadline": _fallback_headline(stats),

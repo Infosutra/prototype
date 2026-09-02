@@ -43,6 +43,87 @@ export interface AnalyticsOverview {
   fieldDistributions?: FieldDistribution[];
 }
 
+export interface TranscriptSegmentOut {
+  speakerId?: string | null;
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+}
+
+export type TranscriptOutSpeakerLabels = {[key: string]: string};
+
+export interface TranscriptOut {
+  languageCode?: string | null;
+  fullText: string;
+  segments?: TranscriptSegmentOut[];
+  speakerLabels?: TranscriptOutSpeakerLabels;
+  segmentLayout?: string;
+}
+
+export interface AudioRecordingOut {
+  id: string;
+  studyId: string;
+  name: string;
+  description: string;
+  originalFilename: string;
+  contentType: string;
+  sizeBytes: number;
+  durationSeconds?: number | null;
+  transcriptionStatus: string;
+  transcriptionProvider?: string | null;
+  transcriptionLanguage?: string | null;
+  transcriptionError?: string | null;
+  transcript?: TranscriptOut | null;
+  transcribedAt?: string | null;
+  fileUrl: string;
+  transcriptionCostAmount?: number | null;
+  transcriptionCostCurrency?: string | null;
+  transcriptionModel?: string | null;
+  estimatedTranscriptionCostAmount?: number | null;
+  estimatedTranscriptionCostCurrency?: string | null;
+  estimatedTranscriptionDurationSeconds?: number | null;
+  transcriptionRatePerMinute?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AudioRecordingSummary {
+  id: string;
+  studyId: string;
+  name: string;
+  description: string;
+  originalFilename: string;
+  contentType: string;
+  sizeBytes: number;
+  durationSeconds?: number | null;
+  transcriptionStatus: string;
+  transcriptionProvider?: string | null;
+  transcriptionLanguage?: string | null;
+  transcriptionError?: string | null;
+  transcribedAt?: string | null;
+  fileUrl: string;
+  transcriptionCostAmount?: number | null;
+  transcriptionCostCurrency?: string | null;
+  estimatedTranscriptionCostAmount?: number | null;
+  estimatedTranscriptionCostCurrency?: string | null;
+  estimatedTranscriptionDurationSeconds?: number | null;
+  transcriptionRatePerMinute?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AudioRecordingUpdate {
+  name?: string | null;
+  description?: string | null;
+}
+
+export interface BodyCreateAudioRecording {
+  study_id: string;
+  name: string;
+  description?: string;
+  file: Blob;
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;
@@ -148,6 +229,13 @@ export interface GeneralSettings {
   aiMaxTokens?: number;
   aiTimeoutSeconds?: number;
   reportLogoUrl?: string | null;
+  transcriptionEnabled?: boolean;
+  transcriptionProvider?: string;
+  transcriptionApiKey?: string;
+  transcriptionBaseUrl?: string;
+  transcriptionModel?: string;
+  transcriptionCurrency?: string;
+  transcriptionRatePerMinute?: number;
 }
 
 export interface GenerateDqaDailyInput {
@@ -446,6 +534,12 @@ export interface ShareResult {
   message: string;
 }
 
+export type SpeakerLabelsUpdateLabels = {[key: string]: string};
+
+export interface SpeakerLabelsUpdate {
+  labels?: SpeakerLabelsUpdateLabels;
+}
+
 export interface StudyAssignProject {
   projectId: string;
   toolCode?: string | null;
@@ -574,6 +668,10 @@ export interface SyncResult {
   errors: string[];
 }
 
+export interface TranscribeRequest {
+  languageCode?: string | null;
+}
+
 export interface TrendPoint {
   date: string;
   submissions: number;
@@ -664,6 +762,37 @@ export interface TriangulationViewOut {
   rows: TriangulationRow[];
   mismatchCount: number;
   practices?: TriangulationPracticeStat[];
+}
+
+export type UsageEventOutMetadata = { [key: string]: unknown } | null;
+
+export interface UsageEventOut {
+  id: string;
+  occurredAt: string;
+  category: string;
+  provider: string;
+  operation: string;
+  quantity: number;
+  unit: string;
+  amount: number;
+  currency: string;
+  studyId?: string | null;
+  resourceType?: string | null;
+  resourceId?: string | null;
+  metadata?: UsageEventOutMetadata;
+}
+
+export interface UsageSummaryItem {
+  category: string;
+  totalAmount: number;
+  currency: string;
+  eventCount: number;
+}
+
+export interface UsageSummaryOut {
+  items: UsageSummaryItem[];
+  totalAmount: number;
+  currency: string;
 }
 
 export interface AppSchemasDqaEnumeratorStat {
@@ -776,5 +905,42 @@ studyId?: string | null;
 
 export type GetTriangulationViewParams = {
 studyId?: string | null;
+};
+
+export type GetAudioRecordingsParams = {
+studyId?: string | null;
+};
+
+export type GetAudioRecordingParams = {
+/**
+ * @pattern ^(linear|provider)$
+ */
+segmentLayout?: string;
+};
+
+export type DownloadAudioRecordingTranscriptParams = {
+/**
+ * @pattern ^(pdf|docx)$
+ */
+format?: string;
+/**
+ * @pattern ^(linear|provider)$
+ */
+segmentLayout?: string;
+};
+
+export type GetUsageEventsParams = {
+studyId?: string | null;
+category?: string | null;
+/**
+ * @minimum 1
+ * @maximum 2000
+ */
+limit?: number;
+};
+
+export type GetUsageSummaryParams = {
+studyId?: string | null;
+category?: string | null;
 };
 

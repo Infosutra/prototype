@@ -29,8 +29,9 @@ def _build_final_narratives(
             "aiSource": "fallback" if run_ai else "skipped",
         }
 
-    from app.integrations.openrouter import OpenRouterError, chat_completion
+    from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_settings
 
+    llm = llm_config_from_app_settings(settings)
     tr1 = tr1_summary(stats)
     compact = {
         "study": stats["studyName"],
@@ -87,13 +88,11 @@ def _build_final_narratives(
     )
     try:
         text = chat_completion(
-            api_key=settings.ai_api_key.strip(),
-            messages=[
+            llm,
+            [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            model=settings.ai_model or "nvidia/nemotron-3-super-120b-a12b:free",
-            base_url=settings.ai_base_url or "https://openrouter.ai/api/v1",
             temperature=float(settings.ai_temperature or 0.3),
             max_tokens=max(int(settings.ai_max_tokens or 2048), 1800),
             timeout_seconds=float(settings.ai_timeout_seconds or 90),
@@ -103,9 +102,9 @@ def _build_final_narratives(
             "aiHeadline": exec_summary,
             "aiCoverageNote": prose["coverage"],
             "sectionProse": prose,
-            "aiSource": "openrouter",
+            "aiSource": llm.provider,
         }
-    except OpenRouterError:
+    except LlmError:
         logger.exception("Final DQA AI narrative failed; using exhaustive fallback")
         return {
             "aiHeadline": fallback_exec,

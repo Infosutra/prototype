@@ -100,7 +100,7 @@ export default function FormsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search forms, tools, UIDs..."
-              className="pl-9 bg-card border-border"
+              className="pl-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />

@@ -12,29 +12,85 @@ import {
   ShieldAlert,
   Library,
   LayoutGrid,
+  Mic,
+  type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, sidebarFieldClasses } from "@/lib/utils";
 import { useGetProjects } from "@workspace/api-client-react";
 import { useStudy } from "@/components/study/StudyProvider";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: Activity },
+const globalNavigation = [
   { name: "Portfolio", href: "/portfolio", icon: LayoutGrid },
   { name: "Studies", href: "/studies", icon: Library },
+  { name: "Settings", href: "/settings", icon: Settings },
+];
+
+const studyNavigation = [
+  { name: "Dashboard", href: "/", icon: Activity },
   { name: "Forms", href: "/forms", icon: FolderGit2 },
   { name: "Data Quality", href: "/dqa", icon: ShieldAlert },
   { name: "Data Explorer", href: "/data", icon: Database },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "AI Insights", href: "/ai", icon: BrainCircuit },
+  { name: "Recordings", href: "/recordings", icon: Mic },
   { name: "Prompts", href: "/prompts", icon: MessageSquare },
   { name: "Reports", href: "/reports", icon: FileText },
-  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 type SidebarNavProps = {
   onNavigate?: () => void;
   className?: string;
 };
+
+type NavItem = {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+};
+
+function NavLinks({
+  items,
+  location,
+  onNavigate,
+}: {
+  items: NavItem[];
+  location: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {items.map((item) => {
+        const isActive =
+          location === item.href || (item.href !== "/" && location.startsWith(item.href));
+        return (
+          <Link
+            key={item.name}
+            href={item.href}
+            onClick={() => onNavigate?.()}
+            className={cn(
+              "group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors",
+              isActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+            )}
+            data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <item.icon
+              className={cn(
+                "mr-3 flex-shrink-0 h-5 w-5",
+                isActive
+                  ? "text-primary"
+                  : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/70",
+              )}
+              aria-hidden="true"
+            />
+            {item.name}
+          </Link>
+        );
+      })}
+    </>
+  );
+}
 
 export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
   const [location] = useLocation();
@@ -59,12 +115,18 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
         <span className="font-bold text-lg tracking-tight">Infosutra</span>
       </div>
 
+      <div className="py-3 border-b border-sidebar-border">
+        <nav className="space-y-1 px-2">
+          <NavLinks items={globalNavigation} location={location} onNavigate={onNavigate} />
+        </nav>
+      </div>
+
       <div className="px-3 py-3 border-b border-sidebar-border space-y-1.5">
         <label className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50 px-1">
           Study workspace
         </label>
         <select
-          className="w-full h-9 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 text-sm"
+          className={cn(sidebarFieldClasses, "w-full h-9 rounded-md px-2 text-sm")}
           value={activeStudyId ?? ""}
           onChange={(e) => setActiveStudyId(e.target.value || null)}
         >
@@ -72,7 +134,6 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
           {studies.map((study) => (
             <option key={study.id} value={study.id}>
               {study.name}
-              {study.dayNumber != null ? ` · Day ${study.dayNumber}` : ""}
             </option>
           ))}
         </select>
@@ -90,35 +151,7 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
 
       <div className="flex-1 overflow-y-auto py-4">
         <nav className="space-y-1 px-2">
-          {navigation.map((item) => {
-            const isActive =
-              location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => onNavigate?.()}
-                className={cn(
-                  "group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                )}
-                data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                <item.icon
-                  className={cn(
-                    "mr-3 flex-shrink-0 h-5 w-5",
-                    isActive
-                      ? "text-primary"
-                      : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/70",
-                  )}
-                  aria-hidden="true"
-                />
-                {item.name}
-              </Link>
-            );
-          })}
+          <NavLinks items={studyNavigation} location={location} onNavigate={onNavigate} />
         </nav>
       </div>
 

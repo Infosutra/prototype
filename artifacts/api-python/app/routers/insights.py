@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Insight, Project, Submission
 from app.db.session import get_db
-from app.integrations.openrouter import OpenRouterError, chat_completion
+from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_settings
 from app.schemas.common import OkResponse, StudyProjectQuery
 from app.schemas.misc import InsightGenerateInput, InsightInput, InsightOut
 from app.services.settings import get_or_create_settings
@@ -107,8 +107,8 @@ def generate_insight(
             status_code=400,
             detail="AI is disabled. Enable it under Settings → General.",
         )
-    api_key = (settings.ai_api_key or "").strip()
-    if not api_key:
+    llm = llm_config_from_app_settings(settings)
+    if not llm.api_key:
         raise HTTPException(
             status_code=400,
             detail="OpenRouter API key is not configured. Add it under Settings → General.",
@@ -193,18 +193,16 @@ def generate_insight(
 
     try:
         raw = chat_completion(
-            api_key=api_key,
-            messages=[
+            llm,
+            [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            model=settings.ai_model or "nvidia/nemotron-3-super-120b-a12b:free",
-            base_url=settings.ai_base_url or "https://openrouter.ai/api/v1",
             temperature=float(settings.ai_temperature or 0.3),
             max_tokens=max(int(settings.ai_max_tokens or 2048), 800),
             timeout_seconds=float(settings.ai_timeout_seconds or 90),
         )
-    except OpenRouterError as exc:
+    except LlmError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     parsed = _parse_insight_payload(raw)

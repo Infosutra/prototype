@@ -21,6 +21,8 @@ import RulePackEditor from './pages/dqa/RulePackEditor';
 import TriangulationViewEditor from './pages/dqa/TriangulationViewEditor';
 import Studies from './pages/studies/Studies';
 import Portfolio from './pages/portfolio/Portfolio';
+import Recordings from './pages/recordings/Recordings';
+import RecordingDetail from './pages/recordings/RecordingDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +54,8 @@ function Router() {
       <Route path="/data" component={DataExplorer} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/ai" component={AiInsights} />
+      <Route path="/recordings/:id" component={RecordingDetail} />
+      <Route path="/recordings" component={Recordings} />
       <Route path="/prompts" component={PromptTemplates} />
       <Route path="/reports" component={Reports} />
       <Route path="/settings" component={Settings} />

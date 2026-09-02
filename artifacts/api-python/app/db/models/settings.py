@@ -50,6 +50,16 @@ class AppSettings(Base):
     ai_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     report_logo_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    transcription_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    transcription_provider: Mapped[str] = mapped_column(String, nullable=False, default="sarvam")
+    transcription_api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    transcription_base_url: Mapped[str] = mapped_column(
+        String, nullable=False, default="https://api.sarvam.ai"
+    )
+    transcription_model: Mapped[str] = mapped_column(String, nullable=False, default="saaras:v3")
+    transcription_currency: Mapped[str] = mapped_column(String, nullable=False, default="INR")
+    transcription_rate_per_minute: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
     )

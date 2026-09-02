@@ -112,6 +112,11 @@
 
   --input: 214 20% 90%;
   --ring: 215 100% 40%;
+
+  --switch-track-unchecked: 215 16% 72%;
+  --switch-track-border: 215 14% 58%;
+  --switch-thumb: 0 0% 100%;
+  --switch-thumb-border: 215 14% 52%;
   
   /* Data Chart Colors: Blues, Teals, Ambers */
   --chart-1: 215 100% 40%;
@@ -190,6 +195,11 @@
 
   --input: 220 25% 18%;
   --ring: 215 100% 50%;
+
+  --switch-track-unchecked: 220 14% 38%;
+  --switch-track-border: 220 12% 52%;
+  --switch-thumb: 210 20% 96%;
+  --switch-thumb-border: 220 12% 62%;
   
   --chart-1: 215 100% 50%;
   --chart-2: 180 80% 40%;
@@ -207,6 +217,23 @@
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
+  }
+  input:where(
+    :not([type]),
+    [type='text'],
+    [type='search'],
+    [type='email'],
+    [type='password'],
+    [type='url'],
+    [type='tel'],
+    [type='number'],
+    [type='time'],
+    [type='date'],
+    [type='datetime-local']
+  ),
+  textarea,
+  select {
+    @apply border border-transparent bg-muted/40 shadow-none transition-[color,box-shadow,background-color,border-color] hover:bg-muted/60 hover:border-muted-foreground/40 focus:outline-none focus:bg-card focus:border-ring/55 focus:ring-2 focus:ring-ring/20 focus-visible:bg-card focus-visible:border-ring/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
 }
 
@@ -265,5 +292,11 @@
   .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
   .active-elevate-2:active:not(.no-default-active-elevate)::after {
     background-color: var(--elevate-2);
+  }
+  .field-control {
+    @apply border border-transparent bg-muted/40 shadow-none transition-[color,box-shadow,background-color,border-color] hover:bg-muted/60 hover:border-muted-foreground/40 focus:outline-none focus:bg-card focus:border-ring/55 focus:ring-2 focus:ring-ring/20 focus-visible:bg-card focus-visible:border-ring/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .setting-toggle-row {
+    @apply flex items-center justify-between gap-4;
   }
 }

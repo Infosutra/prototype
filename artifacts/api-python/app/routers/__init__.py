@@ -1,5 +1,6 @@
 from app.routers import (
     analytics,
+    audio,
     dashboard,
     dqa,
     health,
@@ -10,10 +11,12 @@ from app.routers import (
     settings,
     studies,
     submissions,
+    usage,
 )
 
 __all__ = [
     "analytics",
+    "audio",
     "dashboard",
     "dqa",
     "health",
@@ -24,4 +27,5 @@ __all__ = [
     "settings",
     "studies",
     "submissions",
+    "usage",
 ]

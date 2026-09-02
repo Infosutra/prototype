@@ -152,7 +152,7 @@ export default function AiInsights() {
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <Select value={projectId} onValueChange={setProjectId}>
-                      <SelectTrigger className="w-full sm:w-[220px] bg-background">
+                      <SelectTrigger className="w-full sm:w-[220px]">
                         <SelectValue placeholder="Target Project" />
                       </SelectTrigger>
                       <SelectContent>
@@ -166,7 +166,7 @@ export default function AiInsights() {
                     </Select>
                     <Input
                       placeholder="e.g. Are there GPS clusters that look suspicious?"
-                      className="flex-1 bg-background"
+                      className="flex-1"
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       onKeyDown={(e) => {

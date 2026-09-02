@@ -81,6 +81,16 @@ def to_settings_out(row: AppSettings) -> SettingsOut:
             ai_max_tokens=int(getattr(row, "ai_max_tokens", None) or 2048),
             ai_timeout_seconds=int(getattr(row, "ai_timeout_seconds", None) or 60),
             report_logo_url=row.report_logo_url,
+            transcription_enabled=bool(getattr(row, "transcription_enabled", False)),
+            transcription_provider=getattr(row, "transcription_provider", None) or "sarvam",
+            transcription_api_key=MASK if getattr(row, "transcription_api_key_encrypted", "") else "",
+            transcription_base_url=getattr(row, "transcription_base_url", None)
+            or "https://api.sarvam.ai",
+            transcription_model=getattr(row, "transcription_model", None) or "saaras:v3",
+            transcription_currency=getattr(row, "transcription_currency", None) or "INR",
+            transcription_rate_per_minute=float(
+                getattr(row, "transcription_rate_per_minute", None) or 0.0
+            ),
         ),
     )
 
@@ -95,6 +105,13 @@ def clear_undecryptable_secrets(db: Session) -> bool:
         except SecretError:
             row.smtp_password_encrypted = ""
             row.smtp_connected = False
+            changed = True
+
+    if getattr(row, "transcription_api_key_encrypted", ""):
+        try:
+            decrypt_secret(row.transcription_api_key_encrypted)
+        except SecretError:
+            row.transcription_api_key_encrypted = ""
             changed = True
 
     for cred in db.scalars(select(StudyCredential)).all():
@@ -184,6 +201,16 @@ def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
         row.ai_max_tokens = int(general.ai_max_tokens)
         row.ai_timeout_seconds = int(general.ai_timeout_seconds)
         row.report_logo_url = general.report_logo_url
+        row.transcription_enabled = general.transcription_enabled
+        row.transcription_provider = general.transcription_provider or "sarvam"
+        if general.transcription_api_key and not _is_masked(general.transcription_api_key):
+            row.transcription_api_key_encrypted = encrypt_secret(general.transcription_api_key)
+        row.transcription_base_url = (
+            general.transcription_base_url or "https://api.sarvam.ai"
+        ).strip()
+        row.transcription_model = (general.transcription_model or "saaras:v3").strip()
+        row.transcription_currency = (general.transcription_currency or "INR").strip()
+        row.transcription_rate_per_minute = float(general.transcription_rate_per_minute)
 
     db.commit()
     db.refresh(row)
@@ -226,6 +253,16 @@ def test_smtp(db: Session) -> ConnectionTestResult:
             message="SMTP connection test failed",
             details=str(exc),
         )
+
+
+def get_transcription_api_key(row: AppSettings) -> str:
+    encrypted = getattr(row, "transcription_api_key_encrypted", "") or ""
+    if not encrypted:
+        return ""
+    try:
+        return decrypt_secret(encrypted)
+    except SecretError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def get_study_credential(db: Session, study_id: str) -> StudyCredential | None:

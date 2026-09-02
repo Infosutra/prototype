@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Infosutra theme preview — soft fill</title>
+    <style>
+      :root {
+        --font: "Plus Jakarta Sans", system-ui, sans-serif;
+        --mono: "Space Mono", ui-monospace, monospace;
+        --fg: hsl(220 20% 15%);
+        --muted-fg: hsl(215 15% 45%);
+        --primary: hsl(215 100% 40%);
+        --primary-fg: #fff;
+        --card: #fff;
+        --page: hsl(210 20% 98%);
+        --muted: hsl(214 15% 94%);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        color: var(--fg);
+        background: #e8edf3;
+      }
+
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        background: #0b1b2e;
+        color: #fff;
+      }
+      .top p { margin: 0; font-size: 13px; opacity: 0.85; }
+      .top strong { font-size: 14px; display: block; margin-bottom: 2px; }
+      .top-links { display: flex; gap: 14px; font-size: 13px; }
+      .top-links a { color: #9bd0ff; text-decoration: none; }
+      .top-links a:hover { text-decoration: underline; }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 16px;
+        max-width: 1280px;
+        margin: 0 auto;
+      }
+      @media (max-width: 960px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+
+      .col {
+        background: var(--page);
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #c9d2de;
+      }
+      .col-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid #d7dee8;
+        background: #f4f7fb;
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 4px 8px;
+        border-radius: 999px;
+      }
+      .before .badge { background: #fee2e2; color: #991b1b; }
+      .soft .badge { background: #dbeafe; color: #1e40af; }
+
+      .panel { padding: 16px; }
+      .card {
+        background: var(--card);
+        border-radius: 12px;
+        border: 1px solid hsl(214 20% 90%);
+        padding: 20px;
+      }
+      h2 { margin: 0 0 6px; font-size: 18px; }
+      .desc { margin: 0 0 16px; color: var(--muted-fg); font-size: 13px; line-height: 1.45; }
+
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .hint { margin: 6px 0 0; font-size: 12px; color: var(--muted-fg); }
+
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+      .field { margin-bottom: 14px; }
+
+      .section-title {
+        margin: 20px 0 10px;
+        padding-top: 16px;
+        border-top: 1px solid hsl(214 20% 92%);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .section-desc {
+        margin: 0 0 14px;
+        font-size: 13px;
+        color: var(--muted-fg);
+        line-height: 1.45;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 4px;
+      }
+
+      .btn-primary {
+        border: none;
+        background: var(--primary);
+        color: var(--primary-fg);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .metric {
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: #f1f5f9;
+        color: #334155;
+        font-family: var(--mono);
+      }
+      .before .metric.bad { background: #fee2e2; color: #991b1b; }
+      .soft .metric.good { background: #dbeafe; color: #1e40af; }
+
+      .legend {
+        max-width: 1280px;
+        margin: 0 auto 8px;
+        padding: 0 16px;
+        font-size: 13px;
+        color: #475569;
+        line-height: 1.5;
+      }
+      .legend code {
+        font-family: var(--mono);
+        font-size: 12px;
+        background: #f1f5f9;
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+
+      .tip {
+        max-width: 1280px;
+        margin: 0 auto 24px;
+        padding: 12px 16px;
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #0c4a6e;
+        line-height: 1.5;
+      }
+
+      /* ========== BEFORE (current live) ========== */
+      .before {
+        --input: hsl(214 20% 90%);
+        --button-outline: rgba(0, 0, 0, 0.1);
+      }
+      .before input,
+      .before textarea,
+      .before select {
+        width: 100%;
+        border: 1px solid var(--input);
+        background: transparent;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font: inherit;
+        color: inherit;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      .before textarea { min-height: 88px; resize: vertical; }
+      .before input:focus,
+      .before textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 1px var(--primary);
+      }
+      .before .btn-outline {
+        border: 1px solid var(--button-outline);
+        background: #fff;
+        color: var(--fg);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .before .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid hsl(214 20% 90%);
+        border-radius: 8px;
+        background: hsl(214 15% 94% / 0.2);
+        margin-bottom: 14px;
+      }
+      .before .switch {
+        width: 36px;
+        height: 20px;
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background: hsl(214 20% 90%);
+        position: relative;
+        flex-shrink: 0;
+      }
+      .before .switch::after {
+        content: "";
+        position: absolute;
+        top: 2px; left: 2px;
+        width: 16px; height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      }
+
+      /* ========== SOFT FILL (proposed) ========== */
+      .soft {
+        --field-fill: hsl(214 15% 94% / 0.85);
+        --field-fill-hover: hsl(214 15% 92%);
+        --field-border-hover: hsl(214 14% 78% / 0.7);
+        --field-border-focus: hsl(215 100% 40% / 0.55);
+        --switch-track: hsl(214 12% 72%);
+        --switch-border: hsl(214 12% 62%);
+      }
+      .soft input,
+      .soft textarea,
+      .soft select {
+        width: 100%;
+        border: 1px solid transparent;
+        background: var(--field-fill);
+        border-radius: 6px;
+        padding: 8px 12px;
+        font: inherit;
+        color: inherit;
+        box-shadow: none;
+        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      }
+      .soft textarea { min-height: 88px; resize: vertical; }
+      .soft input:hover,
+      .soft textarea:hover,
+      .soft select:hover {
+        background: var(--field-fill-hover);
+        border-color: var(--field-border-hover);
+      }
+      .soft input:focus,
+      .soft textarea:focus,
+      .soft select:focus {
+        outline: none;
+        background: #fff;
+        border-color: var(--field-border-focus);
+        box-shadow: 0 0 0 3px hsl(215 100% 40% / 0.14);
+      }
+      .soft .btn-secondary {
+        border: none;
+        background: var(--field-fill);
+        color: var(--fg);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .soft .btn-secondary:hover {
+        background: var(--field-fill-hover);
+      }
+      .soft .btn-secondary:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px hsl(215 100% 40% / 0.14);
+      }
+      /* Toggle row: no nested box — spacing only */
+      .soft .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 4px 0 14px;
+        margin-bottom: 6px;
+        border: none;
+        background: transparent;
+      }
+      .soft .switch {
+        width: 36px;
+        height: 20px;
+        border-radius: 999px;
+        border: 1px solid var(--switch-border);
+        background: var(--switch-track);
+        position: relative;
+        flex-shrink: 0;
+      }
+      .soft .switch::after {
+        content: "";
+        position: absolute;
+        top: 1px; left: 1px;
+        width: 16px; height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      }
+      .soft .collapsible {
+        margin-bottom: 14px;
+        border-radius: 6px;
+        background: var(--field-fill);
+        overflow: hidden;
+      }
+      .soft .collapsible summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 10px 12px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted-fg);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .soft .collapsible summary::-webkit-details-marker { display: none; }
+      .soft .collapsible summary::after {
+        content: "▾";
+        font-size: 12px;
+        transition: transform 0.15s;
+      }
+      .soft .collapsible[open] summary::after { transform: rotate(180deg); }
+      .soft .collapsible .body {
+        padding: 0 12px 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted-fg);
+        line-height: 1.6;
+      }
+      .soft .collapsible summary:hover { background: var(--field-fill-hover); }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <strong>Soft fill preview</strong>
+        <p>Fill-first affordance — minimal resting border, emphasis on hover &amp; focus.</p>
+      </div>
+      <div class="top-links">
+        <a href="/theme-preview.html">Border-heavy preview →</a>
+        <a href="/settings">Live Settings →</a>
+      </div>
+    </div>
+
+    <p class="legend">
+      Try tabbing through fields and hovering inputs in the <strong>Soft fill</strong> column.
+      Resting state uses a muted inset fill; borders appear on interaction, not by default.
+    </p>
+
+    <div class="grid">
+      <section class="col before">
+        <div class="col-head">
+          <strong>Before (current)</strong>
+          <span class="badge">Live today</span>
+        </div>
+        <div class="panel">
+          <div class="card">
+            <h2>Email Delivery (Brevo)</h2>
+            <p class="desc">Use Brevo SMTP for daily reports and alerts.</p>
+
+            <div class="row">
+              <div>
+                <label>From Name</label>
+                <input value="Infosutra" />
+              </div>
+              <div>
+                <label>From Email</label>
+                <input value="kalyani.mekala@gmail.com" />
+              </div>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <strong style="font-size:14px">Use TLS</strong>
+                <div class="hint">Recommended for Brevo port 587.</div>
+              </div>
+              <div class="switch on" style="background:var(--primary);border-color:var(--primary)"></div>
+            </div>
+
+            <div class="actions">
+              <button class="btn-outline" type="button">Send Test Email</button>
+            </div>
+
+            <div class="section-title">Daily consolidated report</div>
+            <p class="section-desc">One email covering all projects for the day.</p>
+
+            <div class="toggle-row">
+              <div>
+                <strong style="font-size:14px">Enable daily report</strong>
+                <div class="hint">Sends when SMTP and recipients are set.</div>
+              </div>
+              <div class="switch" aria-hidden="true"></div>
+            </div>
+
+            <div class="field">
+              <label>Recipient emails</label>
+              <textarea>mekala.sarath@gmail.com</textarea>
+              <p class="hint">One email per line, or separate with commas.</p>
+            </div>
+
+            <div class="actions">
+              <button class="btn-outline" type="button">Send today’s report now</button>
+              <button class="btn-primary" type="button">Save Email Settings</button>
+            </div>
+
+            <div class="metrics">
+              <span class="metric bad">boxes everywhere</span>
+              <span class="metric bad">border-only cues</span>
+              <span class="metric bad">buttons ≈ inputs</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="col soft">
+        <div class="col-head">
+          <strong>Soft fill (proposed)</strong>
+          <span class="badge">Preview</span>
+        </div>
+        <div class="panel">
+          <div class="card">
+            <h2>Email Delivery (Brevo)</h2>
+            <p class="desc">Use Brevo SMTP for daily reports and alerts.</p>
+
+            <details class="collapsible">
+              <summary>Brevo defaults</summary>
+              <div class="body">
+                Host: smtp-relay.brevo.com<br />
+                Port: 587<br />
+                Username: your Brevo SMTP login email<br />
+                Password: your Brevo SMTP key
+              </div>
+            </details>
+
+            <div class="row">
+              <div>
+                <label>From Name</label>
+                <input value="Infosutra" />
+              </div>
+              <div>
+                <label>From Email</label>
+                <input value="kalyani.mekala@gmail.com" />
+              </div>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <strong style="font-size:14px">Use TLS</strong>
+                <div class="hint">Recommended for Brevo port 587.</div>
+              </div>
+              <div class="switch on" style="background:var(--primary);border-color:var(--primary)"></div>
+            </div>
+
+            <div class="actions">
+              <button class="btn-secondary" type="button">Send Test Email</button>
+            </div>
+
+            <div class="section-title">Daily consolidated report</div>
+            <p class="section-desc">One email covering all projects for the day.</p>
+
+            <div class="toggle-row">
+              <div>
+                <strong style="font-size:14px">Enable daily report</strong>
+                <div class="hint">Sends when SMTP and recipients are set.</div>
+              </div>
+              <div class="switch" aria-hidden="true"></div>
+            </div>
+
+            <div class="field">
+              <label>Recipient emails</label>
+              <textarea>mekala.sarath@gmail.com</textarea>
+              <p class="hint">One email per line, or separate with commas.</p>
+            </div>
+
+            <div class="actions">
+              <button class="btn-secondary" type="button">Send today’s report now</button>
+              <button class="btn-primary" type="button">Save Email Settings</button>
+            </div>
+
+            <div class="metrics">
+              <span class="metric good">fill at rest</span>
+              <span class="metric good">border on hover/focus</span>
+              <span class="metric good">no nested toggle boxes</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="tip">
+      <strong>Recipe if you like this direction:</strong>
+      fields → <code>bg-muted/40 border-transparent</code> resting,
+      <code>hover:bg-muted/60 hover:border-border/50</code>,
+      <code>focus:bg-card focus:ring-2 focus:ring-ring/20</code>.
+      Secondary buttons → same muted fill (not outline-on-white).
+      Toggle rows → label + switch only, no bordered panel.
+    </div>
+  </body>
+</html>

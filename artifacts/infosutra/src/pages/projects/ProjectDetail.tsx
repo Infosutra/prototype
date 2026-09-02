@@ -75,7 +75,7 @@ export default function ProjectDetail() {
         action={
           <div className="flex gap-2">
             <Button size="sm" variant="outline" asChild>
-              <Link href={`/forms/${projectId}/rules`}>DQA rules</Link>
+              <Link href={`/dqa?projectId=${projectId}&tab=rules`}>DQA rules</Link>
             </Button>
             <Button size="sm" disabled={syncProject.isPending} onClick={() => syncProject.mutate({ projectId })} className="bg-primary text-primary-foreground">
               <RefreshCw className={`w-4 h-4 mr-2 ${syncProject.isPending ? "animate-spin" : ""}`} />

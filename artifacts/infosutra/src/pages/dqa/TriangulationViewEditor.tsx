@@ -246,7 +246,7 @@ export default function TriangulationViewEditor() {
               <label className="block space-y-1 text-sm">
                 <span className="text-muted-foreground">Definition (JSON)</span>
                 <textarea
-                  className="w-full min-h-[420px] rounded-md border bg-background p-3 font-mono text-xs leading-relaxed"
+                  className="field-control w-full min-h-[420px] p-3 font-mono text-xs leading-relaxed"
                   value={definitionText}
                   onChange={(e) => setDefinitionText(e.target.value)}
                   disabled={!selectedCode}

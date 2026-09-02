@@ -35,6 +35,8 @@ export default defineConfig({
       '/api': {
         target: process.env.API_URL ?? 'http://127.0.0.1:8080',
         changeOrigin: true,
+        // Audio playback uses Range / 206; do not time out long recordings.
+        timeout: 0,
       },
     },
     fs: {

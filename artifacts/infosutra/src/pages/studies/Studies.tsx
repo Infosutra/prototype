@@ -30,7 +30,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, CheckCircle2, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, CircleHelp, Plus, Save, Trash2, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useStudy } from "@/components/study/StudyProvider";
 
 function parseRecipientInput(value: string): string[] {
@@ -332,26 +340,42 @@ export default function StudiesPage() {
         title="Studies"
         description="Create a study, then assign synced Kobo forms with tool codes (T1 / T2 / T3)"
         action={
-          <Button size="sm" onClick={startCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New study
-          </Button>
+          <>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" aria-label="Getting started help">
+                  <CircleHelp className="mr-2 h-4 w-4" />
+                  Help
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Getting started with studies</DialogTitle>
+                  <DialogDescription>
+                    Follow these steps to connect Kobo forms to a study workspace.
+                  </DialogDescription>
+                </DialogHeader>
+                <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
+                  <li>Create forms in KoboToolbox</li>
+                  <li>
+                    <Link href="/forms" className="underline text-primary">
+                      Sync from Kobo
+                    </Link>{" "}
+                    on the Forms page
+                  </li>
+                  <li>Create a study here, define tools and Kobo credentials, then assign forms</li>
+                  <li>Keep this study selected in the sidebar workspace for DQA and Reports</li>
+                </ol>
+              </DialogContent>
+            </Dialog>
+            <Button size="sm" onClick={startCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              New study
+            </Button>
+          </>
         }
       />
       <div className="flex-1 overflow-auto bg-muted/30 p-4 md:p-6 space-y-6">
-        <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Create forms in KoboToolbox</li>
-            <li>
-              <Link href="/forms" className="underline text-primary">
-                Sync from Kobo
-              </Link>{" "}
-              on the Forms page
-            </li>
-            <li>Create a study here, define tools and Kobo credentials, then assign forms</li>
-            <li>Keep this study selected in the sidebar workspace for DQA and Reports</li>
-          </ol>
-        </div>
         {error && (
           <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5" />
@@ -586,7 +610,6 @@ export default function StudiesPage() {
                   />
                   <Button
                     type="button"
-                    variant="outline"
                     onClick={() => {
                       if (!toolCode.trim()) return;
                       setForm((f) => ({
@@ -646,7 +669,6 @@ export default function StudiesPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
-                      variant="outline"
                       disabled={updateStudyKobo.isPending}
                       onClick={() => {
                         setKoboFeedback(null);
@@ -664,7 +686,6 @@ export default function StudiesPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="ghost"
                       disabled={testStudyKobo.isPending || !koboApiToken}
                       onClick={() => {
                         setKoboFeedback(null);
@@ -745,7 +766,6 @@ export default function StudiesPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
-                      variant="outline"
                       disabled={updateStudySchedule.isPending}
                       onClick={() => {
                         setScheduleFeedback(null);
@@ -813,7 +833,7 @@ export default function StudiesPage() {
                         </div>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="destructive"
                           onClick={() => void unassignProject(p.id)}
                         >
                           Remove
@@ -827,7 +847,7 @@ export default function StudiesPage() {
                     </Label>
                     <div className="flex flex-wrap gap-2">
                       <select
-                        className="h-9 flex-1 min-w-[180px] rounded-md border bg-background px-2 text-sm"
+                        className="field-control h-9 flex-1 min-w-[180px] px-2 text-sm"
                         value={assignProjectId}
                         onChange={(e) => setAssignProjectId(e.target.value)}
                       >
@@ -858,7 +878,6 @@ export default function StudiesPage() {
                         placeholder="T1"
                       />
                       <Button
-                        variant="outline"
                         disabled={!assignProjectId || assignStudyProject.isPending}
                         onClick={() => void assignProject()}
                       >

@@ -11,7 +11,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<'div'>) {
       data-slot="input-group"
       role="group"
       className={cn(
-        'group/input-group border-input dark:bg-input/30 shadow-xs relative flex w-full items-center rounded-md border outline-none transition-[color,box-shadow]',
+        'group/input-group border-transparent bg-muted/40 shadow-none relative flex w-full items-center rounded-md border outline-none transition-[color,box-shadow,background-color,border-color] hover:bg-muted/60 hover:border-muted-foreground/40',
         'h-9 has-[>textarea]:h-auto',
 
         // Variants based on alignment.
@@ -21,7 +21,8 @@ function InputGroup({ className, ...props }: React.ComponentProps<'div'>) {
         'has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-end]]:[&>input]:pt-3',
 
         // Focus state.
-        'has-[[data-slot=input-group-control]:focus-visible]:ring-ring has-[[data-slot=input-group-control]:focus-visible]:ring-1',
+        'has-[[data-slot=input-group-control]:focus]:border-ring/55 has-[[data-slot=input-group-control]:focus]:bg-card has-[[data-slot=input-group-control]:focus]:ring-ring has-[[data-slot=input-group-control]:focus]:ring-2',
+        'has-[[data-slot=input-group-control]:focus-visible]:border-ring/55 has-[[data-slot=input-group-control]:focus-visible]:bg-card has-[[data-slot=input-group-control]:focus-visible]:ring-ring has-[[data-slot=input-group-control]:focus-visible]:ring-2',
 
         // Error state.
         'has-[[data-slot][aria-invalid=true]]:ring-destructive/20 has-[[data-slot][aria-invalid=true]]:border-destructive dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40',

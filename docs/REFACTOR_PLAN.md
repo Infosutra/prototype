@@ -1,4 +1,8 @@
-# Infosutra Refactor — Execution Plan
+# Infosutra Refactor — Execution Plan ✅ COMPLETE
+
+**Status:** All phases (0–7) completed 2026-08-11. Commits on `main`:
+`abd1de8` → `d9e9621` (Phase 1), `db0da82` (2), `f860a63` (3), `7473697` (4),
+`ad90e17` (5), `2dc899e` (6), `ec92ed5` (7). Tag: `pre-refactor-baseline`.
 
 Specification for moving the codebase from its iteratively-grown state to a
 loosely-coupled, multi-study architecture. Written to be executed **one phase per
@@ -99,7 +103,7 @@ Verified: typecheck passes, build passes, 43 paths.
 
 ---
 
-## Phase 1 — Commit a baseline ⚠️ BLOCKING
+## Phase 1 — Commit a baseline ✅ COMPLETE
 
 **Nothing else in this plan is safe until this is done.**
 
@@ -167,7 +171,7 @@ git log -p | rg -c 'Token [0-9a-f]{20,}' || echo "no tokens in history"
 
 ---
 
-## Phase 2 — Generate the API contract from FastAPI
+## Phase 2 — Generate the API contract from FastAPI ✅ COMPLETE
 
 ### The problem
 
@@ -366,7 +370,7 @@ rule-pack editor loads and saves.
 
 ---
 
-## Phase 3 — Rebuild the data model
+## Phase 3 — Rebuild the data model ✅ COMPLETE
 
 Data may be dropped, so this is a clean rebuild, not a migration.
 
@@ -500,7 +504,7 @@ re-open it.)*
 
 ---
 
-## Phase 4 — Make triangulation study-defined
+## Phase 4 — Make triangulation study-defined ✅ COMPLETE
 
 This is the phase with the most hidden design content. Read this section fully
 before writing code.
@@ -741,7 +745,7 @@ returns its own data and that requesting a view with no study id returns 4xx.
 
 ---
 
-## Phase 5 — Break up the god modules
+## Phase 5 — Break up the god modules ✅ COMPLETE
 
 Pure structural refactor. **No behaviour change.**
 
@@ -824,7 +828,7 @@ plaintext must be identical; PDF/DOCX text content must be identical.
 
 ---
 
-## Phase 6 — Finish the study workspace
+## Phase 6 — Finish the study workspace ✅ COMPLETE
 
 **Scope correction: most of this already exists.** `StudyProvider.tsx`
 (`src/components/study/`) already holds `activeStudyId`, persists it to
@@ -883,7 +887,7 @@ So do **not** build a study selector. What is actually missing:
 
 ---
 
-## Phase 7 — Guardrails
+## Phase 7 — Guardrails ✅ COMPLETE
 
 There are currently **no Python tests** and no Python linter. Without this phase
 the earlier work decays.
@@ -920,21 +924,17 @@ cd artifacts/api-python && uv run ruff check .
 | Phase | Depends on | Risk | Behaviour change |
 | --- | --- | --- | --- |
 | 0 · Delete dead stacks ✅ | — | done | no |
-| 1 · Git baseline ⚠️ | 0 | none | no |
-| 2 · Generated API contract | 1 | low | no |
-| 3 · Schema rebuild | 2 | high | yes — per-study credentials |
-| 4 · Study-defined triangulation | 3 | high | yes — no silent fallback |
-| 5 · Break up god modules | 4 | medium | no |
-| 6 · Finish study workspace | 3, 4 | low | yes |
-| 7 · Guardrails | 5 | low | no |
+| 1 · Git baseline ✅ | 0 | done | no |
+| 2 · Generated API contract ✅ | 1 | done | no |
+| 3 · Schema rebuild ✅ | 2 | done | yes — per-study credentials |
+| 4 · Study-defined triangulation ✅ | 3 | done | yes — no silent fallback |
+| 5 · Break up god modules ✅ | 4 | done | no |
+| 6 · Finish study workspace ✅ | 3, 4 | done | yes |
+| 7 · Guardrails ✅ | 5 | done | no |
 
-Phase 1 is trivial and currently the only thing standing between this refactor
-and an unrecoverable mistake.
+All phases complete. Historical sequencing rationale:
 
-Phase 2 sits before the schema rebuild deliberately: once the spec and client are
-generated, every later schema change propagates to the frontend with one command
-instead of three hand-edits. It pays for itself during Phase 3.
-
-Phases 3 and 4 are the two that genuinely change behaviour and carry real risk.
-They are also the two with the most "Stop and ask" conditions. Treat those
-conditions as the point of the phase, not as friction.
+- Phase 2 before Phase 3: once the spec and client are generated, schema changes
+  propagate to the frontend with one command instead of three hand-edits.
+- Phases 3 and 4 were the behaviour-changing, high-risk steps; their "Stop and
+  ask" conditions were the point of those phases, not friction to route around.

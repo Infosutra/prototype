@@ -37,6 +37,13 @@ class GeneralSettings(CamelModel):
     ai_max_tokens: int = 2048
     ai_timeout_seconds: int = 60
     report_logo_url: str | None = None
+    transcription_enabled: bool = False
+    transcription_provider: str = "sarvam"
+    transcription_api_key: str = ""
+    transcription_base_url: str = "https://api.sarvam.ai"
+    transcription_model: str = "saaras:v3"
+    transcription_currency: str = "INR"
+    transcription_rate_per_minute: float = 0.0
 
 
 class SettingsOut(CamelModel):

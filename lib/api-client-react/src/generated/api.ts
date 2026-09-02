@@ -22,8 +22,13 @@ import type {
   ActivityItem,
   AnalyticsOverview,
   AppSchemasDqaEnumeratorStat,
+  AudioRecordingOut,
+  AudioRecordingSummary,
+  AudioRecordingUpdate,
+  BodyCreateAudioRecording,
   ConnectionTestResult,
   DashboardSummary,
+  DownloadAudioRecordingTranscriptParams,
   DownloadReportParams,
   DqaFlagOut,
   DqaRecomputeResult,
@@ -32,6 +37,8 @@ import type {
   GenerateDqaDailyInput,
   GenerateDqaFinalInput,
   GetAnalyticsOverviewParams,
+  GetAudioRecordingParams,
+  GetAudioRecordingsParams,
   GetDqaByProjectParams,
   GetDqaEnumeratorsParams,
   GetDqaFlagsParams,
@@ -44,6 +51,8 @@ import type {
   GetSubmissionsParams,
   GetTriangulationViewParams,
   GetTriangulationViewsParams,
+  GetUsageEventsParams,
+  GetUsageSummaryParams,
   HTTPValidationError,
   HealthStatus,
   InsightGenerateInput,
@@ -68,6 +77,7 @@ import type {
   SettingsUpdate,
   ShareReportInput,
   ShareResult,
+  SpeakerLabelsUpdate,
   StudyAssignProject,
   StudyCreate,
   StudyCredentialSummary,
@@ -79,12 +89,15 @@ import type {
   SubmissionsPage,
   SyncProjectsParams,
   SyncResult,
+  TranscribeRequest,
   TrendPoint,
   TriangulationViewDefinitionCreate,
   TriangulationViewDefinitionOut,
   TriangulationViewDefinitionUpdate,
   TriangulationViewInfo,
-  TriangulationViewOut
+  TriangulationViewOut,
+  UsageEventOut,
+  UsageSummaryOut
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -5124,4 +5137,871 @@ export const useUpdateProjectRulePack = <TError = ErrorType<HTTPValidationError>
       > => {
       return useMutation(getUpdateProjectRulePackMutationOptions(options));
     }
+
+export const getGetAudioRecordingsUrl = (params?: GetAudioRecordingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audio?${stringifiedParams}` : `/api/audio`
+}
+
+/**
+ * @summary List Audio Recordings
+ */
+export const getAudioRecordings = async (params?: GetAudioRecordingsParams, options?: RequestInit): Promise<AudioRecordingSummary[]> => {
+
+  return customFetch<AudioRecordingSummary[]>(getGetAudioRecordingsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAudioRecordingsQueryKey = (params?: GetAudioRecordingsParams,) => {
+    return [
+    `/api/audio`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAudioRecordingsQueryOptions = <TData = Awaited<ReturnType<typeof getAudioRecordings>>, TError = ErrorType<HTTPValidationError>>(params?: GetAudioRecordingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAudioRecordings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAudioRecordingsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAudioRecordings>>> = ({ signal }) => getAudioRecordings(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAudioRecordings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAudioRecordingsQueryResult = NonNullable<Awaited<ReturnType<typeof getAudioRecordings>>>
+export type GetAudioRecordingsQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Audio Recordings
+ */
+
+export function useGetAudioRecordings<TData = Awaited<ReturnType<typeof getAudioRecordings>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetAudioRecordingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAudioRecordings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAudioRecordingsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAudioRecordingUrl = () => {
+
+
+
+
+  return `/api/audio`
+}
+
+/**
+ * @summary Create Audio Recording
+ */
+export const createAudioRecording = async (bodyCreateAudioRecording: BodyCreateAudioRecording, options?: RequestInit): Promise<AudioRecordingOut> => {
+    const formData = new FormData();
+formData.append(`study_id`, bodyCreateAudioRecording.study_id);
+formData.append(`name`, bodyCreateAudioRecording.name);
+if(bodyCreateAudioRecording.description !== undefined) {
+ formData.append(`description`, bodyCreateAudioRecording.description);
+ }
+formData.append(`file`, bodyCreateAudioRecording.file);
+
+  return customFetch<AudioRecordingOut>(getCreateAudioRecordingUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+export const getCreateAudioRecordingMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAudioRecording>>, TError,{data: BodyType<BodyCreateAudioRecording>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAudioRecording>>, TError,{data: BodyType<BodyCreateAudioRecording>}, TContext> => {
+
+const mutationKey = ['createAudioRecording'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAudioRecording>>, {data: BodyType<BodyCreateAudioRecording>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAudioRecording(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAudioRecordingMutationResult = NonNullable<Awaited<ReturnType<typeof createAudioRecording>>>
+    export type CreateAudioRecordingMutationBody = BodyType<BodyCreateAudioRecording>
+    export type CreateAudioRecordingMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Audio Recording
+ */
+export const useCreateAudioRecording = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAudioRecording>>, TError,{data: BodyType<BodyCreateAudioRecording>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAudioRecording>>,
+        TError,
+        {data: BodyType<BodyCreateAudioRecording>},
+        TContext
+      > => {
+      return useMutation(getCreateAudioRecordingMutationOptions(options));
+    }
+
+export const getGetAudioRecordingUrl = (recordingId: string,
+    params?: GetAudioRecordingParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audio/${recordingId}?${stringifiedParams}` : `/api/audio/${recordingId}`
+}
+
+/**
+ * @summary Get Audio Recording
+ */
+export const getAudioRecording = async (recordingId: string,
+    params?: GetAudioRecordingParams, options?: RequestInit): Promise<AudioRecordingOut> => {
+
+  return customFetch<AudioRecordingOut>(getGetAudioRecordingUrl(recordingId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAudioRecordingQueryKey = (recordingId: string,
+    params?: GetAudioRecordingParams,) => {
+    return [
+    `/api/audio/${recordingId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAudioRecordingQueryOptions = <TData = Awaited<ReturnType<typeof getAudioRecording>>, TError = ErrorType<HTTPValidationError>>(recordingId: string,
+    params?: GetAudioRecordingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAudioRecording>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAudioRecordingQueryKey(recordingId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAudioRecording>>> = ({ signal }) => getAudioRecording(recordingId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: recordingId !== null && recordingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAudioRecording>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAudioRecordingQueryResult = NonNullable<Awaited<ReturnType<typeof getAudioRecording>>>
+export type GetAudioRecordingQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Audio Recording
+ */
+
+export function useGetAudioRecording<TData = Awaited<ReturnType<typeof getAudioRecording>>, TError = ErrorType<HTTPValidationError>>(
+ recordingId: string,
+    params?: GetAudioRecordingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAudioRecording>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAudioRecordingQueryOptions(recordingId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAudioRecordingUrl = (recordingId: string,) => {
+
+
+
+
+  return `/api/audio/${recordingId}`
+}
+
+/**
+ * @summary Update Audio Recording
+ */
+export const updateAudioRecording = async (recordingId: string,
+    audioRecordingUpdate: AudioRecordingUpdate, options?: RequestInit): Promise<AudioRecordingOut> => {
+
+  return customFetch<AudioRecordingOut>(getUpdateAudioRecordingUrl(recordingId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(audioRecordingUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateAudioRecordingMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAudioRecording>>, TError,{recordingId: string;data: BodyType<AudioRecordingUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAudioRecording>>, TError,{recordingId: string;data: BodyType<AudioRecordingUpdate>}, TContext> => {
+
+const mutationKey = ['updateAudioRecording'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAudioRecording>>, {recordingId: string;data: BodyType<AudioRecordingUpdate>}> = (props) => {
+          const {recordingId,data} = props ?? {};
+
+          return  updateAudioRecording(recordingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAudioRecordingMutationResult = NonNullable<Awaited<ReturnType<typeof updateAudioRecording>>>
+    export type UpdateAudioRecordingMutationBody = BodyType<AudioRecordingUpdate>
+    export type UpdateAudioRecordingMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Audio Recording
+ */
+export const useUpdateAudioRecording = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAudioRecording>>, TError,{recordingId: string;data: BodyType<AudioRecordingUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAudioRecording>>,
+        TError,
+        {recordingId: string;data: BodyType<AudioRecordingUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAudioRecordingMutationOptions(options));
+    }
+
+export const getDeleteAudioRecordingUrl = (recordingId: string,) => {
+
+
+
+
+  return `/api/audio/${recordingId}`
+}
+
+/**
+ * @summary Delete Audio Recording
+ */
+export const deleteAudioRecording = async (recordingId: string, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDeleteAudioRecordingUrl(recordingId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAudioRecordingMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAudioRecording>>, TError,{recordingId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAudioRecording>>, TError,{recordingId: string}, TContext> => {
+
+const mutationKey = ['deleteAudioRecording'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAudioRecording>>, {recordingId: string}> = (props) => {
+          const {recordingId} = props ?? {};
+
+          return  deleteAudioRecording(recordingId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAudioRecordingMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAudioRecording>>>
+
+    export type DeleteAudioRecordingMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Delete Audio Recording
+ */
+export const useDeleteAudioRecording = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAudioRecording>>, TError,{recordingId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAudioRecording>>,
+        TError,
+        {recordingId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteAudioRecordingMutationOptions(options));
+    }
+
+export const getUpdateAudioRecordingSpeakerLabelsUrl = (recordingId: string,) => {
+
+
+
+
+  return `/api/audio/${recordingId}/speaker-labels`
+}
+
+/**
+ * @summary Update Audio Recording Speaker Labels
+ */
+export const updateAudioRecordingSpeakerLabels = async (recordingId: string,
+    speakerLabelsUpdate: SpeakerLabelsUpdate, options?: RequestInit): Promise<AudioRecordingOut> => {
+
+  return customFetch<AudioRecordingOut>(getUpdateAudioRecordingSpeakerLabelsUrl(recordingId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(speakerLabelsUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateAudioRecordingSpeakerLabelsMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAudioRecordingSpeakerLabels>>, TError,{recordingId: string;data: BodyType<SpeakerLabelsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAudioRecordingSpeakerLabels>>, TError,{recordingId: string;data: BodyType<SpeakerLabelsUpdate>}, TContext> => {
+
+const mutationKey = ['updateAudioRecordingSpeakerLabels'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAudioRecordingSpeakerLabels>>, {recordingId: string;data: BodyType<SpeakerLabelsUpdate>}> = (props) => {
+          const {recordingId,data} = props ?? {};
+
+          return  updateAudioRecordingSpeakerLabels(recordingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAudioRecordingSpeakerLabelsMutationResult = NonNullable<Awaited<ReturnType<typeof updateAudioRecordingSpeakerLabels>>>
+    export type UpdateAudioRecordingSpeakerLabelsMutationBody = BodyType<SpeakerLabelsUpdate>
+    export type UpdateAudioRecordingSpeakerLabelsMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Audio Recording Speaker Labels
+ */
+export const useUpdateAudioRecordingSpeakerLabels = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAudioRecordingSpeakerLabels>>, TError,{recordingId: string;data: BodyType<SpeakerLabelsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAudioRecordingSpeakerLabels>>,
+        TError,
+        {recordingId: string;data: BodyType<SpeakerLabelsUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAudioRecordingSpeakerLabelsMutationOptions(options));
+    }
+
+export const getGetAudioRecordingFileUrl = (recordingId: string,) => {
+
+
+
+
+  return `/api/audio/${recordingId}/file`
+}
+
+/**
+ * @summary Get Audio Recording File
+ */
+export const getAudioRecordingFile = async (recordingId: string, options?: RequestInit): Promise<unknown | Blob> => {
+
+  return customFetch<unknown | Blob>(getGetAudioRecordingFileUrl(recordingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAudioRecordingFileQueryKey = (recordingId: string,) => {
+    return [
+    `/api/audio/${recordingId}/file`
+    ] as const;
+    }
+
+
+export const getGetAudioRecordingFileQueryOptions = <TData = Awaited<ReturnType<typeof getAudioRecordingFile>>, TError = ErrorType<HTTPValidationError>>(recordingId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAudioRecordingFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAudioRecordingFileQueryKey(recordingId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAudioRecordingFile>>> = ({ signal }) => getAudioRecordingFile(recordingId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: recordingId !== null && recordingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAudioRecordingFile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAudioRecordingFileQueryResult = NonNullable<Awaited<ReturnType<typeof getAudioRecordingFile>>>
+export type GetAudioRecordingFileQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Audio Recording File
+ */
+
+export function useGetAudioRecordingFile<TData = Awaited<ReturnType<typeof getAudioRecordingFile>>, TError = ErrorType<HTTPValidationError>>(
+ recordingId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAudioRecordingFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAudioRecordingFileQueryOptions(recordingId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDownloadAudioRecordingTranscriptUrl = (recordingId: string,
+    params?: DownloadAudioRecordingTranscriptParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audio/${recordingId}/download?${stringifiedParams}` : `/api/audio/${recordingId}/download`
+}
+
+/**
+ * @summary Download Audio Recording Transcript
+ */
+export const downloadAudioRecordingTranscript = async (recordingId: string,
+    params?: DownloadAudioRecordingTranscriptParams, options?: RequestInit): Promise<unknown | Blob> => {
+
+  return customFetch<unknown | Blob>(getDownloadAudioRecordingTranscriptUrl(recordingId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadAudioRecordingTranscriptQueryKey = (recordingId: string,
+    params?: DownloadAudioRecordingTranscriptParams,) => {
+    return [
+    `/api/audio/${recordingId}/download`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getDownloadAudioRecordingTranscriptQueryOptions = <TData = Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>, TError = ErrorType<HTTPValidationError>>(recordingId: string,
+    params?: DownloadAudioRecordingTranscriptParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadAudioRecordingTranscriptQueryKey(recordingId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>> = ({ signal }) => downloadAudioRecordingTranscript(recordingId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: recordingId !== null && recordingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadAudioRecordingTranscriptQueryResult = NonNullable<Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>>
+export type DownloadAudioRecordingTranscriptQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Download Audio Recording Transcript
+ */
+
+export function useDownloadAudioRecordingTranscript<TData = Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>, TError = ErrorType<HTTPValidationError>>(
+ recordingId: string,
+    params?: DownloadAudioRecordingTranscriptParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadAudioRecordingTranscript>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadAudioRecordingTranscriptQueryOptions(recordingId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTranscribeAudioRecordingUrl = (recordingId: string,) => {
+
+
+
+
+  return `/api/audio/${recordingId}/transcribe`
+}
+
+/**
+ * @summary Transcribe Audio Recording
+ */
+export const transcribeAudioRecording = async (recordingId: string,
+    transcribeRequest: TranscribeRequest, options?: RequestInit): Promise<AudioRecordingOut> => {
+
+  return customFetch<AudioRecordingOut>(getTranscribeAudioRecordingUrl(recordingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(transcribeRequest)
+  }
+);}
+
+
+
+
+export const getTranscribeAudioRecordingMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transcribeAudioRecording>>, TError,{recordingId: string;data: BodyType<TranscribeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof transcribeAudioRecording>>, TError,{recordingId: string;data: BodyType<TranscribeRequest>}, TContext> => {
+
+const mutationKey = ['transcribeAudioRecording'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof transcribeAudioRecording>>, {recordingId: string;data: BodyType<TranscribeRequest>}> = (props) => {
+          const {recordingId,data} = props ?? {};
+
+          return  transcribeAudioRecording(recordingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TranscribeAudioRecordingMutationResult = NonNullable<Awaited<ReturnType<typeof transcribeAudioRecording>>>
+    export type TranscribeAudioRecordingMutationBody = BodyType<TranscribeRequest>
+    export type TranscribeAudioRecordingMutationError = ErrorType<void | HTTPValidationError>
+
+    /**
+ * @summary Transcribe Audio Recording
+ */
+export const useTranscribeAudioRecording = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transcribeAudioRecording>>, TError,{recordingId: string;data: BodyType<TranscribeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof transcribeAudioRecording>>,
+        TError,
+        {recordingId: string;data: BodyType<TranscribeRequest>},
+        TContext
+      > => {
+      return useMutation(getTranscribeAudioRecordingMutationOptions(options));
+    }
+
+export const getGetUsageEventsUrl = (params?: GetUsageEventsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/usage?${stringifiedParams}` : `/api/usage`
+}
+
+/**
+ * @summary Get Usage Events
+ */
+export const getUsageEvents = async (params?: GetUsageEventsParams, options?: RequestInit): Promise<UsageEventOut[]> => {
+
+  return customFetch<UsageEventOut[]>(getGetUsageEventsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUsageEventsQueryKey = (params?: GetUsageEventsParams,) => {
+    return [
+    `/api/usage`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetUsageEventsQueryOptions = <TData = Awaited<ReturnType<typeof getUsageEvents>>, TError = ErrorType<HTTPValidationError>>(params?: GetUsageEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsageEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUsageEventsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUsageEvents>>> = ({ signal }) => getUsageEvents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUsageEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUsageEventsQueryResult = NonNullable<Awaited<ReturnType<typeof getUsageEvents>>>
+export type GetUsageEventsQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Usage Events
+ */
+
+export function useGetUsageEvents<TData = Awaited<ReturnType<typeof getUsageEvents>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetUsageEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsageEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUsageEventsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetUsageSummaryUrl = (params?: GetUsageSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/usage/summary?${stringifiedParams}` : `/api/usage/summary`
+}
+
+/**
+ * @summary Get Usage Summary
+ */
+export const getUsageSummary = async (params?: GetUsageSummaryParams, options?: RequestInit): Promise<UsageSummaryOut> => {
+
+  return customFetch<UsageSummaryOut>(getGetUsageSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUsageSummaryQueryKey = (params?: GetUsageSummaryParams,) => {
+    return [
+    `/api/usage/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetUsageSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getUsageSummary>>, TError = ErrorType<HTTPValidationError>>(params?: GetUsageSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsageSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUsageSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUsageSummary>>> = ({ signal }) => getUsageSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUsageSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUsageSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getUsageSummary>>>
+export type GetUsageSummaryQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Usage Summary
+ */
+
+export function useGetUsageSummary<TData = Awaited<ReturnType<typeof getUsageSummary>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetUsageSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUsageSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUsageSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

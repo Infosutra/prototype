@@ -1929,6 +1929,370 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /audio:
+    get:
+      tags:
+      - audio
+      summary: List Audio Recordings
+      operationId: getAudioRecordings
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioRecordingSummary'
+                title: Response Getaudiorecordings
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - audio
+      summary: Create Audio Recording
+      operationId: createAudioRecording
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_createAudioRecording'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioRecordingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /audio/{recording_id}:
+    get:
+      tags:
+      - audio
+      summary: Get Audio Recording
+      operationId: getAudioRecording
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      - name: segmentLayout
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(linear|provider)$
+          default: linear
+          title: Segmentlayout
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioRecordingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - audio
+      summary: Update Audio Recording
+      operationId: updateAudioRecording
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioRecordingUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioRecordingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - audio
+      summary: Delete Audio Recording
+      operationId: deleteAudioRecording
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /audio/{recording_id}/speaker-labels:
+    patch:
+      tags:
+      - audio
+      summary: Update Audio Recording Speaker Labels
+      operationId: updateAudioRecordingSpeakerLabels
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeakerLabelsUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioRecordingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /audio/{recording_id}/file:
+    get:
+      tags:
+      - audio
+      summary: Get Audio Recording File
+      operationId: getAudioRecordingFile
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+            audio/*: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /audio/{recording_id}/download:
+    get:
+      tags:
+      - audio
+      summary: Download Audio Recording Transcript
+      operationId: downloadAudioRecordingTranscript
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(pdf|docx)$
+          default: pdf
+          title: Format
+      - name: segmentLayout
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(linear|provider)$
+          default: linear
+          title: Segmentlayout
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+            application/pdf: {}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /audio/{recording_id}/transcribe:
+    post:
+      tags:
+      - audio
+      summary: Transcribe Audio Recording
+      operationId: transcribeAudioRecording
+      parameters:
+      - name: recording_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recording Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranscribeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioRecordingOut'
+        '400':
+          description: Bad request
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /usage:
+    get:
+      tags:
+      - usage
+      summary: Get Usage Events
+      operationId: getUsageEvents
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2000
+          minimum: 1
+          default: 500
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsageEventOut'
+                title: Response Getusageevents
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /usage/summary:
+    get:
+      tags:
+      - usage
+      summary: Get Usage Summary
+      operationId: getUsageSummary
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummaryOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     ActivityItem:
@@ -1995,6 +2359,259 @@ components:
       - submissionsByProject
       - enumeratorPerformance
       title: AnalyticsOverview
+    AudioRecordingOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        studyId:
+          type: string
+          title: Studyid
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        originalFilename:
+          type: string
+          title: Originalfilename
+        contentType:
+          type: string
+          title: Contenttype
+        sizeBytes:
+          type: integer
+          title: Sizebytes
+        durationSeconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Durationseconds
+        transcriptionStatus:
+          type: string
+          title: Transcriptionstatus
+        transcriptionProvider:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionprovider
+        transcriptionLanguage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionlanguage
+        transcriptionError:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionerror
+        transcript:
+          anyOf:
+          - $ref: '#/components/schemas/TranscriptOut'
+          - type: 'null'
+        transcribedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcribedat
+        fileUrl:
+          type: string
+          title: Fileurl
+        transcriptionCostAmount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Transcriptioncostamount
+        transcriptionCostCurrency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptioncostcurrency
+        transcriptionModel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionmodel
+        estimatedTranscriptionCostAmount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Estimatedtranscriptioncostamount
+        estimatedTranscriptionCostCurrency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Estimatedtranscriptioncostcurrency
+        estimatedTranscriptionDurationSeconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Estimatedtranscriptiondurationseconds
+        transcriptionRatePerMinute:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Transcriptionrateperminute
+        createdAt:
+          type: string
+          title: Createdat
+        updatedAt:
+          type: string
+          title: Updatedat
+      type: object
+      required:
+      - id
+      - studyId
+      - name
+      - description
+      - originalFilename
+      - contentType
+      - sizeBytes
+      - transcriptionStatus
+      - fileUrl
+      - createdAt
+      - updatedAt
+      title: AudioRecordingOut
+    AudioRecordingSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        studyId:
+          type: string
+          title: Studyid
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        originalFilename:
+          type: string
+          title: Originalfilename
+        contentType:
+          type: string
+          title: Contenttype
+        sizeBytes:
+          type: integer
+          title: Sizebytes
+        durationSeconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Durationseconds
+        transcriptionStatus:
+          type: string
+          title: Transcriptionstatus
+        transcriptionProvider:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionprovider
+        transcriptionLanguage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionlanguage
+        transcriptionError:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptionerror
+        transcribedAt:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcribedat
+        fileUrl:
+          type: string
+          title: Fileurl
+        transcriptionCostAmount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Transcriptioncostamount
+        transcriptionCostCurrency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transcriptioncostcurrency
+        estimatedTranscriptionCostAmount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Estimatedtranscriptioncostamount
+        estimatedTranscriptionCostCurrency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Estimatedtranscriptioncostcurrency
+        estimatedTranscriptionDurationSeconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Estimatedtranscriptiondurationseconds
+        transcriptionRatePerMinute:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Transcriptionrateperminute
+        createdAt:
+          type: string
+          title: Createdat
+        updatedAt:
+          type: string
+          title: Updatedat
+      type: object
+      required:
+      - id
+      - studyId
+      - name
+      - description
+      - originalFilename
+      - contentType
+      - sizeBytes
+      - transcriptionStatus
+      - fileUrl
+      - createdAt
+      - updatedAt
+      title: AudioRecordingSummary
+    AudioRecordingUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+      type: object
+      title: AudioRecordingUpdate
+    Body_createAudioRecording:
+      properties:
+        study_id:
+          type: string
+          title: Study Id
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+          default: ''
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - study_id
+      - name
+      - file
+      title: Body_createAudioRecording
     ChartDataPoint:
       properties:
         label:
@@ -2354,6 +2971,34 @@ components:
           - type: string
           - type: 'null'
           title: Reportlogourl
+        transcriptionEnabled:
+          type: boolean
+          title: Transcriptionenabled
+          default: false
+        transcriptionProvider:
+          type: string
+          title: Transcriptionprovider
+          default: sarvam
+        transcriptionApiKey:
+          type: string
+          title: Transcriptionapikey
+          default: ''
+        transcriptionBaseUrl:
+          type: string
+          title: Transcriptionbaseurl
+          default: https://api.sarvam.ai
+        transcriptionModel:
+          type: string
+          title: Transcriptionmodel
+          default: saaras:v3
+        transcriptionCurrency:
+          type: string
+          title: Transcriptioncurrency
+          default: INR
+        transcriptionRatePerMinute:
+          type: number
+          title: Transcriptionrateperminute
+          default: 0.0
       type: object
       required:
       - organizationName
@@ -3385,6 +4030,16 @@ components:
       - useTls
       - connected
       title: SmtpSettings
+    SpeakerLabelsUpdate:
+      properties:
+        labels:
+          additionalProperties:
+            type: string
+          type: object
+          title: Labels
+          default: {}
+      type: object
+      title: SpeakerLabelsUpdate
     StatusCount:
       properties:
         status:
@@ -3853,6 +4508,67 @@ components:
       - syncedAt
       - errors
       title: SyncResult
+    TranscribeRequest:
+      properties:
+        languageCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Languagecode
+      type: object
+      title: TranscribeRequest
+    TranscriptOut:
+      properties:
+        languageCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Languagecode
+        fullText:
+          type: string
+          title: Fulltext
+        segments:
+          items:
+            $ref: '#/components/schemas/TranscriptSegmentOut'
+          type: array
+          title: Segments
+          default: []
+        speakerLabels:
+          additionalProperties:
+            type: string
+          type: object
+          title: Speakerlabels
+          default: {}
+        segmentLayout:
+          type: string
+          title: Segmentlayout
+          default: linear
+      type: object
+      required:
+      - fullText
+      title: TranscriptOut
+    TranscriptSegmentOut:
+      properties:
+        speakerId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Speakerid
+        startSeconds:
+          type: number
+          title: Startseconds
+        endSeconds:
+          type: number
+          title: Endseconds
+        text:
+          type: string
+          title: Text
+      type: object
+      required:
+      - startSeconds
+      - endSeconds
+      - text
+      title: TranscriptSegmentOut
     TrendPoint:
       properties:
         date:
@@ -4135,6 +4851,108 @@ components:
       - rows
       - mismatchCount
       title: TriangulationViewOut
+    UsageEventOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        occurredAt:
+          type: string
+          title: Occurredat
+        category:
+          type: string
+          title: Category
+        provider:
+          type: string
+          title: Provider
+        operation:
+          type: string
+          title: Operation
+        quantity:
+          type: number
+          title: Quantity
+        unit:
+          type: string
+          title: Unit
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        resourceType:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resourcetype
+        resourceId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resourceid
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+      type: object
+      required:
+      - id
+      - occurredAt
+      - category
+      - provider
+      - operation
+      - quantity
+      - unit
+      - amount
+      - currency
+      title: UsageEventOut
+    UsageSummaryItem:
+      properties:
+        category:
+          type: string
+          title: Category
+        totalAmount:
+          type: number
+          title: Totalamount
+        currency:
+          type: string
+          title: Currency
+        eventCount:
+          type: integer
+          title: Eventcount
+      type: object
+      required:
+      - category
+      - totalAmount
+      - currency
+      - eventCount
+      title: UsageSummaryItem
+    UsageSummaryOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/UsageSummaryItem'
+          type: array
+          title: Items
+        totalAmount:
+          type: number
+          title: Totalamount
+        currency:
+          type: string
+          title: Currency
+      type: object
+      required:
+      - items
+      - totalAmount
+      - currency
+      title: UsageSummaryOut
     ValidationError:
       properties:
         loc:
