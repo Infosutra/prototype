@@ -156,6 +156,20 @@ export interface DashboardSummary {
   topProjects: ProjectSummary[];
 }
 
+export type DqaCompileInputExistingRule = { [key: string]: unknown } | null;
+
+export interface DqaConversationTurn {
+  role: string;
+  content: string;
+}
+
+export interface DqaCompileInput {
+  english: string;
+  conversation?: DqaConversationTurn[];
+  existingRule?: DqaCompileInputExistingRule;
+  previewLimit?: number;
+}
+
 export type DqaFlagOutDetails = { [key: string]: unknown } | null;
 
 export interface DqaFlagOut {
@@ -172,6 +186,24 @@ export interface DqaFlagOut {
   projectName?: string | null;
   koboId?: string | null;
   submittedAt?: string | null;
+}
+
+export type DqaPreviewExampleDetails = { [key: string]: unknown };
+
+export interface DqaPreviewExample {
+  submissionId: string;
+  koboId?: string | null;
+  enumerator?: string | null;
+  wouldFlag: boolean;
+  details?: DqaPreviewExampleDetails;
+}
+
+export interface DqaPreviewResult {
+  submissionsChecked: number;
+  flagCount: number;
+  passCount: number;
+  notApplicableCount: number;
+  examples?: DqaPreviewExample[];
 }
 
 export interface DqaRecomputeResult {
@@ -196,6 +228,32 @@ export interface DqaSummary {
   redFlags: number;
   amberFlags: number;
   byRule: DqaRuleCount[];
+}
+
+export type DqaValidateRuleInputRule = { [key: string]: unknown };
+
+export interface DqaValidateRuleInput {
+  rule: DqaValidateRuleInputRule;
+  previewLimit?: number;
+}
+
+export interface DqaValidationIssue {
+  path: string;
+  code: string;
+  message: string;
+}
+
+export interface DqaValidationResult {
+  valid: boolean;
+  errors?: DqaValidationIssue[];
+  warnings?: string[];
+}
+
+export interface DqaValidateRuleOut {
+  status: string;
+  message?: string | null;
+  validation: DqaValidationResult;
+  preview?: DqaPreviewResult | null;
 }
 
 export type FormFieldOutChoicesItem = { [key: string]: unknown };
@@ -225,6 +283,7 @@ export interface GeneralSettings {
   aiApiKey: string;
   aiBaseUrl?: string;
   aiModel?: string;
+  aiCompileModel?: string;
   aiTemperature?: number;
   aiMaxTokens?: number;
   aiTimeoutSeconds?: number;

@@ -77,6 +77,7 @@ def to_settings_out(row: AppSettings) -> SettingsOut:
             ai_base_url=getattr(row, "ai_base_url", None) or "https://openrouter.ai/api/v1",
             ai_model=getattr(row, "ai_model", None)
             or "nvidia/nemotron-3-super-120b-a12b:free",
+            ai_compile_model=getattr(row, "ai_compile_model", None) or "",
             ai_temperature=float(getattr(row, "ai_temperature", None) or 0.3),
             ai_max_tokens=int(getattr(row, "ai_max_tokens", None) or 2048),
             ai_timeout_seconds=int(getattr(row, "ai_timeout_seconds", None) or 60),
@@ -197,6 +198,7 @@ def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
         row.ai_model = (
             general.ai_model or "nvidia/nemotron-3-super-120b-a12b:free"
         ).strip()
+        row.ai_compile_model = (general.ai_compile_model or "").strip()
         row.ai_temperature = float(general.ai_temperature)
         row.ai_max_tokens = int(general.ai_max_tokens)
         row.ai_timeout_seconds = int(general.ai_timeout_seconds)

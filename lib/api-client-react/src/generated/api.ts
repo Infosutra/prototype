@@ -30,9 +30,12 @@ import type {
   DashboardSummary,
   DownloadAudioRecordingTranscriptParams,
   DownloadReportParams,
+  DqaCompileInput,
   DqaFlagOut,
   DqaRecomputeResult,
   DqaSummary,
+  DqaValidateRuleInput,
+  DqaValidateRuleOut,
   FormFieldOut,
   GenerateDqaDailyInput,
   GenerateDqaFinalInput,
@@ -5136,6 +5139,148 @@ export const useUpdateProjectRulePack = <TError = ErrorType<HTTPValidationError>
         TContext
       > => {
       return useMutation(getUpdateProjectRulePackMutationOptions(options));
+    }
+
+export const getCompileDqaRuleUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/dqa/compile`
+}
+
+/**
+ * @summary Compile Rule
+ */
+export const compileDqaRule = async (projectId: string,
+    dqaCompileInput: DqaCompileInput, options?: RequestInit): Promise<unknown> => {
+
+  return customFetch<unknown>(getCompileDqaRuleUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaCompileInput)
+  }
+);}
+
+
+
+
+export const getCompileDqaRuleMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof compileDqaRule>>, TError,{projectId: string;data: BodyType<DqaCompileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof compileDqaRule>>, TError,{projectId: string;data: BodyType<DqaCompileInput>}, TContext> => {
+
+const mutationKey = ['compileDqaRule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof compileDqaRule>>, {projectId: string;data: BodyType<DqaCompileInput>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  compileDqaRule(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompileDqaRuleMutationResult = NonNullable<Awaited<ReturnType<typeof compileDqaRule>>>
+    export type CompileDqaRuleMutationBody = BodyType<DqaCompileInput>
+    export type CompileDqaRuleMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Compile Rule
+ */
+export const useCompileDqaRule = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof compileDqaRule>>, TError,{projectId: string;data: BodyType<DqaCompileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof compileDqaRule>>,
+        TError,
+        {projectId: string;data: BodyType<DqaCompileInput>},
+        TContext
+      > => {
+      return useMutation(getCompileDqaRuleMutationOptions(options));
+    }
+
+export const getValidateDqaRuleUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/dqa/validate-rule`
+}
+
+/**
+ * @summary Validate Rule Endpoint
+ */
+export const validateDqaRule = async (projectId: string,
+    dqaValidateRuleInput: DqaValidateRuleInput, options?: RequestInit): Promise<DqaValidateRuleOut> => {
+
+  return customFetch<DqaValidateRuleOut>(getValidateDqaRuleUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaValidateRuleInput)
+  }
+);}
+
+
+
+
+export const getValidateDqaRuleMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateDqaRule>>, TError,{projectId: string;data: BodyType<DqaValidateRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof validateDqaRule>>, TError,{projectId: string;data: BodyType<DqaValidateRuleInput>}, TContext> => {
+
+const mutationKey = ['validateDqaRule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateDqaRule>>, {projectId: string;data: BodyType<DqaValidateRuleInput>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  validateDqaRule(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ValidateDqaRuleMutationResult = NonNullable<Awaited<ReturnType<typeof validateDqaRule>>>
+    export type ValidateDqaRuleMutationBody = BodyType<DqaValidateRuleInput>
+    export type ValidateDqaRuleMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Validate Rule Endpoint
+ */
+export const useValidateDqaRule = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateDqaRule>>, TError,{projectId: string;data: BodyType<DqaValidateRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof validateDqaRule>>,
+        TError,
+        {projectId: string;data: BodyType<DqaValidateRuleInput>},
+        TContext
+      > => {
+      return useMutation(getValidateDqaRuleMutationOptions(options));
     }
 
 export const getGetAudioRecordingsUrl = (params?: GetAudioRecordingsParams,) => {

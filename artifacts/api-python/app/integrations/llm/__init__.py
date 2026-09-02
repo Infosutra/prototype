@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from app.integrations.llm.errors import LlmError
 from app.integrations.llm.registry import get_plugin, register_plugin, resolve_plugin_id
-from app.integrations.llm.settings import llm_config_from_app_settings
+from app.integrations.llm.settings import (
+    llm_compile_config_from_app_settings,
+    llm_config_from_app_settings,
+)
 from app.integrations.llm.types import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
@@ -41,6 +44,7 @@ __all__ = [
     "chat_completion",
     "get_plugin",
     "llm_config_from_app_settings",
+    "llm_compile_config_from_app_settings",
     "register_plugin",
     "resolve_plugin_id",
 ]

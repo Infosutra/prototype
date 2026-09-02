@@ -4,12 +4,17 @@ import {
   getGetDqaFlagsQueryKey,
   getGetDqaSummaryQueryKey,
   getGetProjectRulePackQueryKey,
+  useCompileDqaRule,
   useGetDqaSummary,
   useGetProject,
   useGetProjectFormFields,
   useGetProjectRulePack,
   useRecomputeDqa,
   useUpdateProjectRulePack,
+  useValidateDqaRule,
+  type DqaCompileInput,
+  type DqaPreviewResult,
+  type DqaValidationResult,
 } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,10 +25,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, ChevronDown, HelpCircle } from "lucide-react";
 
 type View = "table" | "add" | "edit";
 type ChatPhase = "idle" | "thinking" | "streaming" | "done";
+type CompileStatus = "idle" | "loading" | "success" | "needs_clarification" | "invalid";
 
 type DisplayRule = {
   id: string;
@@ -32,11 +39,25 @@ type DisplayRule = {
   raw: Record<string, unknown>;
 };
 
+type ConversationTurn = { role: "user" | "assistant"; content: string };
+
+type CompileResponse = {
+  status: string;
+  question?: string;
+  partialExplanation?: string;
+  rule?: Record<string, unknown>;
+  explanation?: string;
+  message?: string;
+  validation?: DqaValidationResult;
+  preview?: DqaPreviewResult;
+  lastProposal?: Record<string, unknown>;
+};
+
 const THINKING_LINES = [
-  "Parsing rule intent…",
-  "Matching field codes against KoBo form schema…",
-  "Validating operators against engine…",
-  "Drafting compiled check…",
+  "Reading your requirement…",
+  "Matching fields against the form schema…",
+  "Selecting supported operators…",
+  "Validating compiled check…",
 ];
 
 function ruleEnglish(rule: Record<string, unknown>): string {
@@ -57,63 +78,34 @@ function packRulesToDisplay(rules: unknown[]): DisplayRule[] {
     }));
 }
 
-function runThinkingThenStream(
-  lines: string[],
-  fullText: string,
+function runThinkingWhileLoading(
   onThinkingStep: (n: number) => void,
   onPhase: (p: ChatPhase) => void,
   onStreamPos: (n: number) => void,
-  onDone: () => void,
+  placeholder: string,
 ) {
   let step = 0;
   const thinkId = window.setInterval(() => {
     step += 1;
     onThinkingStep(step);
-    if (step >= lines.length) {
+    if (step >= THINKING_LINES.length) {
       window.clearInterval(thinkId);
       onPhase("streaming");
       let pos = 0;
       const streamId = window.setInterval(() => {
-        pos += 4;
-        onStreamPos(Math.min(pos, fullText.length));
-        if (pos >= fullText.length) {
+        pos += 6;
+        onStreamPos(Math.min(pos, placeholder.length));
+        if (pos >= placeholder.length) {
           window.clearInterval(streamId);
           onPhase("done");
-          onDone();
         }
-      }, 25);
+      }, 20);
     }
-  }, 400);
+  }, 350);
   return () => {
     window.clearInterval(thinkId);
   };
 }
-
-function buildAssistantReply(
-  turn: number,
-  userText: string,
-  fields: { name: string; label: string }[],
-): string {
-  if (turn === 1) {
-    const sample = fields.slice(0, 3).map((f) => `• ${f.name} — ${f.label.slice(0, 60)}`).join("\n");
-    return [
-      "I read your rule against this form's field schema.",
-      sample ? `\n${sample}` : "",
-      "\nI'll compile this into a DQA check for this form. Confirm or clarify severity, tolerance, or field mappings.",
-    ].join("");
-  }
-  if (turn === 2) {
-    return "Noted. Should small differences be ignored, or should any mismatch flag? Reply with tolerance preferences, then I'll preview on existing submissions.";
-  }
-  return "Compiled and validated against current submissions. Review the preview below, then add or save the rule.";
-}
-
-type CompletedTurn = {
-  user: string;
-  assistant: string;
-  showFields?: boolean;
-  showPreview?: boolean;
-};
 
 function UserBubble({ text }: { text: string }) {
   return (
@@ -154,86 +146,189 @@ function AssistantBubble({ text, streaming }: { text: string; streaming?: boolea
 }
 
 function RuleAuthoringChat({
+  projectId,
   mode,
-  ruleEnglish,
+  initialEnglish,
+  existingRule,
   fields,
-  summaryFlags,
-  summarySubmissions,
-  compiledJson,
   onBack,
   onApprove,
 }: {
+  projectId: string;
   mode: "add" | "edit";
-  ruleEnglish: string;
+  initialEnglish: string;
+  existingRule: Record<string, unknown> | null;
   fields: { name: string; label: string }[];
-  summaryFlags: number;
-  summarySubmissions: number;
-  compiledJson: string;
   onBack: () => void;
-  onApprove: (english: string) => void;
+  onApprove: (rule: Record<string, unknown>) => void;
 }) {
-  const [turn, setTurn] = useState(mode === "edit" ? 0 : 0);
+  const compileRule = useCompileDqaRule();
+  const validateRule = useValidateDqaRule();
+
   const [composer, setComposer] = useState("");
-  const [completed, setCompleted] = useState<CompletedTurn[]>([]);
+  const [conversation, setConversation] = useState<ConversationTurn[]>([]);
+  const [transcript, setTranscript] = useState<ConversationTurn[]>(
+    mode === "edit" && initialEnglish ? [{ role: "user", content: initialEnglish }] : [],
+  );
   const [phase, setPhase] = useState<ChatPhase>("idle");
   const [thinkingStep, setThinkingStep] = useState(0);
   const [streamPos, setStreamPos] = useState(0);
-  const [pendingUser, setPendingUser] = useState("");
-  const [showPreviewCards, setShowPreviewCards] = useState(false);
-  const [draftEnglish, setDraftEnglish] = useState(ruleEnglish);
+  const [pendingAssistant, setPendingAssistant] = useState("");
+  const [compileStatus, setCompileStatus] = useState<CompileStatus>("idle");
+  const [compiledRule, setCompiledRule] = useState<Record<string, unknown> | null>(null);
+  const [preview, setPreview] = useState<DqaPreviewResult | null>(null);
+  const [validation, setValidation] = useState<DqaValidationResult | null>(null);
+  const [compileError, setCompileError] = useState<string | null>(null);
+  const [jsonDraft, setJsonDraft] = useState("");
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => cleanupRef.current?.(), []);
 
-  const activeAssistantText = buildAssistantReply(turn, pendingUser || draftEnglish, fields);
+  useEffect(() => {
+    if (compiledRule) {
+      setJsonDraft(JSON.stringify(compiledRule, null, 2));
+    }
+  }, [compiledRule]);
 
-  const startAssistantTurn = useCallback(
-    (nextTurn: number, userText: string) => {
-      if (nextTurn === 1) setDraftEnglish(userText);
-      setPendingUser(userText);
-      setTurn(nextTurn);
+  const busy = compileStatus === "loading" || phase === "thinking" || phase === "streaming";
+  const readyToApprove = compileStatus === "success" && compiledRule !== null;
+
+  const handleCompileResponse = useCallback((data: CompileResponse, userText: string) => {
+    if (data.status === "needs_clarification") {
+      const question = data.question || "Could you clarify this rule?";
+      setCompileStatus("needs_clarification");
+      setCompiledRule(null);
+      setPreview(null);
+      setValidation(data.validation ?? null);
+      setConversation((prev) => [
+        ...prev,
+        { role: "user", content: userText },
+        { role: "assistant", content: question },
+      ]);
+      setTranscript((prev) => [
+        ...prev,
+        { role: "user", content: userText },
+        { role: "assistant", content: question },
+      ]);
+      setPendingAssistant(question);
+      return;
+    }
+
+    if (data.status === "success" && data.rule) {
+      setCompileStatus("success");
+      setCompiledRule(data.rule as Record<string, unknown>);
+      setPreview(data.preview ?? null);
+      setValidation(data.validation ?? null);
+      const explanation = data.explanation || "Rule compiled and validated.";
+      setConversation((prev) => [
+        ...prev,
+        { role: "user", content: userText },
+        { role: "assistant", content: explanation },
+      ]);
+      setTranscript((prev) => [
+        ...prev,
+        { role: "user", content: userText },
+        { role: "assistant", content: explanation },
+      ]);
+      setPendingAssistant(explanation);
+      return;
+    }
+
+    const message =
+      data.message ||
+      data.validation?.errors?.map((e) => e.message).join("; ") ||
+      "Compilation failed";
+    setCompileStatus("invalid");
+    setCompiledRule(null);
+    setPreview(null);
+    setValidation(data.validation ?? null);
+    setCompileError(message);
+    setConversation((prev) => [...prev, { role: "user", content: userText }]);
+    setTranscript((prev) => [
+      ...prev,
+      { role: "user", content: userText },
+      { role: "assistant", content: message },
+    ]);
+    setPendingAssistant(message);
+  }, []);
+
+  const runCompile = useCallback(
+    async (userText: string) => {
+      setCompileError(null);
+      setCompileStatus("loading");
       setPhase("thinking");
       setThinkingStep(0);
       setStreamPos(0);
-      setShowPreviewCards(false);
-
-      const fullText = buildAssistantReply(nextTurn, userText, fields);
+      setPendingAssistant("Compiling rule…");
       cleanupRef.current?.();
-      cleanupRef.current = runThinkingThenStream(
-        THINKING_LINES,
-        fullText,
+      cleanupRef.current = runThinkingWhileLoading(
         setThinkingStep,
         setPhase,
         setStreamPos,
-        () => {
-          setCompleted((prev) => [
-            ...prev,
-            {
-              user: userText,
-              assistant: fullText,
-              showFields: nextTurn === 1,
-              showPreview: nextTurn === 3,
-            },
-          ]);
-          setPendingUser("");
-          if (nextTurn === 3) setShowPreviewCards(true);
-        },
+        "Compiling rule…",
       );
+
+      const payload: DqaCompileInput = {
+        english: userText,
+        conversation,
+        existingRule: existingRule ?? undefined,
+        previewLimit: 50,
+      };
+
+      try {
+        const data = (await compileRule.mutateAsync({
+          projectId,
+          data: payload,
+        })) as CompileResponse;
+        cleanupRef.current?.();
+        setPhase("done");
+        handleCompileResponse(data, userText);
+      } catch (err) {
+        cleanupRef.current?.();
+        setPhase("done");
+        setCompileStatus("invalid");
+        const message = err instanceof Error ? err.message : "Compile request failed";
+        setCompileError(message);
+        setTranscript((prev) => [
+          ...prev,
+          { role: "user", content: userText },
+          { role: "assistant", content: message },
+        ]);
+        setPendingAssistant(message);
+      }
     },
-    [fields],
+    [compileRule, conversation, existingRule, handleCompileResponse, projectId],
   );
 
   function handleSend() {
     const text = composer.trim();
-    if (!text || phase === "thinking" || phase === "streaming") return;
+    if (!text || busy) return;
     setComposer("");
-    if (turn === 0) startAssistantTurn(1, text);
-    else if (turn === 1) startAssistantTurn(2, text);
-    else if (turn === 2) startAssistantTurn(3, text);
+    void runCompile(text);
   }
 
-  const busy = phase === "thinking" || phase === "streaming";
-  const readyToApprove = turn === 3 && phase === "done" && showPreviewCards;
+  async function handleRevalidateJson() {
+    setCompileError(null);
+    try {
+      const parsed = JSON.parse(jsonDraft) as Record<string, unknown>;
+      const result = await validateRule.mutateAsync({
+        projectId,
+        data: { rule: parsed, previewLimit: 50 },
+      });
+      setValidation(result.validation);
+      if (result.status === "success" && result.validation?.valid) {
+        setCompiledRule(parsed);
+        setPreview(result.preview ?? null);
+        setCompileStatus("success");
+      } else {
+        setCompileStatus("invalid");
+        setCompileError(result.message || "Rule failed validation");
+      }
+    } catch (err) {
+      setCompileError(err instanceof Error ? err.message : "Invalid JSON");
+      setCompileStatus("invalid");
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -246,76 +341,104 @@ function RuleAuthoringChat({
 
       <div className="mx-auto flex w-full max-w-2xl flex-col rounded-xl border bg-card min-h-[520px]">
         <div className="flex-1 overflow-auto p-4 space-y-5">
-          {mode === "edit" && completed.length === 0 && !pendingUser && (
-            <UserBubble text={ruleEnglish} />
-          )}
-
-          {completed.map((item, i) => (
-            <div key={`${item.user}-${i}`} className="space-y-3">
-              <UserBubble text={item.user} />
-              <AssistantBubble text={item.assistant} />
-              {item.showFields && fields.length > 0 && (
-                <div className="rounded-lg border p-3 text-sm">
-                  <p className="mb-2 font-semibold">Form fields (sample)</p>
-                  <ul className="space-y-1 text-xs text-muted-foreground">
-                    {fields.slice(0, 6).map((f) => (
-                      <li key={f.name}>
-                        <span className="font-mono">{f.name}</span> — {f.label.slice(0, 80)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {item.showPreview && (
-                <>
-                  <div className="rounded-lg border p-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-2xl font-semibold text-destructive">{summaryFlags}</p>
-                      <p className="text-xs text-muted-foreground">Current flags on form</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-semibold">{summarySubmissions}</p>
-                      <p className="text-xs text-muted-foreground">Submissions checked</p>
-                    </div>
-                  </div>
-                  <Collapsible>
-                    <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/50">
-                      <ChevronDown className="h-4 w-4" />
-                      Compiled JSON
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <pre className="mt-2 overflow-auto rounded-lg border bg-muted/30 p-3 text-xs">
-                        {compiledJson}
-                      </pre>
-                    </CollapsibleContent>
-                  </Collapsible>
-                  {readyToApprove && i === completed.length - 1 && (
-                    <div className="flex gap-2 pt-1">
-                      <Button onClick={() => onApprove(draftEnglish)} className="bg-primary text-primary-foreground">
-                        {mode === "add" ? "Add rule" : "Save rule"}
-                      </Button>
-                      <Button variant="ghost" onClick={onBack}>
-                        Discard
-                      </Button>
-                    </div>
-                  )}
-                </>
+          {transcript.map((item, i) => (
+            <div key={`${item.role}-${i}`} className="space-y-3">
+              {item.role === "user" ? (
+                <UserBubble text={item.content} />
+              ) : (
+                <AssistantBubble text={item.content} />
               )}
             </div>
           ))}
 
-          {pendingUser && (
+          {busy && (
             <div className="space-y-3">
-              <UserBubble text={pendingUser} />
               {phase === "thinking" && (
                 <ThinkingBlock lines={THINKING_LINES} visibleCount={thinkingStep} />
               )}
-              {(phase === "streaming" || phase === "done") && (
+              {(phase === "streaming" || phase === "done") && pendingAssistant && (
                 <AssistantBubble
-                  text={activeAssistantText.slice(0, streamPos)}
+                  text={pendingAssistant.slice(0, streamPos || pendingAssistant.length)}
                   streaming={phase === "streaming"}
                 />
               )}
+            </div>
+          )}
+
+          {compileStatus === "success" && preview && (
+            <div className="rounded-lg border p-3 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-2xl font-semibold text-destructive">{preview.flagCount}</p>
+                <p className="text-xs text-muted-foreground">Would flag (preview)</p>
+              </div>
+              <div>
+                <p className="text-2xl font-semibold">{preview.submissionsChecked}</p>
+                <p className="text-xs text-muted-foreground">Submissions checked</p>
+              </div>
+            </div>
+          )}
+
+          {validation && !validation.valid && (validation.errors?.length ?? 0) > 0 && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive space-y-1">
+              {(validation.errors ?? []).map((err) => (
+                <p key={`${err.path}-${err.code}`}>
+                  {err.path ? `${err.path}: ` : ""}
+                  {err.message}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {compileError && compileStatus === "invalid" && (
+            <div className="flex gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              {compileError}
+            </div>
+          )}
+
+          {fields.length > 0 && compileStatus === "success" && (
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="mb-2 font-semibold">Form fields (sample)</p>
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                {fields.slice(0, 6).map((f) => (
+                  <li key={f.name}>
+                    <span className="font-mono">{f.name}</span> — {f.label.slice(0, 80)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(compiledRule || jsonDraft) && (
+            <Collapsible defaultOpen={compileStatus === "success"}>
+              <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/50">
+                <ChevronDown className="h-4 w-4" />
+                Compiled JSON
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                <Textarea
+                  value={jsonDraft}
+                  onChange={(e) => setJsonDraft(e.target.value)}
+                  className="font-mono text-xs min-h-[160px]"
+                />
+                <Button variant="outline" size="sm" onClick={() => void handleRevalidateJson()}>
+                  Re-validate & preview
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {readyToApprove && (
+            <div className="flex gap-2 pt-1">
+              <Button
+                onClick={() => compiledRule && onApprove(compiledRule)}
+                className="bg-primary text-primary-foreground"
+              >
+                {mode === "add" ? "Add rule" : "Save rule"}
+              </Button>
+              <Button variant="ghost" onClick={onBack}>
+                Discard
+              </Button>
             </div>
           )}
         </div>
@@ -326,13 +449,9 @@ function RuleAuthoringChat({
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
               placeholder={
-                turn === 0
-                  ? "Describe the rule in English…"
-                  : turn === 1
-                    ? "Confirm or clarify…"
-                    : turn === 2
-                      ? "e.g. No tolerance, or allow ±1…"
-                      : "Optional follow-up…"
+                compileStatus === "needs_clarification"
+                  ? "Answer the clarification…"
+                  : "Describe the rule in English…"
               }
               disabled={busy}
               onKeyDown={(e) => {
@@ -361,7 +480,6 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
   const packQuery = useGetProjectRulePack(projectId, {
     query: { enabled: Boolean(projectId) } as never,
   });
-  const summaryQuery = useGetDqaSummary({ projectId });
   const updatePack = useUpdateProjectRulePack();
   const recompute = useRecomputeDqa();
 
@@ -420,31 +538,14 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
     await saveRules(next);
   };
 
-  const approveRule = async (english: string) => {
+  const approveRule = async (compiled: Record<string, unknown>) => {
     let next: Record<string, unknown>[];
     if (view === "add") {
-      const id = `R-${Date.now()}`;
-      next = [
-        ...packRules,
-        {
-          id,
-          title: english.slice(0, 80),
-          message: english,
-          english,
-          severity: "amber",
-          check: editRule?.raw.check ?? { op: "blank", field: fields[0]?.name || "" },
-        },
-      ];
+      const id = String(compiled.id || `R-${Date.now()}`);
+      next = [...packRules, { ...compiled, id }];
     } else if (editRule) {
       next = packRules.map((r) =>
-        String(r.id) === editRule.id
-          ? {
-              ...r,
-              title: english.slice(0, 80),
-              message: english,
-              english,
-            }
-          : r,
+        String(r.id) === editRule.id ? { ...compiled, id: editRule.id } : r,
       );
     } else {
       return;
@@ -460,34 +561,20 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
     packQuery.error?.message ||
     saveError;
 
-  const compiledJson = editRule
-    ? JSON.stringify(editRule.raw, null, 2)
-    : JSON.stringify(
-        {
-          id: "new",
-          english: "…",
-          severity: "amber",
-          check: { op: "pending_compile" },
-        },
-        null,
-        2,
-      );
-
   if (view === "add" || view === "edit") {
     return (
       <div key={`${view}-${authoringSession}`}>
         <RuleAuthoringChat
+          projectId={projectId}
           mode={view}
-          ruleEnglish={editRule?.english ?? ""}
+          initialEnglish={editRule?.english ?? ""}
+          existingRule={editRule?.raw ?? null}
           fields={fields}
-          summaryFlags={summaryQuery.data?.redFlags ?? 0}
-          summarySubmissions={summaryQuery.data?.totalSubmissions ?? 0}
-          compiledJson={compiledJson}
           onBack={() => {
             setView("table");
             setEditRuleId(null);
           }}
-          onApprove={(english) => void approveRule(english)}
+          onApprove={(rule) => void approveRule(rule)}
         />
       </div>
     );
@@ -526,11 +613,11 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground space-y-2">
             <p>
-              Write rules in plain English. Compile, validate, and preview happen in the chat — no
-              separate compile step on the rules table.
+              Write rules in plain English. The compiler validates against this form&apos;s schema,
+              previews on recent submissions, and saves deterministic JSON checks.
             </p>
             <p>
-              Runtime evaluation uses compiled JSON only. Form schemas are sent to the assistant,
+              Runtime evaluation uses compiled JSON only. Form schemas are sent to the compiler,
               not submission PII.
             </p>
           </CardContent>

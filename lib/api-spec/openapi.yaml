@@ -1929,6 +1929,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/compile:
+    post:
+      tags:
+      - dqa
+      summary: Compile Rule
+      operationId: compileDqaRule
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaCompileInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/validate-rule:
+    post:
+      tags:
+      - dqa
+      summary: Validate Rule Endpoint
+      operationId: validateDqaRule
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaValidateRuleInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaValidateRuleOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /audio:
     get:
       tags:
@@ -2126,6 +2189,10 @@ paths:
             application/json:
               schema: {}
             audio/*: {}
+        '206':
+          content:
+            audio/*: {}
+          description: Partial Content
         '422':
           description: Validation Error
           content:
@@ -2713,6 +2780,44 @@ components:
       - submissionsByStatus
       - topProjects
       title: DashboardSummary
+    DqaCompileInput:
+      properties:
+        english:
+          type: string
+          title: English
+        conversation:
+          items:
+            $ref: '#/components/schemas/DqaConversationTurn'
+          type: array
+          title: Conversation
+          default: []
+        existingRule:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Existingrule
+        previewLimit:
+          type: integer
+          title: Previewlimit
+          default: 50
+      type: object
+      required:
+      - english
+      title: DqaCompileInput
+    DqaConversationTurn:
+      properties:
+        role:
+          type: string
+          title: Role
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: DqaConversationTurn
     DqaFlagOut:
       properties:
         id:
@@ -2776,6 +2881,61 @@ components:
       - message
       - evaluatedAt
       title: DqaFlagOut
+    DqaPreviewExample:
+      properties:
+        submissionId:
+          type: string
+          title: Submissionid
+        koboId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Koboid
+        enumerator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enumerator
+        wouldFlag:
+          type: boolean
+          title: Wouldflag
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+          default: {}
+      type: object
+      required:
+      - submissionId
+      - wouldFlag
+      title: DqaPreviewExample
+    DqaPreviewResult:
+      properties:
+        submissionsChecked:
+          type: integer
+          title: Submissionschecked
+        flagCount:
+          type: integer
+          title: Flagcount
+        passCount:
+          type: integer
+          title: Passcount
+        notApplicableCount:
+          type: integer
+          title: Notapplicablecount
+        examples:
+          items:
+            $ref: '#/components/schemas/DqaPreviewExample'
+          type: array
+          title: Examples
+          default: []
+      type: object
+      required:
+      - submissionsChecked
+      - flagCount
+      - passCount
+      - notApplicableCount
+      title: DqaPreviewResult
     DqaRecomputeResult:
       properties:
         projectId:
@@ -2855,6 +3015,79 @@ components:
       - amberFlags
       - byRule
       title: DqaSummary
+    DqaValidateRuleInput:
+      properties:
+        rule:
+          additionalProperties: true
+          type: object
+          title: Rule
+        previewLimit:
+          type: integer
+          title: Previewlimit
+          default: 50
+      type: object
+      required:
+      - rule
+      title: DqaValidateRuleInput
+    DqaValidateRuleOut:
+      properties:
+        status:
+          type: string
+          title: Status
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+        validation:
+          $ref: '#/components/schemas/DqaValidationResult'
+        preview:
+          anyOf:
+          - $ref: '#/components/schemas/DqaPreviewResult'
+          - type: 'null'
+      type: object
+      required:
+      - status
+      - validation
+      title: DqaValidateRuleOut
+    DqaValidationIssue:
+      properties:
+        path:
+          type: string
+          title: Path
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - path
+      - code
+      - message
+      title: DqaValidationIssue
+    DqaValidationResult:
+      properties:
+        valid:
+          type: boolean
+          title: Valid
+        errors:
+          items:
+            $ref: '#/components/schemas/DqaValidationIssue'
+          type: array
+          title: Errors
+          default: []
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+          default: []
+      type: object
+      required:
+      - valid
+      title: DqaValidationResult
     FieldDistribution:
       properties:
         field:
@@ -2954,6 +3187,10 @@ components:
           type: string
           title: Aimodel
           default: nvidia/nemotron-3-super-120b-a12b:free
+        aiCompileModel:
+          type: string
+          title: Aicompilemodel
+          default: ''
         aiTemperature:
           type: number
           title: Aitemperature

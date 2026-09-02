@@ -78,6 +78,10 @@ async def lifespan(_app: FastAPI):
         seeded = dqa_engine.seed_rule_packs(db, overwrite=False)
         if seeded:
             logger.info("Seeded %s DQA rule pack(s)", seeded)
+        from app.services.dqa_compile_prompt import seed_dqa_compile_prompt
+
+        if seed_dqa_compile_prompt(db):
+            logger.info("Seeded DQA compile prompt template")
         assigned = studies_service.apply_all_study_form_maps(db)
         if assigned:
             logger.info("Assigned %s project(s) to studies from seed tool links", assigned)

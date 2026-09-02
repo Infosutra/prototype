@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,10 +13,16 @@ from app.db.session import get_db
 from app.repositories import dqa as dqa_repo
 from app.schemas.common import DqaFlagsQuery, ProjectIdQuery, StudyIdQuery, StudyProjectQuery
 from app.schemas.dqa import (
+    DqaCompileInput,
+    DqaCompileInvalid,
+    DqaCompileNeedsClarification,
+    DqaCompileSuccess,
     DqaFlagOut,
     DqaRecomputeResult,
     DqaRuleCount,
     DqaSummary,
+    DqaValidateRuleInput,
+    DqaValidateRuleOut,
     EnumeratorStat,
     FormFieldOut,
     ProjectDqaStat,
@@ -25,7 +32,10 @@ from app.schemas.dqa import (
     TriangulationViewOut,
 )
 from app.services import dqa_engine
-from app.services.dqa_engine import list_form_fields
+from app.services.dqa_compile import CompileError, compile_dqa_rule, validate_dqa_rule_for_project
+from app.domain.dqa.form_fields import list_form_fields
+from app.domain.dqa.validate import validate_pack_rules
+from app.services.settings import get_or_create_settings
 from app.services import triangulation as tri
 from app.services.triangulation import TriangulationError
 
@@ -315,5 +325,83 @@ def put_rule_pack(
         raise HTTPException(status_code=404, detail="Project not found")
     if not isinstance(payload.pack, dict):
         raise HTTPException(status_code=400, detail="pack must be an object")
+    form_fields = list_form_fields(
+        project.form_definition if isinstance(project.form_definition, dict) else None
+    )
+    validation = validate_pack_rules(
+        payload.pack.get("rules") if isinstance(payload.pack.get("rules"), list) else [],
+        form_fields=form_fields,
+        pack=payload.pack,
+    )
+    if not validation.valid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Rule pack contains invalid rules",
+                "validation": validation.to_dict(),
+            },
+        )
     saved = dqa_engine.save_pack(db, project_id, payload.pack)
     return RulePackOut(project_id=project_id, pack=saved)
+
+
+@projects_router.post(
+    "/{project_id}/dqa/compile",
+    operation_id="compileDqaRule",
+    response_model=None,
+)
+def compile_rule(
+    project_id: str,
+    payload: DqaCompileInput,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    settings = get_or_create_settings(db)
+    try:
+        result = compile_dqa_rule(
+            db,
+            project,
+            english=payload.english,
+            conversation=[t.model_dump() for t in payload.conversation],
+            existing_rule=payload.existing_rule,
+            preview_limit=payload.preview_limit,
+            settings=settings,
+        )
+    except CompileError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    status = result.get("status")
+    if status == "invalid":
+        return JSONResponse(status_code=422, content=result)
+    return result
+
+
+@projects_router.post(
+    "/{project_id}/dqa/validate-rule",
+    response_model=DqaValidateRuleOut,
+    operation_id="validateDqaRule",
+)
+def validate_rule_endpoint(
+    project_id: str,
+    payload: DqaValidateRuleInput,
+    db: Session = Depends(get_db),
+) -> DqaValidateRuleOut:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    result = validate_dqa_rule_for_project(
+        db,
+        project,
+        payload.rule,
+        preview_limit=payload.preview_limit,
+    )
+    return DqaValidateRuleOut.model_validate(
+        {
+            "status": result["status"],
+            "message": result.get("message"),
+            "validation": result["validation"],
+            "preview": result.get("preview"),
+        }
+    )

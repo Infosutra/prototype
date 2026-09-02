@@ -160,3 +160,85 @@ class TriangulationViewDefinitionCreate(CamelModel):
     title: str
     description: str | None = None
     definition: dict[str, Any]
+
+
+class DqaConversationTurn(CamelModel):
+    role: str
+    content: str
+
+
+class DqaCompileInput(CamelModel):
+    english: str
+    conversation: list[DqaConversationTurn] = []
+    existing_rule: dict[str, Any] | None = None
+    preview_limit: int = 50
+
+
+class DqaValidateRuleInput(CamelModel):
+    rule: dict[str, Any]
+    preview_limit: int = 50
+
+
+class DqaValidationIssue(CamelModel):
+    path: str
+    code: str
+    message: str
+
+
+class DqaValidationResult(CamelModel):
+    valid: bool
+    errors: list[DqaValidationIssue] = []
+    warnings: list[str] = []
+
+
+class DqaPreviewExample(CamelModel):
+    submission_id: str
+    kobo_id: str | None = None
+    enumerator: str | None = None
+    would_flag: bool
+    details: dict[str, Any] = {}
+
+
+class DqaPreviewResult(CamelModel):
+    submissions_checked: int
+    flag_count: int
+    pass_count: int
+    not_applicable_count: int
+    examples: list[DqaPreviewExample] = []
+
+
+class DqaCompileMeta(CamelModel):
+    model: str
+    attempts: int
+    prompt_id: str | None = None
+
+
+class DqaCompileSuccess(CamelModel):
+    status: str = "success"
+    rule: dict[str, Any]
+    explanation: str
+    validation: DqaValidationResult
+    preview: DqaPreviewResult
+    meta: DqaCompileMeta
+
+
+class DqaCompileNeedsClarification(CamelModel):
+    status: str = "needs_clarification"
+    question: str
+    partial_explanation: str | None = None
+    meta: DqaCompileMeta
+
+
+class DqaCompileInvalid(CamelModel):
+    status: str = "invalid"
+    message: str
+    validation: DqaValidationResult | None = None
+    last_proposal: dict[str, Any] | None = None
+    meta: DqaCompileMeta
+
+
+class DqaValidateRuleOut(CamelModel):
+    status: str
+    message: str | None = None
+    validation: DqaValidationResult
+    preview: DqaPreviewResult | None = None

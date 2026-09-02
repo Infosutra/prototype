@@ -88,6 +88,7 @@ export default function Settings() {
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState("nvidia/nemotron-3-super-120b-a12b:free");
+  const [aiCompileModel, setAiCompileModel] = useState("");
   const [aiBaseUrl, setAiBaseUrl] = useState("https://openrouter.ai/api/v1");
 
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(false);
@@ -117,6 +118,7 @@ export default function Settings() {
         setAiEnabled(Boolean(settings.general.aiEnabled));
         setAiApiKey(settings.general.aiApiKey || "");
         setAiModel(settings.general.aiModel || "nvidia/nemotron-3-super-120b-a12b:free");
+        setAiCompileModel(settings.general.aiCompileModel || "");
         setAiBaseUrl(settings.general.aiBaseUrl || "https://openrouter.ai/api/v1");
         setTranscriptionApiKey(settings.general.transcriptionApiKey || "");
         setTranscriptionEnabled(Boolean(settings.general.transcriptionEnabled));
@@ -181,6 +183,7 @@ export default function Settings() {
     setAiEnabled(Boolean(settingsQuery.data.general.aiEnabled));
     setAiApiKey(settingsQuery.data.general.aiApiKey || "");
     setAiModel(settingsQuery.data.general.aiModel || "nvidia/nemotron-3-super-120b-a12b:free");
+    setAiCompileModel(settingsQuery.data.general.aiCompileModel || "");
     setAiBaseUrl(settingsQuery.data.general.aiBaseUrl || "https://openrouter.ai/api/v1");
     setTranscriptionEnabled(Boolean(settingsQuery.data.general.transcriptionEnabled));
     setTranscriptionProvider(settingsQuery.data.general.transcriptionProvider || "sarvam");
@@ -240,6 +243,7 @@ export default function Settings() {
           reportLogoUrl: g?.reportLogoUrl ?? null,
           aiBaseUrl,
           aiModel,
+          aiCompileModel,
           aiTemperature: 0.3,
           aiMaxTokens: 2048,
           aiTimeoutSeconds: 60,
@@ -568,8 +572,8 @@ export default function Settings() {
                   <div className="pt-6 border-t mt-6 space-y-4">
                     <h3 className="text-lg font-medium">AI Configuration (OpenRouter)</h3>
                     <p className="text-sm text-muted-foreground">
-                      Powers DQA Daily headlines. Default model is the free Nemotron endpoint;
-                      change model or base URL anytime.
+                      Powers DQA Daily headlines and other narratives. DQA rule compilation can
+                      use a separate model below.
                     </p>
                     <div className="setting-toggle-row">
                       <div className="space-y-0.5">
@@ -597,6 +601,19 @@ export default function Settings() {
                         onChange={(e) => setAiModel(e.target.value)}
                         className="font-mono text-sm"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ai-compile-model">DQA compile model</Label>
+                      <Input
+                        id="ai-compile-model"
+                        value={aiCompileModel}
+                        onChange={(e) => setAiCompileModel(e.target.value)}
+                        placeholder="Leave blank to use the model above"
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Used only when compiling DQA rules from English (not runtime evaluation).
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="ai-key">OpenRouter API Key</Label>

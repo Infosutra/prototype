@@ -13,6 +13,16 @@ OPENROUTER_EXTRA_HEADERS = {
 
 
 def llm_config_from_app_settings(settings: AppSettings) -> LlmConfig:
+    return _llm_config_from_app_settings(settings, model=(settings.ai_model or DEFAULT_MODEL).strip())
+
+
+def llm_compile_config_from_app_settings(settings: AppSettings) -> LlmConfig:
+    compile_model = (getattr(settings, "ai_compile_model", None) or "").strip()
+    model = compile_model or (settings.ai_model or DEFAULT_MODEL).strip()
+    return _llm_config_from_app_settings(settings, model=model)
+
+
+def _llm_config_from_app_settings(settings: AppSettings, *, model: str) -> LlmConfig:
     provider = (settings.ai_provider or "openrouter").strip().lower()
     plugin_id = resolve_plugin_id(provider)
     extra_headers: dict[str, str] = {}
@@ -24,6 +34,6 @@ def llm_config_from_app_settings(settings: AppSettings) -> LlmConfig:
         plugin_id=plugin_id,
         api_key=(settings.ai_api_key or "").strip(),
         base_url=(settings.ai_base_url or DEFAULT_BASE_URL).strip(),
-        model=(settings.ai_model or DEFAULT_MODEL).strip(),
+        model=model,
         extra_headers=extra_headers,
     )
