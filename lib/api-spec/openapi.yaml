@@ -1776,6 +1776,146 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/relationships:
+    get:
+      tags:
+      - dqa
+      summary: List Dqa Relationships
+      operationId: listDqaRelationships
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DqaRelationshipOut'
+                title: Response Listdqarelationships
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - dqa
+      summary: Create Dqa Relationship
+      operationId: createDqaRelationship
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaRelationshipCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaRelationshipOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dqa/relationships/{relationship_id}:
+    put:
+      tags:
+      - dqa
+      summary: Update Dqa Relationship
+      operationId: updateDqaRelationship
+      parameters:
+      - name: relationship_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Relationship Id
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaRelationshipUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaRelationshipOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - dqa
+      summary: Delete Dqa Relationship
+      operationId: deleteDqaRelationship
+      parameters:
+      - name: relationship_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Relationship Id
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                title: Response Deletedqarelationship
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /dqa/triangulation:
     get:
       tags:
@@ -1923,6 +2063,279 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RulePackOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/rule-pack/versions:
+    get:
+      tags:
+      - dqa
+      summary: List Rule Pack Versions
+      operationId: listProjectRulePackVersions
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RulePackVersionOut'
+                title: Response Listprojectrulepackversions
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/compile-sessions/{session_id}:
+    get:
+      tags:
+      - dqa
+      summary: Get Dqa Compile Session
+      operationId: getDqaCompileSession
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaCompileSessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/compile-sessions:
+    get:
+      tags:
+      - dqa
+      summary: List Dqa Compile Sessions
+      operationId: listDqaCompileSessions
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DqaCompileSessionOut'
+                title: Response Listdqacompilesessions
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/test-rule:
+    post:
+      tags:
+      - dqa
+      summary: Test Dqa Rule
+      operationId: testDqaRule
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaTestRuleInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaTestRuleOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/explain:
+    post:
+      tags:
+      - dqa
+      summary: Explain Dqa Flag
+      operationId: explainDqaFlag
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaExplainFlagInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DqaExplainFlagOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/rules/{rule_id}/lifecycle:
+    post:
+      tags:
+      - dqa
+      summary: Set Dqa Rule Lifecycle
+      operationId: setDqaRuleLifecycle
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: rule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Rule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaRuleLifecycleInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Setdqarulelifecycle
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/rules:
+    get:
+      tags:
+      - dqa
+      summary: List Dqa Rules
+      operationId: listDqaRules
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: group
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group
+      - name: enabled_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Enabled Only
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response Listdqarules
         '422':
           description: Validation Error
           content:
@@ -2805,6 +3218,65 @@ components:
       required:
       - english
       title: DqaCompileInput
+    DqaCompileSessionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        projectId:
+          type: string
+          title: Projectid
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        status:
+          type: string
+          title: Status
+        english:
+          type: string
+          title: English
+        provider:
+          type: string
+          title: Provider
+        model:
+          type: string
+          title: Model
+        attempts:
+          type: integer
+          title: Attempts
+        latencyMsTotal:
+          type: integer
+          title: Latencymstotal
+        promptTokens:
+          type: integer
+          title: Prompttokens
+        completionTokens:
+          type: integer
+          title: Completiontokens
+        ruleId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ruleid
+        createdAt:
+          type: string
+          title: Createdat
+      type: object
+      required:
+      - id
+      - projectId
+      - status
+      - english
+      - provider
+      - model
+      - attempts
+      - latencyMsTotal
+      - promptTokens
+      - completionTokens
+      - createdAt
+      title: DqaCompileSessionOut
     DqaConversationTurn:
       properties:
         role:
@@ -2818,6 +3290,124 @@ components:
       - role
       - content
       title: DqaConversationTurn
+    DqaEvaluationMetrics:
+      properties:
+        durationMs:
+          type: number
+          title: Durationms
+          default: 0.0
+        submissions:
+          type: integer
+          title: Submissions
+          default: 0
+        rulesEvaluated:
+          type: integer
+          title: Rulesevaluated
+          default: 0
+        flagsProduced:
+          type: integer
+          title: Flagsproduced
+          default: 0
+        flaggedSubmissions:
+          type: integer
+          title: Flaggedsubmissions
+          default: 0
+        relationshipLookups:
+          type: integer
+          title: Relationshiplookups
+          default: 0
+        relationshipLookupMs:
+          type: number
+          title: Relationshiplookupms
+          default: 0.0
+        evaluationErrors:
+          items:
+            type: string
+          type: array
+          title: Evaluationerrors
+          default: []
+        slowRules:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Slowrules
+          default: []
+        cascadeProjects:
+          items:
+            type: string
+          type: array
+          title: Cascadeprojects
+          default: []
+        packVersion:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Packversion
+      type: object
+      title: DqaEvaluationMetrics
+    DqaExplainFlagInput:
+      properties:
+        rule:
+          additionalProperties: true
+          type: object
+          title: Rule
+        details:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Details
+        passes:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Passes
+      type: object
+      required:
+      - rule
+      title: DqaExplainFlagInput
+    DqaExplainFlagOut:
+      properties:
+        explanation:
+          anyOf:
+          - $ref: '#/components/schemas/DqaExplanation'
+          - additionalProperties: true
+            type: object
+          title: Explanation
+        debugTrace:
+          additionalProperties: true
+          type: object
+          title: Debugtrace
+          default: {}
+      type: object
+      required:
+      - explanation
+      title: DqaExplainFlagOut
+    DqaExplanation:
+      properties:
+        summary:
+          type: string
+          title: Summary
+        lines:
+          items:
+            type: string
+          type: array
+          title: Lines
+          default: []
+        wouldFlag:
+          type: boolean
+          title: Wouldflag
+          default: false
+        op:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Op
+      type: object
+      required:
+      - summary
+      title: DqaExplanation
     DqaFlagOut:
       properties:
         id:
@@ -2897,17 +3487,29 @@ components:
           - type: 'null'
           title: Enumerator
         wouldFlag:
-          type: boolean
+          anyOf:
+          - type: boolean
+          - type: 'null'
           title: Wouldflag
         details:
           additionalProperties: true
           type: object
           title: Details
           default: {}
+        outcome:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Outcome
+        explanation:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Explanation
       type: object
       required:
       - submissionId
-      - wouldFlag
       title: DqaPreviewExample
     DqaPreviewResult:
       properties:
@@ -2928,6 +3530,12 @@ components:
             $ref: '#/components/schemas/DqaPreviewExample'
           type: array
           title: Examples
+          default: []
+        warnings:
+          items:
+            $ref: '#/components/schemas/DqaRuleWarning'
+          type: array
+          title: Warnings
           default: []
       type: object
       required:
@@ -2952,12 +3560,136 @@ components:
         flags:
           type: integer
           title: Flags
+        cascadeProjects:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Cascadeprojects
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/DqaEvaluationMetrics'
+          - type: 'null'
       type: object
       required:
       - submissions
       - flaggedSubmissions
       - flags
       title: DqaRecomputeResult
+    DqaRelationshipCreate:
+      properties:
+        code:
+          type: string
+          title: Code
+        title:
+          type: string
+          title: Title
+          default: ''
+        sourceProjectId:
+          type: string
+          title: Sourceprojectid
+        targetProjectId:
+          type: string
+          title: Targetprojectid
+        sourceJoinField:
+          type: string
+          title: Sourcejoinfield
+        targetJoinField:
+          type: string
+          title: Targetjoinfield
+        cardinality:
+          type: string
+          title: Cardinality
+          default: one
+      type: object
+      required:
+      - code
+      - sourceProjectId
+      - targetProjectId
+      - sourceJoinField
+      - targetJoinField
+      title: DqaRelationshipCreate
+    DqaRelationshipOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        studyId:
+          type: string
+          title: Studyid
+        code:
+          type: string
+          title: Code
+        title:
+          type: string
+          title: Title
+        sourceProjectId:
+          type: string
+          title: Sourceprojectid
+        targetProjectId:
+          type: string
+          title: Targetprojectid
+        sourceJoinField:
+          type: string
+          title: Sourcejoinfield
+        targetJoinField:
+          type: string
+          title: Targetjoinfield
+        cardinality:
+          type: string
+          title: Cardinality
+      type: object
+      required:
+      - id
+      - studyId
+      - code
+      - title
+      - sourceProjectId
+      - targetProjectId
+      - sourceJoinField
+      - targetJoinField
+      - cardinality
+      title: DqaRelationshipOut
+    DqaRelationshipUpdate:
+      properties:
+        code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Code
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        sourceProjectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourceprojectid
+        targetProjectId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Targetprojectid
+        sourceJoinField:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sourcejoinfield
+        targetJoinField:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Targetjoinfield
+        cardinality:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cardinality
+      type: object
+      title: DqaRelationshipUpdate
     DqaRuleCount:
       properties:
         ruleId:
@@ -2979,6 +3711,33 @@ components:
       - severity
       - count
       title: DqaRuleCount
+    DqaRuleLifecycleInput:
+      properties:
+        status:
+          type: string
+          title: Status
+        enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enabled
+      type: object
+      required:
+      - status
+      title: DqaRuleLifecycleInput
+    DqaRuleWarning:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - code
+      - message
+      title: DqaRuleWarning
     DqaSummary:
       properties:
         projectId:
@@ -3015,6 +3774,130 @@ components:
       - amberFlags
       - byRule
       title: DqaSummary
+    DqaTestRecord:
+      properties:
+        submissionId:
+          type: string
+          title: Submissionid
+        koboId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Koboid
+        enumerator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Enumerator
+        outcome:
+          type: string
+          title: Outcome
+        wouldFlag:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Wouldflag
+        fieldValues:
+          additionalProperties: true
+          type: object
+          title: Fieldvalues
+          default: {}
+        related:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Related
+          default: []
+        explanation:
+          anyOf:
+          - $ref: '#/components/schemas/DqaExplanation'
+          - additionalProperties: true
+            type: object
+          title: Explanation
+          default: {}
+        debugTrace:
+          additionalProperties: true
+          type: object
+          title: Debugtrace
+          default: {}
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+          default: {}
+      type: object
+      required:
+      - submissionId
+      - outcome
+      title: DqaTestRecord
+    DqaTestRuleInput:
+      properties:
+        rule:
+          additionalProperties: true
+          type: object
+          title: Rule
+        submissionIds:
+          items:
+            type: string
+          type: array
+          title: Submissionids
+          default: []
+        limit:
+          type: integer
+          title: Limit
+          default: 50
+      type: object
+      required:
+      - rule
+      title: DqaTestRuleInput
+    DqaTestRuleOut:
+      properties:
+        submissionsChecked:
+          type: integer
+          title: Submissionschecked
+        flagCount:
+          type: integer
+          title: Flagcount
+        passCount:
+          type: integer
+          title: Passcount
+        notApplicableCount:
+          type: integer
+          title: Notapplicablecount
+        missingDataCount:
+          type: integer
+          title: Missingdatacount
+          default: 0
+        ambiguousRelatedCount:
+          type: integer
+          title: Ambiguousrelatedcount
+          default: 0
+        records:
+          items:
+            $ref: '#/components/schemas/DqaTestRecord'
+          type: array
+          title: Records
+          default: []
+        examples:
+          items:
+            $ref: '#/components/schemas/DqaTestRecord'
+          type: array
+          title: Examples
+          default: []
+        warnings:
+          items:
+            $ref: '#/components/schemas/DqaRuleWarning'
+          type: array
+          title: Warnings
+          default: []
+      type: object
+      required:
+      - submissionsChecked
+      - flagCount
+      - passCount
+      - notApplicableCount
+      title: DqaTestRuleOut
     DqaValidateRuleInput:
       properties:
         rule:
@@ -3045,6 +3928,16 @@ components:
           anyOf:
           - $ref: '#/components/schemas/DqaPreviewResult'
           - type: 'null'
+        test:
+          anyOf:
+          - $ref: '#/components/schemas/DqaTestRuleOut'
+          - type: 'null'
+        warnings:
+          items:
+            $ref: '#/components/schemas/DqaRuleWarning'
+          type: array
+          title: Warnings
+          default: []
       type: object
       required:
       - status
@@ -4143,6 +5036,10 @@ components:
           additionalProperties: true
           type: object
           title: Pack
+        version:
+          type: integer
+          title: Version
+          default: 1
       type: object
       required:
       - projectId
@@ -4158,6 +5055,49 @@ components:
       required:
       - pack
       title: RulePackUpdate
+    RulePackVersionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        projectId:
+          type: string
+          title: Projectid
+        version:
+          type: integer
+          title: Version
+        status:
+          type: string
+          title: Status
+        source:
+          type: string
+          title: Source
+        compileSessionId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Compilesessionid
+        changeNote:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Changenote
+        createdAt:
+          type: string
+          title: Createdat
+        ruleCount:
+          type: integer
+          title: Rulecount
+          default: 0
+      type: object
+      required:
+      - id
+      - projectId
+      - version
+      - status
+      - source
+      - createdAt
+      title: RulePackVersionOut
     SettingsOut:
       properties:
         smtp:

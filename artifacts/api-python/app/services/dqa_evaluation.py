@@ -20,6 +20,7 @@ from app.services.dqa_relationship_resolver import (
     load_study_relationships,
     source_projects_for_target,
 )
+from app.domain.dqa.rule_management import active_rules
 from app.services.dqa_rule_packs import get_pack_for_project, get_pack_version
 
 logger = logging.getLogger(__name__)
@@ -147,9 +148,7 @@ def evaluate_submission(
 
     data = submission.data if isinstance(submission.data, dict) else {}
     flags: list[DqaFlag] = []
-    for rule in pack.get("rules") or []:
-        if not isinstance(rule, dict):
-            continue
+    for rule in active_rules(pack.get("rules") or []):
         check = rule.get("check")
         if check is None and rule.get("checks"):
             check = {"op": "all", "checks": rule["checks"]}

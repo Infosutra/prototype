@@ -27,13 +27,25 @@ import type {
   AudioRecordingUpdate,
   BodyCreateAudioRecording,
   ConnectionTestResult,
+  CreateDqaRelationshipParams,
   DashboardSummary,
+  DeleteDqaRelationship200,
+  DeleteDqaRelationshipParams,
   DownloadAudioRecordingTranscriptParams,
   DownloadReportParams,
   DqaCompileInput,
+  DqaCompileSessionOut,
+  DqaExplainFlagInput,
+  DqaExplainFlagOut,
   DqaFlagOut,
   DqaRecomputeResult,
+  DqaRelationshipCreate,
+  DqaRelationshipOut,
+  DqaRelationshipUpdate,
+  DqaRuleLifecycleInput,
   DqaSummary,
+  DqaTestRuleInput,
+  DqaTestRuleOut,
   DqaValidateRuleInput,
   DqaValidateRuleOut,
   FormFieldOut,
@@ -61,6 +73,11 @@ import type {
   InsightGenerateInput,
   InsightInput,
   InsightOut,
+  ListDqaCompileSessionsParams,
+  ListDqaRelationshipsParams,
+  ListDqaRules200Item,
+  ListDqaRulesParams,
+  ListProjectRulePackVersionsParams,
   OkResponse,
   ProjectAnalytics,
   ProjectDqaStat,
@@ -76,6 +93,8 @@ import type {
   ReportScheduleUpdate,
   RulePackOut,
   RulePackUpdate,
+  RulePackVersionOut,
+  SetDqaRuleLifecycle200,
   SettingsOut,
   SettingsUpdate,
   ShareReportInput,
@@ -99,6 +118,7 @@ import type {
   TriangulationViewDefinitionUpdate,
   TriangulationViewInfo,
   TriangulationViewOut,
+  UpdateDqaRelationshipParams,
   UsageEventOut,
   UsageSummaryOut
 } from './api.schemas';
@@ -4741,6 +4761,327 @@ export const useRecomputeDqa = <TError = ErrorType<HTTPValidationError>,
       return useMutation(getRecomputeDqaMutationOptions(options));
     }
 
+export const getListDqaRelationshipsUrl = (params?: ListDqaRelationshipsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dqa/relationships?${stringifiedParams}` : `/api/dqa/relationships`
+}
+
+/**
+ * @summary List Dqa Relationships
+ */
+export const listDqaRelationships = async (params?: ListDqaRelationshipsParams, options?: RequestInit): Promise<DqaRelationshipOut[]> => {
+
+  return customFetch<DqaRelationshipOut[]>(getListDqaRelationshipsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDqaRelationshipsQueryKey = (params?: ListDqaRelationshipsParams,) => {
+    return [
+    `/api/dqa/relationships`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDqaRelationshipsQueryOptions = <TData = Awaited<ReturnType<typeof listDqaRelationships>>, TError = ErrorType<HTTPValidationError>>(params?: ListDqaRelationshipsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDqaRelationships>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDqaRelationshipsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDqaRelationships>>> = ({ signal }) => listDqaRelationships(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDqaRelationships>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDqaRelationshipsQueryResult = NonNullable<Awaited<ReturnType<typeof listDqaRelationships>>>
+export type ListDqaRelationshipsQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Dqa Relationships
+ */
+
+export function useListDqaRelationships<TData = Awaited<ReturnType<typeof listDqaRelationships>>, TError = ErrorType<HTTPValidationError>>(
+ params?: ListDqaRelationshipsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDqaRelationships>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDqaRelationshipsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDqaRelationshipUrl = (params?: CreateDqaRelationshipParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dqa/relationships?${stringifiedParams}` : `/api/dqa/relationships`
+}
+
+/**
+ * @summary Create Dqa Relationship
+ */
+export const createDqaRelationship = async (dqaRelationshipCreate: DqaRelationshipCreate,
+    params?: CreateDqaRelationshipParams, options?: RequestInit): Promise<DqaRelationshipOut> => {
+
+  return customFetch<DqaRelationshipOut>(getCreateDqaRelationshipUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaRelationshipCreate)
+  }
+);}
+
+
+
+
+export const getCreateDqaRelationshipMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDqaRelationship>>, TError,{data: BodyType<DqaRelationshipCreate>;params?: CreateDqaRelationshipParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDqaRelationship>>, TError,{data: BodyType<DqaRelationshipCreate>;params?: CreateDqaRelationshipParams}, TContext> => {
+
+const mutationKey = ['createDqaRelationship'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDqaRelationship>>, {data: BodyType<DqaRelationshipCreate>;params?: CreateDqaRelationshipParams}> = (props) => {
+          const {data,params} = props ?? {};
+
+          return  createDqaRelationship(data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDqaRelationshipMutationResult = NonNullable<Awaited<ReturnType<typeof createDqaRelationship>>>
+    export type CreateDqaRelationshipMutationBody = BodyType<DqaRelationshipCreate>
+    export type CreateDqaRelationshipMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Dqa Relationship
+ */
+export const useCreateDqaRelationship = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDqaRelationship>>, TError,{data: BodyType<DqaRelationshipCreate>;params?: CreateDqaRelationshipParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDqaRelationship>>,
+        TError,
+        {data: BodyType<DqaRelationshipCreate>;params?: CreateDqaRelationshipParams},
+        TContext
+      > => {
+      return useMutation(getCreateDqaRelationshipMutationOptions(options));
+    }
+
+export const getUpdateDqaRelationshipUrl = (relationshipId: string,
+    params?: UpdateDqaRelationshipParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dqa/relationships/${relationshipId}?${stringifiedParams}` : `/api/dqa/relationships/${relationshipId}`
+}
+
+/**
+ * @summary Update Dqa Relationship
+ */
+export const updateDqaRelationship = async (relationshipId: string,
+    dqaRelationshipUpdate: DqaRelationshipUpdate,
+    params?: UpdateDqaRelationshipParams, options?: RequestInit): Promise<DqaRelationshipOut> => {
+
+  return customFetch<DqaRelationshipOut>(getUpdateDqaRelationshipUrl(relationshipId,params),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaRelationshipUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateDqaRelationshipMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDqaRelationship>>, TError,{relationshipId: string;data: BodyType<DqaRelationshipUpdate>;params?: UpdateDqaRelationshipParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDqaRelationship>>, TError,{relationshipId: string;data: BodyType<DqaRelationshipUpdate>;params?: UpdateDqaRelationshipParams}, TContext> => {
+
+const mutationKey = ['updateDqaRelationship'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDqaRelationship>>, {relationshipId: string;data: BodyType<DqaRelationshipUpdate>;params?: UpdateDqaRelationshipParams}> = (props) => {
+          const {relationshipId,data,params} = props ?? {};
+
+          return  updateDqaRelationship(relationshipId,data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDqaRelationshipMutationResult = NonNullable<Awaited<ReturnType<typeof updateDqaRelationship>>>
+    export type UpdateDqaRelationshipMutationBody = BodyType<DqaRelationshipUpdate>
+    export type UpdateDqaRelationshipMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Dqa Relationship
+ */
+export const useUpdateDqaRelationship = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDqaRelationship>>, TError,{relationshipId: string;data: BodyType<DqaRelationshipUpdate>;params?: UpdateDqaRelationshipParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDqaRelationship>>,
+        TError,
+        {relationshipId: string;data: BodyType<DqaRelationshipUpdate>;params?: UpdateDqaRelationshipParams},
+        TContext
+      > => {
+      return useMutation(getUpdateDqaRelationshipMutationOptions(options));
+    }
+
+export const getDeleteDqaRelationshipUrl = (relationshipId: string,
+    params?: DeleteDqaRelationshipParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dqa/relationships/${relationshipId}?${stringifiedParams}` : `/api/dqa/relationships/${relationshipId}`
+}
+
+/**
+ * @summary Delete Dqa Relationship
+ */
+export const deleteDqaRelationship = async (relationshipId: string,
+    params?: DeleteDqaRelationshipParams, options?: RequestInit): Promise<DeleteDqaRelationship200> => {
+
+  return customFetch<DeleteDqaRelationship200>(getDeleteDqaRelationshipUrl(relationshipId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteDqaRelationshipMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDqaRelationship>>, TError,{relationshipId: string;params?: DeleteDqaRelationshipParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteDqaRelationship>>, TError,{relationshipId: string;params?: DeleteDqaRelationshipParams}, TContext> => {
+
+const mutationKey = ['deleteDqaRelationship'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteDqaRelationship>>, {relationshipId: string;params?: DeleteDqaRelationshipParams}> = (props) => {
+          const {relationshipId,params} = props ?? {};
+
+          return  deleteDqaRelationship(relationshipId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteDqaRelationshipMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDqaRelationship>>>
+
+    export type DeleteDqaRelationshipMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Delete Dqa Relationship
+ */
+export const useDeleteDqaRelationship = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDqaRelationship>>, TError,{relationshipId: string;params?: DeleteDqaRelationshipParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteDqaRelationship>>,
+        TError,
+        {relationshipId: string;params?: DeleteDqaRelationshipParams},
+        TContext
+      > => {
+      return useMutation(getDeleteDqaRelationshipMutationOptions(options));
+    }
+
 export const getGetTriangulationViewsUrl = (params?: GetTriangulationViewsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -5140,6 +5481,570 @@ export const useUpdateProjectRulePack = <TError = ErrorType<HTTPValidationError>
       > => {
       return useMutation(getUpdateProjectRulePackMutationOptions(options));
     }
+
+export const getListProjectRulePackVersionsUrl = (projectId: string,
+    params?: ListProjectRulePackVersionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/projects/${projectId}/rule-pack/versions?${stringifiedParams}` : `/api/projects/${projectId}/rule-pack/versions`
+}
+
+/**
+ * @summary List Rule Pack Versions
+ */
+export const listProjectRulePackVersions = async (projectId: string,
+    params?: ListProjectRulePackVersionsParams, options?: RequestInit): Promise<RulePackVersionOut[]> => {
+
+  return customFetch<RulePackVersionOut[]>(getListProjectRulePackVersionsUrl(projectId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectRulePackVersionsQueryKey = (projectId: string,
+    params?: ListProjectRulePackVersionsParams,) => {
+    return [
+    `/api/projects/${projectId}/rule-pack/versions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListProjectRulePackVersionsQueryOptions = <TData = Awaited<ReturnType<typeof listProjectRulePackVersions>>, TError = ErrorType<HTTPValidationError>>(projectId: string,
+    params?: ListProjectRulePackVersionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectRulePackVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectRulePackVersionsQueryKey(projectId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectRulePackVersions>>> = ({ signal }) => listProjectRulePackVersions(projectId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectRulePackVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectRulePackVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectRulePackVersions>>>
+export type ListProjectRulePackVersionsQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Rule Pack Versions
+ */
+
+export function useListProjectRulePackVersions<TData = Awaited<ReturnType<typeof listProjectRulePackVersions>>, TError = ErrorType<HTTPValidationError>>(
+ projectId: string,
+    params?: ListProjectRulePackVersionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectRulePackVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectRulePackVersionsQueryOptions(projectId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDqaCompileSessionUrl = (projectId: string,
+    sessionId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/dqa/compile-sessions/${sessionId}`
+}
+
+/**
+ * @summary Get Dqa Compile Session
+ */
+export const getDqaCompileSession = async (projectId: string,
+    sessionId: string, options?: RequestInit): Promise<DqaCompileSessionOut> => {
+
+  return customFetch<DqaCompileSessionOut>(getGetDqaCompileSessionUrl(projectId,sessionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDqaCompileSessionQueryKey = (projectId: string,
+    sessionId: string,) => {
+    return [
+    `/api/projects/${projectId}/dqa/compile-sessions/${sessionId}`
+    ] as const;
+    }
+
+
+export const getGetDqaCompileSessionQueryOptions = <TData = Awaited<ReturnType<typeof getDqaCompileSession>>, TError = ErrorType<HTTPValidationError>>(projectId: string,
+    sessionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDqaCompileSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDqaCompileSessionQueryKey(projectId,sessionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDqaCompileSession>>> = ({ signal }) => getDqaCompileSession(projectId,sessionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined && sessionId !== null && sessionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDqaCompileSession>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDqaCompileSessionQueryResult = NonNullable<Awaited<ReturnType<typeof getDqaCompileSession>>>
+export type GetDqaCompileSessionQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Dqa Compile Session
+ */
+
+export function useGetDqaCompileSession<TData = Awaited<ReturnType<typeof getDqaCompileSession>>, TError = ErrorType<HTTPValidationError>>(
+ projectId: string,
+    sessionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDqaCompileSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDqaCompileSessionQueryOptions(projectId,sessionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDqaCompileSessionsUrl = (projectId: string,
+    params?: ListDqaCompileSessionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/projects/${projectId}/dqa/compile-sessions?${stringifiedParams}` : `/api/projects/${projectId}/dqa/compile-sessions`
+}
+
+/**
+ * @summary List Dqa Compile Sessions
+ */
+export const listDqaCompileSessions = async (projectId: string,
+    params?: ListDqaCompileSessionsParams, options?: RequestInit): Promise<DqaCompileSessionOut[]> => {
+
+  return customFetch<DqaCompileSessionOut[]>(getListDqaCompileSessionsUrl(projectId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDqaCompileSessionsQueryKey = (projectId: string,
+    params?: ListDqaCompileSessionsParams,) => {
+    return [
+    `/api/projects/${projectId}/dqa/compile-sessions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDqaCompileSessionsQueryOptions = <TData = Awaited<ReturnType<typeof listDqaCompileSessions>>, TError = ErrorType<HTTPValidationError>>(projectId: string,
+    params?: ListDqaCompileSessionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDqaCompileSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDqaCompileSessionsQueryKey(projectId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDqaCompileSessions>>> = ({ signal }) => listDqaCompileSessions(projectId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDqaCompileSessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDqaCompileSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof listDqaCompileSessions>>>
+export type ListDqaCompileSessionsQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Dqa Compile Sessions
+ */
+
+export function useListDqaCompileSessions<TData = Awaited<ReturnType<typeof listDqaCompileSessions>>, TError = ErrorType<HTTPValidationError>>(
+ projectId: string,
+    params?: ListDqaCompileSessionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDqaCompileSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDqaCompileSessionsQueryOptions(projectId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTestDqaRuleUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/dqa/test-rule`
+}
+
+/**
+ * @summary Test Dqa Rule
+ */
+export const testDqaRule = async (projectId: string,
+    dqaTestRuleInput: DqaTestRuleInput, options?: RequestInit): Promise<DqaTestRuleOut> => {
+
+  return customFetch<DqaTestRuleOut>(getTestDqaRuleUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaTestRuleInput)
+  }
+);}
+
+
+
+
+export const getTestDqaRuleMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testDqaRule>>, TError,{projectId: string;data: BodyType<DqaTestRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testDqaRule>>, TError,{projectId: string;data: BodyType<DqaTestRuleInput>}, TContext> => {
+
+const mutationKey = ['testDqaRule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testDqaRule>>, {projectId: string;data: BodyType<DqaTestRuleInput>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  testDqaRule(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestDqaRuleMutationResult = NonNullable<Awaited<ReturnType<typeof testDqaRule>>>
+    export type TestDqaRuleMutationBody = BodyType<DqaTestRuleInput>
+    export type TestDqaRuleMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Test Dqa Rule
+ */
+export const useTestDqaRule = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testDqaRule>>, TError,{projectId: string;data: BodyType<DqaTestRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testDqaRule>>,
+        TError,
+        {projectId: string;data: BodyType<DqaTestRuleInput>},
+        TContext
+      > => {
+      return useMutation(getTestDqaRuleMutationOptions(options));
+    }
+
+export const getExplainDqaFlagUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/dqa/explain`
+}
+
+/**
+ * @summary Explain Dqa Flag
+ */
+export const explainDqaFlag = async (projectId: string,
+    dqaExplainFlagInput: DqaExplainFlagInput, options?: RequestInit): Promise<DqaExplainFlagOut> => {
+
+  return customFetch<DqaExplainFlagOut>(getExplainDqaFlagUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaExplainFlagInput)
+  }
+);}
+
+
+
+
+export const getExplainDqaFlagMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof explainDqaFlag>>, TError,{projectId: string;data: BodyType<DqaExplainFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof explainDqaFlag>>, TError,{projectId: string;data: BodyType<DqaExplainFlagInput>}, TContext> => {
+
+const mutationKey = ['explainDqaFlag'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof explainDqaFlag>>, {projectId: string;data: BodyType<DqaExplainFlagInput>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  explainDqaFlag(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExplainDqaFlagMutationResult = NonNullable<Awaited<ReturnType<typeof explainDqaFlag>>>
+    export type ExplainDqaFlagMutationBody = BodyType<DqaExplainFlagInput>
+    export type ExplainDqaFlagMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Explain Dqa Flag
+ */
+export const useExplainDqaFlag = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof explainDqaFlag>>, TError,{projectId: string;data: BodyType<DqaExplainFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof explainDqaFlag>>,
+        TError,
+        {projectId: string;data: BodyType<DqaExplainFlagInput>},
+        TContext
+      > => {
+      return useMutation(getExplainDqaFlagMutationOptions(options));
+    }
+
+export const getSetDqaRuleLifecycleUrl = (projectId: string,
+    ruleId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}/dqa/rules/${ruleId}/lifecycle`
+}
+
+/**
+ * @summary Set Dqa Rule Lifecycle
+ */
+export const setDqaRuleLifecycle = async (projectId: string,
+    ruleId: string,
+    dqaRuleLifecycleInput: DqaRuleLifecycleInput, options?: RequestInit): Promise<SetDqaRuleLifecycle200> => {
+
+  return customFetch<SetDqaRuleLifecycle200>(getSetDqaRuleLifecycleUrl(projectId,ruleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dqaRuleLifecycleInput)
+  }
+);}
+
+
+
+
+export const getSetDqaRuleLifecycleMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDqaRuleLifecycle>>, TError,{projectId: string;ruleId: string;data: BodyType<DqaRuleLifecycleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setDqaRuleLifecycle>>, TError,{projectId: string;ruleId: string;data: BodyType<DqaRuleLifecycleInput>}, TContext> => {
+
+const mutationKey = ['setDqaRuleLifecycle'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setDqaRuleLifecycle>>, {projectId: string;ruleId: string;data: BodyType<DqaRuleLifecycleInput>}> = (props) => {
+          const {projectId,ruleId,data} = props ?? {};
+
+          return  setDqaRuleLifecycle(projectId,ruleId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetDqaRuleLifecycleMutationResult = NonNullable<Awaited<ReturnType<typeof setDqaRuleLifecycle>>>
+    export type SetDqaRuleLifecycleMutationBody = BodyType<DqaRuleLifecycleInput>
+    export type SetDqaRuleLifecycleMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Set Dqa Rule Lifecycle
+ */
+export const useSetDqaRuleLifecycle = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDqaRuleLifecycle>>, TError,{projectId: string;ruleId: string;data: BodyType<DqaRuleLifecycleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setDqaRuleLifecycle>>,
+        TError,
+        {projectId: string;ruleId: string;data: BodyType<DqaRuleLifecycleInput>},
+        TContext
+      > => {
+      return useMutation(getSetDqaRuleLifecycleMutationOptions(options));
+    }
+
+export const getListDqaRulesUrl = (projectId: string,
+    params?: ListDqaRulesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/projects/${projectId}/dqa/rules?${stringifiedParams}` : `/api/projects/${projectId}/dqa/rules`
+}
+
+/**
+ * @summary List Dqa Rules
+ */
+export const listDqaRules = async (projectId: string,
+    params?: ListDqaRulesParams, options?: RequestInit): Promise<ListDqaRules200Item[]> => {
+
+  return customFetch<ListDqaRules200Item[]>(getListDqaRulesUrl(projectId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDqaRulesQueryKey = (projectId: string,
+    params?: ListDqaRulesParams,) => {
+    return [
+    `/api/projects/${projectId}/dqa/rules`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDqaRulesQueryOptions = <TData = Awaited<ReturnType<typeof listDqaRules>>, TError = ErrorType<HTTPValidationError>>(projectId: string,
+    params?: ListDqaRulesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDqaRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDqaRulesQueryKey(projectId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDqaRules>>> = ({ signal }) => listDqaRules(projectId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDqaRules>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDqaRulesQueryResult = NonNullable<Awaited<ReturnType<typeof listDqaRules>>>
+export type ListDqaRulesQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Dqa Rules
+ */
+
+export function useListDqaRules<TData = Awaited<ReturnType<typeof listDqaRules>>, TError = ErrorType<HTTPValidationError>>(
+ projectId: string,
+    params?: ListDqaRulesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDqaRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDqaRulesQueryOptions(projectId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getCompileDqaRuleUrl = (projectId: string,) => {
 

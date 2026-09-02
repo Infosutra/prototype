@@ -30,6 +30,9 @@ Rules:
 - For field-to-field comparisons use field_b (e.g. gt with field + field_b or related_field).
 - For duration bands use duration_minutes_gte with start_field, end_field, optional min and max.
 - If the requirement is ambiguous, set clarifying_question to a single concise question and set rule to null.
+- Ask clarifying questions only when necessary. Do not ask which field to use if exactly one field matches the requirement.
+- For inter-form rules, ask which relationship to use only when multiple relationships are listed in source_relationships.
+- For threshold edits on an existing_rule, preserve the rule id and change only the requested threshold/value.
 - If you can compile, set clarifying_question to null and provide rule + explanation.
 
 Response schema:

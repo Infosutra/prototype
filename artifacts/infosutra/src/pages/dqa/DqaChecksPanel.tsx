@@ -10,10 +10,15 @@ import {
   useGetProjectFormFields,
   useGetProjectRulePack,
   useRecomputeDqa,
+  useSetDqaRuleLifecycle,
+  useTestDqaRule,
   useUpdateProjectRulePack,
   useValidateDqaRule,
   type DqaCompileInput,
   type DqaPreviewResult,
+  type DqaRuleWarning,
+  type DqaTestRecord,
+  type DqaTestRuleOut,
   type DqaValidationResult,
 } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
@@ -25,18 +30,39 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, ChevronDown, HelpCircle } from "lucide-react";
+import { AlertCircle, ChevronDown, HelpCircle, Search } from "lucide-react";
 
 type View = "table" | "add" | "edit";
 type ChatPhase = "idle" | "thinking" | "streaming" | "done";
 type CompileStatus = "idle" | "loading" | "success" | "needs_clarification" | "invalid";
+type RuleLifecycleStatus = "draft" | "reviewed" | "approved" | "active";
 
 type DisplayRule = {
   id: string;
   english: string;
-  status: "compiled" | "draft";
+  description: string;
+  status: RuleLifecycleStatus;
+  enabled: boolean;
+  group: string;
   raw: Record<string, unknown>;
+};
+
+type RuleDiff = {
+  changeCount?: number;
+  changes?: Array<{
+    path: string;
+    change: string;
+    before?: unknown;
+    after?: unknown;
+  }>;
 };
 
 type ConversationTurn = { role: "user" | "assistant"; content: string };
@@ -50,6 +76,9 @@ type CompileResponse = {
   message?: string;
   validation?: DqaValidationResult;
   preview?: DqaPreviewResult;
+  test?: DqaTestRuleOut;
+  diff?: RuleDiff;
+  warnings?: DqaRuleWarning[];
   lastProposal?: Record<string, unknown>;
 };
 
@@ -67,15 +96,70 @@ function ruleEnglish(rule: Record<string, unknown>): string {
   return String(rule.id || "Untitled rule");
 }
 
+function ruleLifecycleStatus(rule: Record<string, unknown>): RuleLifecycleStatus {
+  const status = String(rule.status || "").toLowerCase();
+  if (status === "draft" || status === "reviewed" || status === "approved" || status === "active") {
+    return status;
+  }
+  if (rule._draft) return "draft";
+  return "active";
+}
+
+function ruleIsEnabled(rule: Record<string, unknown>): boolean {
+  if (rule.enabled === false) return false;
+  return ruleLifecycleStatus(rule) === "active";
+}
+
+function applyLifecycle(
+  rule: Record<string, unknown>,
+  status: RuleLifecycleStatus,
+): Record<string, unknown> {
+  const meta = (rule.meta && typeof rule.meta === "object" ? rule.meta : {}) as Record<
+    string,
+    unknown
+  >;
+  const audit = (meta.audit && typeof meta.audit === "object" ? meta.audit : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    ...rule,
+    status,
+    enabled: status === "active",
+    meta: {
+      ...meta,
+      audit: {
+        ...audit,
+        status,
+        ...(status === "active"
+          ? { approved: true, activated_at: new Date().toISOString() }
+          : {}),
+      },
+    },
+  };
+}
+
 function packRulesToDisplay(rules: unknown[]): DisplayRule[] {
   return rules
     .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
     .map((rule) => ({
       id: String(rule.id || ""),
       english: ruleEnglish(rule),
-      status: (rule as Record<string, unknown>)._draft ? "draft" : "compiled",
+      description: String(rule.description || rule.title || "").trim(),
+      status: ruleLifecycleStatus(rule),
+      enabled: ruleIsEnabled(rule),
+      group: String(rule.group || "").trim(),
       raw: rule,
     }));
+}
+
+function statusBadgeVariant(
+  status: RuleLifecycleStatus,
+): "default" | "secondary" | "outline" | "destructive" {
+  if (status === "active") return "default";
+  if (status === "draft") return "secondary";
+  if (status === "approved") return "outline";
+  return "outline";
 }
 
 function runThinkingWhileLoading(
@@ -145,6 +229,185 @@ function AssistantBubble({ text, streaming }: { text: string; streaming?: boolea
   );
 }
 
+function WarningsList({ warnings }: { warnings: DqaRuleWarning[] }) {
+  if (!warnings.length) return null;
+  return (
+    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm space-y-1">
+      <p className="font-semibold text-amber-800 dark:text-amber-200">Quality warnings</p>
+      {warnings.map((w) => (
+        <p key={`${w.code}-${w.message}`} className="text-xs text-amber-900 dark:text-amber-100">
+          {w.message}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function RuleDiffPanel({ diff }: { diff: RuleDiff | null }) {
+  if (!diff?.changes?.length) return null;
+  return (
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/50">
+        <ChevronDown className="h-4 w-4" />
+        Proposed changes ({diff.changeCount ?? diff.changes.length})
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2 space-y-1">
+        {diff.changes.map((change) => (
+          <div key={change.path} className="rounded border px-2 py-1.5 text-xs font-mono">
+            <span className="text-muted-foreground">{change.path}</span>{" "}
+            <Badge variant="outline" className="text-[10px] ml-1">
+              {change.change}
+            </Badge>
+            {change.before !== undefined && (
+              <p className="text-destructive mt-0.5">− {JSON.stringify(change.before)}</p>
+            )}
+            {change.after !== undefined && (
+              <p className="text-green-700 dark:text-green-400 mt-0.5">
+                + {JSON.stringify(change.after)}
+              </p>
+            )}
+          </div>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function explanationLines(record: DqaTestRecord): string[] {
+  const exp = record.explanation;
+  if (exp && typeof exp === "object" && "lines" in exp && Array.isArray(exp.lines)) {
+    return exp.lines.map(String);
+  }
+  if (exp && typeof exp === "object" && "summary" in exp && typeof exp.summary === "string") {
+    return [exp.summary];
+  }
+  return [];
+}
+
+function previewToTest(preview: DqaPreviewResult | null): DqaTestRuleOut | null {
+  if (!preview) return null;
+  return {
+    submissionsChecked: preview.submissionsChecked,
+    flagCount: preview.flagCount,
+    passCount: preview.passCount,
+    notApplicableCount: preview.notApplicableCount,
+    examples: (preview.examples ?? []).map((ex) => ({
+      submissionId: ex.submissionId,
+      koboId: ex.koboId,
+      enumerator: ex.enumerator,
+      outcome: ex.outcome ?? (ex.wouldFlag ? "fail" : "pass"),
+      wouldFlag: ex.wouldFlag,
+      explanation: ex.explanation ?? {},
+      details: ex.details ?? {},
+    })),
+    warnings: preview.warnings,
+  };
+}
+
+function RuleTestWorkspace({ test }: { test: DqaTestRuleOut | null }) {
+  if (!test) return null;
+  const examples = test.records?.length ? test.records : test.examples ?? [];
+  return (
+    <div className="rounded-lg border p-3 space-y-3 text-sm">
+      <p className="font-semibold">Rule test workspace</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div>
+          <p className="text-2xl font-semibold">{test.submissionsChecked}</p>
+          <p className="text-xs text-muted-foreground">Records tested</p>
+        </div>
+        <div>
+          <p className="text-2xl font-semibold text-green-700 dark:text-green-400">
+            {test.passCount}
+          </p>
+          <p className="text-xs text-muted-foreground">Passing</p>
+        </div>
+        <div>
+          <p className="text-2xl font-semibold text-destructive">{test.flagCount}</p>
+          <p className="text-xs text-muted-foreground">Failing / flagged</p>
+        </div>
+        <div>
+          <p className="text-2xl font-semibold text-muted-foreground">
+            {test.missingDataCount ?? 0}
+          </p>
+          <p className="text-xs text-muted-foreground">Missing data</p>
+        </div>
+      </div>
+      {(test.notApplicableCount ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {test.notApplicableCount} not applicable
+          {(test.ambiguousRelatedCount ?? 0) > 0 &&
+            ` · ${test.ambiguousRelatedCount} ambiguous related matches`}
+        </p>
+      )}
+      {examples.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">Sample records</p>
+          {examples.slice(0, 6).map((row) => (
+            <Collapsible key={row.submissionId}>
+              <CollapsibleTrigger className="flex w-full items-center justify-between rounded border px-2 py-1.5 text-left text-xs hover:bg-muted/40">
+                <span>
+                  {row.koboId || row.submissionId}
+                  {row.enumerator ? ` · ${row.enumerator}` : ""}
+                </span>
+                <Badge
+                  variant={
+                    row.outcome === "fail"
+                      ? "destructive"
+                      : row.outcome === "pass"
+                        ? "default"
+                        : "secondary"
+                  }
+                  className="text-[10px]"
+                >
+                  {row.outcome}
+                </Badge>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="px-2 py-1.5 space-y-1 text-xs">
+                {explanationLines(row).map((line) => (
+                  <p key={line} className="text-muted-foreground">
+                    {line}
+                  </p>
+                ))}
+                {row.fieldValues && Object.keys(row.fieldValues).length > 0 && (
+                  <div className="font-mono text-[11px] space-y-0.5">
+                    {Object.entries(row.fieldValues).map(([k, v]) => (
+                      <p key={k}>
+                        {k}: {JSON.stringify(v)}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {(row.related?.length ?? 0) > 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    {row.related!.map((rel) => (
+                      <p key={String(rel.relationship)}>
+                        Related: {String(rel.relationship)} ({String(rel.status)})
+                        {rel.joinKey ? ` · join ${String(rel.joinKey)}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {row.debugTrace && Object.keys(row.debugTrace).length > 0 && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="text-[11px] underline">
+                      Debug trace
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <pre className="text-[10px] overflow-auto max-h-32">
+                        {JSON.stringify(row.debugTrace, null, 2)}
+                      </pre>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RuleAuthoringChat({
   projectId,
   mode,
@@ -160,10 +423,11 @@ function RuleAuthoringChat({
   existingRule: Record<string, unknown> | null;
   fields: { name: string; label: string }[];
   onBack: () => void;
-  onApprove: (rule: Record<string, unknown>) => void;
+  onApprove: (rule: Record<string, unknown>, lifecycle: RuleLifecycleStatus) => void;
 }) {
   const compileRule = useCompileDqaRule();
   const validateRule = useValidateDqaRule();
+  const testRuleMutation = useTestDqaRule();
 
   const [composer, setComposer] = useState("");
   const [conversation, setConversation] = useState<ConversationTurn[]>([]);
@@ -177,10 +441,17 @@ function RuleAuthoringChat({
   const [compileStatus, setCompileStatus] = useState<CompileStatus>("idle");
   const [compiledRule, setCompiledRule] = useState<Record<string, unknown> | null>(null);
   const [preview, setPreview] = useState<DqaPreviewResult | null>(null);
+  const [testResult, setTestResult] = useState<DqaTestRuleOut | null>(null);
+  const [ruleDiff, setRuleDiff] = useState<RuleDiff | null>(null);
+  const [qualityWarnings, setQualityWarnings] = useState<DqaRuleWarning[]>([]);
   const [validation, setValidation] = useState<DqaValidationResult | null>(null);
   const [compileError, setCompileError] = useState<string | null>(null);
   const [jsonDraft, setJsonDraft] = useState("");
+  const [confirmActivate, setConfirmActivate] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
+
+  const editingActiveRule =
+    mode === "edit" && existingRule !== null && ruleLifecycleStatus(existingRule) === "active";
 
   useEffect(() => () => cleanupRef.current?.(), []);
 
@@ -199,6 +470,9 @@ function RuleAuthoringChat({
       setCompileStatus("needs_clarification");
       setCompiledRule(null);
       setPreview(null);
+      setTestResult(null);
+      setRuleDiff(null);
+      setQualityWarnings([]);
       setValidation(data.validation ?? null);
       setConversation((prev) => [
         ...prev,
@@ -218,7 +492,11 @@ function RuleAuthoringChat({
       setCompileStatus("success");
       setCompiledRule(data.rule as Record<string, unknown>);
       setPreview(data.preview ?? null);
+      setTestResult(data.test ?? null);
+      setRuleDiff(data.diff ?? null);
+      setQualityWarnings(data.warnings ?? data.preview?.warnings ?? []);
       setValidation(data.validation ?? null);
+      setConfirmActivate(false);
       const explanation = data.explanation || "Rule compiled and validated.";
       setConversation((prev) => [
         ...prev,
@@ -241,6 +519,9 @@ function RuleAuthoringChat({
     setCompileStatus("invalid");
     setCompiledRule(null);
     setPreview(null);
+    setTestResult(null);
+    setRuleDiff(null);
+    setQualityWarnings([]);
     setValidation(data.validation ?? null);
     setCompileError(message);
     setConversation((prev) => [...prev, { role: "user", content: userText }]);
@@ -319,6 +600,8 @@ function RuleAuthoringChat({
       if (result.status === "success" && result.validation?.valid) {
         setCompiledRule(parsed);
         setPreview(result.preview ?? null);
+        setTestResult(result.test ?? null);
+        setQualityWarnings(result.warnings ?? result.test?.warnings ?? []);
         setCompileStatus("success");
       } else {
         setCompileStatus("invalid");
@@ -328,6 +611,29 @@ function RuleAuthoringChat({
       setCompileError(err instanceof Error ? err.message : "Invalid JSON");
       setCompileStatus("invalid");
     }
+  }
+
+  async function handleRunTest() {
+    if (!compiledRule) return;
+    try {
+      const result = await testRuleMutation.mutateAsync({
+        projectId,
+        data: { rule: compiledRule, limit: 50 },
+      });
+      setTestResult(result);
+      setQualityWarnings(result.warnings ?? []);
+    } catch (err) {
+      setCompileError(err instanceof Error ? err.message : "Test failed");
+    }
+  }
+
+  function handleSave(lifecycle: RuleLifecycleStatus) {
+    if (!compiledRule) return;
+    if (lifecycle === "active" && editingActiveRule && !confirmActivate) {
+      setConfirmActivate(true);
+      return;
+    }
+    onApprove(applyLifecycle(compiledRule, lifecycle), lifecycle);
   }
 
   return (
@@ -365,15 +671,27 @@ function RuleAuthoringChat({
             </div>
           )}
 
-          {compileStatus === "success" && preview && (
-            <div className="rounded-lg border p-3 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-2xl font-semibold text-destructive">{preview.flagCount}</p>
-                <p className="text-xs text-muted-foreground">Would flag (preview)</p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold">{preview.submissionsChecked}</p>
-                <p className="text-xs text-muted-foreground">Submissions checked</p>
+          {compileStatus === "success" && (testResult || preview) && (
+            <RuleTestWorkspace test={testResult ?? previewToTest(preview)} />
+          )}
+
+          <WarningsList warnings={qualityWarnings} />
+
+          {ruleDiff && <RuleDiffPanel diff={ruleDiff} />}
+
+          {editingActiveRule && confirmActivate && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm space-y-2">
+              <p className="font-semibold">Confirm activation</p>
+              <p className="text-muted-foreground text-xs">
+                This replaces the currently active rule. Review the diff above before activating.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => handleSave("active")}>
+                  Confirm activate
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmActivate(false)}>
+                  Cancel
+                </Button>
               </div>
             </div>
           )}
@@ -424,17 +742,23 @@ function RuleAuthoringChat({
                 <Button variant="outline" size="sm" onClick={() => void handleRevalidateJson()}>
                   Re-validate & preview
                 </Button>
+                <Button variant="outline" size="sm" onClick={() => void handleRunTest()}>
+                  Run test
+                </Button>
               </CollapsibleContent>
             </Collapsible>
           )}
 
           {readyToApprove && (
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button variant="outline" onClick={() => handleSave("draft")}>
+                Save as draft
+              </Button>
               <Button
-                onClick={() => compiledRule && onApprove(compiledRule)}
+                onClick={() => handleSave("active")}
                 className="bg-primary text-primary-foreground"
               >
-                {mode === "add" ? "Add rule" : "Save rule"}
+                {mode === "add" ? "Activate rule" : "Save & activate"}
               </Button>
               <Button variant="ghost" onClick={onBack}>
                 Discard
@@ -482,6 +806,7 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
   });
   const updatePack = useUpdateProjectRulePack();
   const recompute = useRecomputeDqa();
+  const lifecycleMutation = useSetDqaRuleLifecycle();
 
   const [view, setView] = useState<View>("table");
   const [helpOpen, setHelpOpen] = useState(false);
@@ -490,6 +815,8 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
   const [packRules, setPackRules] = useState<Record<string, unknown>[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
     if (!packQuery.data?.pack) return;
@@ -498,6 +825,23 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
   }, [packQuery.data]);
 
   const displayRules = useMemo(() => packRulesToDisplay(packRules), [packRules]);
+  const filteredRules = useMemo(() => {
+    let items = displayRules;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      items = items.filter(
+        (r) =>
+          r.english.toLowerCase().includes(q) ||
+          r.id.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q) ||
+          r.group.toLowerCase().includes(q),
+      );
+    }
+    if (statusFilter !== "all") {
+      items = items.filter((r) => r.status === statusFilter);
+    }
+    return items;
+  }, [displayRules, searchQuery, statusFilter]);
   const editRule = displayRules.find((r) => r.id === editRuleId);
   const fields = useMemo(
     () =>
@@ -538,14 +882,18 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
     await saveRules(next);
   };
 
-  const approveRule = async (compiled: Record<string, unknown>) => {
+  const approveRule = async (
+    compiled: Record<string, unknown>,
+    lifecycle: RuleLifecycleStatus = "active",
+  ) => {
+    const withLifecycle = applyLifecycle(compiled, lifecycle);
     let next: Record<string, unknown>[];
     if (view === "add") {
-      const id = String(compiled.id || `R-${Date.now()}`);
-      next = [...packRules, { ...compiled, id }];
+      const id = String(withLifecycle.id || `R-${Date.now()}`);
+      next = [...packRules, { ...withLifecycle, id }];
     } else if (editRule) {
       next = packRules.map((r) =>
-        String(r.id) === editRule.id ? { ...compiled, id: editRule.id } : r,
+        String(r.id) === editRule.id ? { ...withLifecycle, id: editRule.id } : r,
       );
     } else {
       return;
@@ -553,6 +901,29 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
     await saveRules(next);
     setView("table");
     setEditRuleId(null);
+  };
+
+  const setRuleLifecycle = async (ruleId: string, status: RuleLifecycleStatus) => {
+    setSaveError(null);
+    try {
+      await lifecycleMutation.mutateAsync({
+        projectId,
+        ruleId,
+        data: { status, enabled: status === "active" },
+      });
+      queryClient.invalidateQueries({ queryKey: getGetProjectRulePackQueryKey(projectId) });
+      const updated = packRules.map((r) =>
+        String(r.id) === ruleId ? applyLifecycle(r, status) : r,
+      );
+      setPackRules(updated);
+      if (status === "active") {
+        await recompute.mutateAsync({ params: { projectId } });
+        queryClient.invalidateQueries({ queryKey: getGetDqaSummaryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDqaFlagsQueryKey() });
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Lifecycle update failed");
+    }
   };
 
   const error =
@@ -574,7 +945,7 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
             setView("table");
             setEditRuleId(null);
           }}
-          onApprove={(rule) => void approveRule(rule)}
+          onApprove={(rule, lifecycle) => void approveRule(rule, lifecycle)}
         />
       </div>
     );
@@ -632,6 +1003,29 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
       )}
 
       <Card>
+        <div className="flex flex-wrap items-center gap-2 border-b p-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search rules…"
+              className="pl-8"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="reviewed">Reviewed</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead>
@@ -639,28 +1033,44 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
                 <th className="p-3 w-12">#</th>
                 <th className="p-3">Rule</th>
                 <th className="p-3 w-28">Status</th>
-                <th className="p-3 w-48 text-right">Actions</th>
+                <th className="p-3 w-24">Enabled</th>
+                <th className="p-3 w-56 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {displayRules.length === 0 ? (
+              {filteredRules.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-6 text-center text-muted-foreground">
-                    No rules yet. Add one in English or sync form data to load seeded rules.
+                  <td colSpan={5} className="p-6 text-center text-muted-foreground">
+                    {displayRules.length === 0
+                      ? "No rules yet. Add one in English or sync form data to load seeded rules."
+                      : "No rules match your filters."}
                   </td>
                 </tr>
               ) : (
-                displayRules.map((rule, index) => (
+                filteredRules.map((rule, index) => (
                   <tr key={rule.id || index} className="border-b last:border-0">
                     <td className="p-3 text-muted-foreground">{index + 1}</td>
-                    <td className="p-3">{rule.english}</td>
                     <td className="p-3">
-                      <Badge variant={rule.status === "compiled" ? "default" : "secondary"}>
-                        {rule.status === "compiled" ? "Compiled" : "Draft"}
+                      <p>{rule.english}</p>
+                      {rule.description && rule.description !== rule.english && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{rule.description}</p>
+                      )}
+                      {rule.group && (
+                        <Badge variant="outline" className="text-[10px] mt-1">
+                          {rule.group}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <Badge variant={statusBadgeVariant(rule.status)}>{rule.status}</Badge>
+                    </td>
+                    <td className="p-3">
+                      <Badge variant={rule.enabled ? "default" : "secondary"}>
+                        {rule.enabled ? "On" : "Off"}
                       </Badge>
                     </td>
                     <td className="p-3">
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-1 flex-wrap">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -670,8 +1080,28 @@ export function DqaChecksPanel({ projectId }: { projectId: string }) {
                             setView("edit");
                           }}
                         >
-                          Edit via chat
+                          Edit
                         </Button>
+                        {rule.status !== "active" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isSaving}
+                            onClick={() => void setRuleLifecycle(rule.id, "active")}
+                          >
+                            Activate
+                          </Button>
+                        )}
+                        {rule.status === "active" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isSaving}
+                            onClick={() => void setRuleLifecycle(rule.id, "draft")}
+                          >
+                            Disable
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"

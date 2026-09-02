@@ -268,12 +268,73 @@ class DqaValidationResult(CamelModel):
     warnings: list[str] = []
 
 
+class DqaTestRuleInput(CamelModel):
+    rule: dict[str, Any]
+    submission_ids: list[str] = []
+    limit: int = 50
+
+
+class DqaRuleWarning(CamelModel):
+    code: str
+    message: str
+
+
+class DqaExplanation(CamelModel):
+    summary: str
+    lines: list[str] = []
+    would_flag: bool = False
+    op: str | None = None
+
+
+class DqaTestRecord(CamelModel):
+    submission_id: str
+    kobo_id: str | None = None
+    enumerator: str | None = None
+    outcome: str
+    would_flag: bool | None = None
+    field_values: dict[str, Any] = {}
+    related: list[dict[str, Any]] = []
+    explanation: DqaExplanation | dict[str, Any] = {}
+    debug_trace: dict[str, Any] = {}
+    details: dict[str, Any] = {}
+
+
+class DqaTestRuleOut(CamelModel):
+    submissions_checked: int
+    flag_count: int
+    pass_count: int
+    not_applicable_count: int
+    missing_data_count: int = 0
+    ambiguous_related_count: int = 0
+    records: list[DqaTestRecord] = []
+    examples: list[DqaTestRecord] = []
+    warnings: list[DqaRuleWarning] = []
+
+
+class DqaRuleLifecycleInput(CamelModel):
+    status: str
+    enabled: bool | None = None
+
+
+class DqaExplainFlagInput(CamelModel):
+    rule: dict[str, Any]
+    details: dict[str, Any] | None = None
+    passes: bool | None = None
+
+
+class DqaExplainFlagOut(CamelModel):
+    explanation: DqaExplanation | dict[str, Any]
+    debug_trace: dict[str, Any] = {}
+
+
 class DqaPreviewExample(CamelModel):
     submission_id: str
     kobo_id: str | None = None
     enumerator: str | None = None
-    would_flag: bool
+    would_flag: bool | None = None
     details: dict[str, Any] = {}
+    outcome: str | None = None
+    explanation: dict[str, Any] | None = None
 
 
 class DqaPreviewResult(CamelModel):
@@ -282,6 +343,7 @@ class DqaPreviewResult(CamelModel):
     pass_count: int
     not_applicable_count: int
     examples: list[DqaPreviewExample] = []
+    warnings: list[DqaRuleWarning] = []
 
 
 class DqaCompileMeta(CamelModel):
@@ -324,3 +386,5 @@ class DqaValidateRuleOut(CamelModel):
     message: str | None = None
     validation: DqaValidationResult
     preview: DqaPreviewResult | None = None
+    test: DqaTestRuleOut | None = None
+    warnings: list[DqaRuleWarning] = []

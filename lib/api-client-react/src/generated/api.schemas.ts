@@ -170,6 +170,64 @@ export interface DqaCompileInput {
   previewLimit?: number;
 }
 
+export interface DqaCompileSessionOut {
+  id: string;
+  projectId: string;
+  studyId?: string | null;
+  status: string;
+  english: string;
+  provider: string;
+  model: string;
+  attempts: number;
+  latencyMsTotal: number;
+  promptTokens: number;
+  completionTokens: number;
+  ruleId?: string | null;
+  createdAt: string;
+}
+
+export type DqaEvaluationMetricsSlowRulesItem = { [key: string]: unknown };
+
+export interface DqaEvaluationMetrics {
+  durationMs?: number;
+  submissions?: number;
+  rulesEvaluated?: number;
+  flagsProduced?: number;
+  flaggedSubmissions?: number;
+  relationshipLookups?: number;
+  relationshipLookupMs?: number;
+  evaluationErrors?: string[];
+  slowRules?: DqaEvaluationMetricsSlowRulesItem[];
+  cascadeProjects?: string[];
+  packVersion?: number | null;
+}
+
+export type DqaExplainFlagInputRule = { [key: string]: unknown };
+
+export type DqaExplainFlagInputDetails = { [key: string]: unknown } | null;
+
+export interface DqaExplainFlagInput {
+  rule: DqaExplainFlagInputRule;
+  details?: DqaExplainFlagInputDetails;
+  passes?: boolean | null;
+}
+
+export interface DqaExplanation {
+  summary: string;
+  lines?: string[];
+  wouldFlag?: boolean;
+  op?: string | null;
+}
+
+export type DqaExplainFlagOutExplanation = DqaExplanation | { [key: string]: unknown };
+
+export type DqaExplainFlagOutDebugTrace = { [key: string]: unknown };
+
+export interface DqaExplainFlagOut {
+  explanation: DqaExplainFlagOutExplanation;
+  debugTrace?: DqaExplainFlagOutDebugTrace;
+}
+
 export type DqaFlagOutDetails = { [key: string]: unknown } | null;
 
 export interface DqaFlagOut {
@@ -190,12 +248,21 @@ export interface DqaFlagOut {
 
 export type DqaPreviewExampleDetails = { [key: string]: unknown };
 
+export type DqaPreviewExampleExplanation = { [key: string]: unknown } | null;
+
 export interface DqaPreviewExample {
   submissionId: string;
   koboId?: string | null;
   enumerator?: string | null;
-  wouldFlag: boolean;
+  wouldFlag?: boolean | null;
   details?: DqaPreviewExampleDetails;
+  outcome?: string | null;
+  explanation?: DqaPreviewExampleExplanation;
+}
+
+export interface DqaRuleWarning {
+  code: string;
+  message: string;
 }
 
 export interface DqaPreviewResult {
@@ -204,6 +271,7 @@ export interface DqaPreviewResult {
   passCount: number;
   notApplicableCount: number;
   examples?: DqaPreviewExample[];
+  warnings?: DqaRuleWarning[];
 }
 
 export interface DqaRecomputeResult {
@@ -211,6 +279,40 @@ export interface DqaRecomputeResult {
   submissions: number;
   flaggedSubmissions: number;
   flags: number;
+  cascadeProjects?: string[] | null;
+  metrics?: DqaEvaluationMetrics | null;
+}
+
+export interface DqaRelationshipCreate {
+  code: string;
+  title?: string;
+  sourceProjectId: string;
+  targetProjectId: string;
+  sourceJoinField: string;
+  targetJoinField: string;
+  cardinality?: string;
+}
+
+export interface DqaRelationshipOut {
+  id: string;
+  studyId: string;
+  code: string;
+  title: string;
+  sourceProjectId: string;
+  targetProjectId: string;
+  sourceJoinField: string;
+  targetJoinField: string;
+  cardinality: string;
+}
+
+export interface DqaRelationshipUpdate {
+  code?: string | null;
+  title?: string | null;
+  sourceProjectId?: string | null;
+  targetProjectId?: string | null;
+  sourceJoinField?: string | null;
+  targetJoinField?: string | null;
+  cardinality?: string | null;
 }
 
 export interface DqaRuleCount {
@@ -218,6 +320,11 @@ export interface DqaRuleCount {
   title: string;
   severity: string;
   count: number;
+}
+
+export interface DqaRuleLifecycleInput {
+  status: string;
+  enabled?: boolean | null;
 }
 
 export interface DqaSummary {
@@ -228,6 +335,49 @@ export interface DqaSummary {
   redFlags: number;
   amberFlags: number;
   byRule: DqaRuleCount[];
+}
+
+export type DqaTestRecordFieldValues = { [key: string]: unknown };
+
+export type DqaTestRecordRelatedItem = { [key: string]: unknown };
+
+export type DqaTestRecordExplanation = DqaExplanation | { [key: string]: unknown };
+
+export type DqaTestRecordDebugTrace = { [key: string]: unknown };
+
+export type DqaTestRecordDetails = { [key: string]: unknown };
+
+export interface DqaTestRecord {
+  submissionId: string;
+  koboId?: string | null;
+  enumerator?: string | null;
+  outcome: string;
+  wouldFlag?: boolean | null;
+  fieldValues?: DqaTestRecordFieldValues;
+  related?: DqaTestRecordRelatedItem[];
+  explanation?: DqaTestRecordExplanation;
+  debugTrace?: DqaTestRecordDebugTrace;
+  details?: DqaTestRecordDetails;
+}
+
+export type DqaTestRuleInputRule = { [key: string]: unknown };
+
+export interface DqaTestRuleInput {
+  rule: DqaTestRuleInputRule;
+  submissionIds?: string[];
+  limit?: number;
+}
+
+export interface DqaTestRuleOut {
+  submissionsChecked: number;
+  flagCount: number;
+  passCount: number;
+  notApplicableCount: number;
+  missingDataCount?: number;
+  ambiguousRelatedCount?: number;
+  records?: DqaTestRecord[];
+  examples?: DqaTestRecord[];
+  warnings?: DqaRuleWarning[];
 }
 
 export type DqaValidateRuleInputRule = { [key: string]: unknown };
@@ -254,6 +404,8 @@ export interface DqaValidateRuleOut {
   message?: string | null;
   validation: DqaValidationResult;
   preview?: DqaPreviewResult | null;
+  test?: DqaTestRuleOut | null;
+  warnings?: DqaRuleWarning[];
 }
 
 export type FormFieldOutChoicesItem = { [key: string]: unknown };
@@ -549,12 +701,25 @@ export type RulePackOutPack = { [key: string]: unknown };
 export interface RulePackOut {
   projectId: string;
   pack: RulePackOutPack;
+  version?: number;
 }
 
 export type RulePackUpdatePack = { [key: string]: unknown };
 
 export interface RulePackUpdate {
   pack: RulePackUpdatePack;
+}
+
+export interface RulePackVersionOut {
+  id: string;
+  projectId: string;
+  version: number;
+  status: string;
+  source: string;
+  compileSessionId?: string | null;
+  changeNote?: string | null;
+  createdAt: string;
+  ruleCount?: number;
 }
 
 export interface SmtpSettings {
@@ -958,6 +1123,24 @@ export type RecomputeDqaParams = {
 projectId?: string | null;
 };
 
+export type ListDqaRelationshipsParams = {
+studyId?: string | null;
+};
+
+export type CreateDqaRelationshipParams = {
+studyId?: string | null;
+};
+
+export type UpdateDqaRelationshipParams = {
+studyId?: string | null;
+};
+
+export type DeleteDqaRelationshipParams = {
+studyId?: string | null;
+};
+
+export type DeleteDqaRelationship200 = {[key: string]: string};
+
 export type GetTriangulationViewsParams = {
 studyId?: string | null;
 };
@@ -965,6 +1148,33 @@ studyId?: string | null;
 export type GetTriangulationViewParams = {
 studyId?: string | null;
 };
+
+export type ListProjectRulePackVersionsParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+};
+
+export type ListDqaCompileSessionsParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+};
+
+export type SetDqaRuleLifecycle200 = { [key: string]: unknown };
+
+export type ListDqaRulesParams = {
+q?: string | null;
+status?: string | null;
+group?: string | null;
+enabled_only?: boolean;
+};
+
+export type ListDqaRules200Item = { [key: string]: unknown };
 
 export type GetAudioRecordingsParams = {
 studyId?: string | null;

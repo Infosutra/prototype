@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -25,6 +25,11 @@ from app.schemas.dqa import (
     DqaRecomputeResult,
     DqaRuleCount,
     DqaSummary,
+    DqaExplainFlagInput,
+    DqaExplainFlagOut,
+    DqaRuleLifecycleInput,
+    DqaTestRuleInput,
+    DqaTestRuleOut,
     DqaValidateRuleInput,
     DqaValidateRuleOut,
     EnumeratorStat,
@@ -49,6 +54,8 @@ from app.services.dqa_relationships import (
 )
 from app.services.dqa_rule_packs import get_pack_version, list_pack_versions
 from app.domain.dqa.form_fields import list_form_fields
+from app.domain.dqa.rule_management import filter_rules, set_rule_status
+from app.services.dqa_test import explain_flag, run_rule_test
 from app.domain.dqa.validate import validate_pack_rules
 from app.services.settings import get_or_create_settings
 from app.services import triangulation as tri
@@ -546,6 +553,112 @@ def list_dqa_compile_sessions(
 
 
 @projects_router.post(
+    "/{project_id}/dqa/test-rule",
+    response_model=DqaTestRuleOut,
+    operation_id="testDqaRule",
+)
+def test_dqa_rule(
+    project_id: str,
+    payload: DqaTestRuleInput,
+    db: Session = Depends(get_db),
+) -> DqaTestRuleOut:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    result = run_rule_test(
+        db,
+        project_id,
+        payload.rule,
+        submission_ids=payload.submission_ids or None,
+        limit=payload.limit,
+    )
+    return DqaTestRuleOut.model_validate(result)
+
+
+@projects_router.post(
+    "/{project_id}/dqa/explain",
+    response_model=DqaExplainFlagOut,
+    operation_id="explainDqaFlag",
+)
+def explain_dqa_flag(
+    project_id: str,
+    payload: DqaExplainFlagInput,
+    db: Session = Depends(get_db),
+) -> DqaExplainFlagOut:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    result = explain_flag(
+        rule=payload.rule,
+        details=payload.details,
+        passes=payload.passes,
+    )
+    return DqaExplainFlagOut.model_validate(result)
+
+
+@projects_router.post(
+    "/{project_id}/dqa/rules/{rule_id}/lifecycle",
+    operation_id="setDqaRuleLifecycle",
+)
+def set_dqa_rule_lifecycle(
+    project_id: str,
+    rule_id: str,
+    payload: DqaRuleLifecycleInput,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    pack = dqa_engine.get_pack_for_project(db, project_id) or {"rules": []}
+    rules = pack.get("rules") if isinstance(pack.get("rules"), list) else []
+    updated_rule = None
+    new_rules = []
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id")) == rule_id:
+            try:
+                updated_rule = set_rule_status(item, payload.status, enabled=payload.enabled)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            new_rules.append(updated_rule)
+        else:
+            new_rules.append(item)
+    if updated_rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    pack = dict(pack)
+    pack["rules"] = new_rules
+    saved = dqa_engine.save_pack(db, project_id, pack, source="manual", change_note=f"lifecycle:{payload.status}")
+    return {"rule": updated_rule, "pack_version": saved.get("pack_version")}
+
+
+@projects_router.get(
+    "/{project_id}/dqa/rules",
+    operation_id="listDqaRules",
+)
+def list_dqa_rules(
+    project_id: str,
+    q: str | None = Query(None),
+    status: str | None = Query(None),
+    group: str | None = Query(None),
+    enabled_only: bool = Query(False),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    pack = dqa_engine.get_pack_for_project(db, project_id) or {}
+    rules = filter_rules(
+        pack.get("rules") if isinstance(pack.get("rules"), list) else [],
+        query=q,
+        status=status,
+        group=group,
+        enabled_only=enabled_only,
+    )
+    return rules
+
+
+@projects_router.post(
     "/{project_id}/dqa/compile",
     operation_id="compileDqaRule",
     response_model=None,
@@ -603,5 +716,7 @@ def validate_rule_endpoint(
             "message": result.get("message"),
             "validation": result["validation"],
             "preview": result.get("preview"),
+            "test": result.get("test"),
+            "warnings": result.get("warnings") or [],
         }
     )

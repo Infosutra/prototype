@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.models import AppSettings, Project
 from app.domain.dqa.form_fields import list_form_fields
 from app.domain.dqa.rule_audit import attach_compile_audit, sanitize_english
+from app.domain.dqa.rule_diff import compute_rule_diff
 from app.domain.dqa.validate import ValidationResult, validate_rule
 from app.integrations.llm import (
     LlmError,
@@ -22,6 +23,7 @@ from app.integrations.llm import (
 from app.services.dqa_compile_audit import CompileSessionRecorder
 from app.services.dqa_compile_prompt import build_compiler_messages, load_compile_prompt
 from app.services.dqa_preview import preview_rule
+from app.services.dqa_test import run_rule_test
 from app.services.dqa_relationships import build_relationship_schema, relationships_for_source_project
 from app.services.dqa_rule_packs import get_pack_for_project
 
@@ -293,7 +295,7 @@ def compile_dqa_rule(
                 rule=audited_rule,
                 preview=preview,
             )
-            return {
+            body: dict[str, Any] = {
                 "status": "success",
                 "rule": audited_rule,
                 "explanation": str(payload.get("explanation") or rule["message"]),
@@ -301,7 +303,11 @@ def compile_dqa_rule(
                 "preview": preview,
                 "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
                 "session_id": session.id,
+                "warnings": preview.get("warnings") if isinstance(preview, dict) else [],
             }
+            if existing_rule:
+                body["diff"] = compute_rule_diff(existing_rule, audited_rule)
+            return body
 
         if attempts < MAX_LLM_ATTEMPTS:
             repair_context = {
@@ -355,6 +361,8 @@ def validate_dqa_rule_for_project(
     }
     if validation.valid:
         body["preview"] = preview_rule(db, project.id, rule, limit=preview_limit)
+        body["test"] = run_rule_test(db, project.id, rule, limit=preview_limit)
+        body["warnings"] = body["test"].get("warnings") or []
     else:
         body["message"] = "Rule failed validation"
     return body
