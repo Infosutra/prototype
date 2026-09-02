@@ -102,6 +102,7 @@ def _any_section_filled(data: dict[str, Any], prefix: str) -> bool:
 
 _REF_KEYS = (
     "field",
+    "field_b",
     "parent_field",
     "trigger_field",
     "text_field",

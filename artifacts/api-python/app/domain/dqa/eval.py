@@ -6,6 +6,13 @@ import logging
 import re
 from typing import Any
 
+from app.domain.dqa.context import EvaluationContext
+from app.domain.dqa.refs import (
+    eval_numeric_relation,
+    resolve_field_value,
+    resolve_numeric_operands,
+    resolve_string_operands,
+)
 from app.domain.dqa.related import _related_submission_ref
 from app.domain.dqa.values import (
     NO_VALUES,
@@ -32,6 +39,12 @@ def eval_check(
     """Return (passes, details). Flag when passes is False."""
     if not check or not isinstance(check, dict):
         return True, {}
+    ctx = EvaluationContext.from_eval_args(
+        data=data,
+        pack=pack,
+        project_rows=project_rows,
+        current=current,
+    )
     op = str(check.get("op") or "").strip()
     details: dict[str, Any] = {"op": op}
 
@@ -90,10 +103,11 @@ def eval_check(
         return filled, details
 
     if op == "equals":
-        value = _as_str(get_value(data, pack, check.get("field"))).lower()
-        expected = _as_str(check.get("value")).lower()
-        details.update({"value": value, "expected": expected})
-        return value == expected, details
+        left, right, cmp_details = resolve_string_operands(ctx, check)
+        details.update(cmp_details)
+        if cmp_details.get("error"):
+            return False, details
+        return left == right, details
 
     if op == "equals_any":
         value = _as_str(get_value(data, pack, check.get("field"))).lower()
@@ -102,9 +116,11 @@ def eval_check(
         return value in values, details
 
     if op == "not_equals":
-        value = _as_str(get_value(data, pack, check.get("field"))).lower()
-        expected = _as_str(check.get("value")).lower()
-        return value != expected, {"value": value, "expected": expected}
+        left, right, cmp_details = resolve_string_operands(ctx, check)
+        details.update(cmp_details)
+        if cmp_details.get("error"):
+            return False, details
+        return left != right, details
 
     if op == "in":
         value = _as_str(get_value(data, pack, check.get("field"))).lower()
@@ -145,21 +161,11 @@ def eval_check(
         return True, details
 
     if op in {"gt", "lt", "gte", "lte"}:
-        num = _as_number(get_value(data, pack, check.get("field")))
-        bound = check.get("value")
-        if bound is None and check.get("threshold"):
-            bound = _threshold(pack, str(check["threshold"]))
-        details.update({"value": num, "bound": bound})
-        if num is None or bound is None:
+        left, right, cmp_details = resolve_numeric_operands(ctx, check)
+        details.update(cmp_details)
+        if cmp_details.get("error"):
             return False, details
-        bound_f = float(bound)
-        if op == "gt":
-            return num > bound_f, details
-        if op == "lt":
-            return num < bound_f, details
-        if op == "gte":
-            return num >= bound_f, details
-        return num <= bound_f, details
+        return eval_numeric_relation(left, right, op), details
 
     if op == "integer":
         text = _as_str(get_value(data, pack, check.get("field")))
@@ -167,22 +173,44 @@ def eval_check(
         return ok, {"value": text}
 
     if op == "duration_minutes_gte":
-        start = _parse_dt(get_value(data, pack, check.get("start_field") or "start"))
-        end = _parse_dt(get_value(data, pack, check.get("end_field") or "end"))
+        start = _parse_dt(
+            resolve_field_value(ctx, check.get("start_field") or "start")
+        )
+        end = _parse_dt(resolve_field_value(ctx, check.get("end_field") or "end"))
         # Kobo also stores start/end as top-level meta sometimes
         if start is None:
             start = _parse_dt(data.get("start"))
         if end is None:
             end = _parse_dt(data.get("end"))
+        maximum = check.get("max")
+        if maximum is None and check.get("max_minutes") is not None:
+            maximum = check.get("max_minutes")
+        if maximum is None and check.get("max_threshold"):
+            maximum = _threshold(pack, str(check["max_threshold"]))
         minimum = check.get("min")
-        if minimum is None:
-            minimum = _threshold(pack, str(check.get("threshold") or "min_duration_minutes"), 15)
-        details.update({"start": start.isoformat() if start else None, "end": end.isoformat() if end else None, "min": minimum})
-        if start is None or end is None or minimum is None:
+        if minimum is None and check.get("threshold"):
+            minimum = _threshold(pack, str(check["threshold"]))
+        if minimum is None and maximum is None:
+            minimum = _threshold(pack, "min_duration_minutes", 15)
+        details.update(
+            {
+                "start": start.isoformat() if start else None,
+                "end": end.isoformat() if end else None,
+                "min": minimum,
+                "max": maximum,
+            }
+        )
+        if start is None or end is None:
             return True, details  # cannot evaluate → do not flag
+        if minimum is None and maximum is None:
+            return True, details
         minutes = (end - start).total_seconds() / 60.0
         details["minutes"] = minutes
-        return minutes >= float(minimum), details
+        if minimum is not None and minutes < float(minimum):
+            return False, details
+        if maximum is not None and minutes > float(maximum):
+            return False, details
+        return True, details
 
     if op == "exclusive_choice":
         selected = set(_as_list(get_value(data, pack, check.get("field"))))

@@ -96,3 +96,113 @@ def test_classroom_area_between_threshold():
 
     ok_low, _ = eval_check(rule["check"], data={"C1": "10"}, pack=pack)
     assert ok_low is False
+
+
+def test_field_vs_field_gt():
+    pack = {"fields": {"high": "B22", "low": "B21"}}
+    ok, details = eval_check(
+        {"op": "gt", "field": "high", "field_b": "low"},
+        data={"B22": "10", "B21": "5"},
+        pack=pack,
+    )
+    assert ok is True
+    assert details["field_b"] == "low"
+
+    ok_fail, _ = eval_check(
+        {"op": "gt", "field": "high", "field_b": "low"},
+        data={"B22": "3", "B21": "8"},
+        pack=pack,
+    )
+    assert ok_fail is False
+
+
+def test_field_vs_constant_gt_regression():
+    pack = {"thresholds": {"min_area": 50}}
+    ok, _ = eval_check(
+        {"op": "gt", "field": "C1", "value": 10},
+        data={"C1": "20"},
+        pack=pack,
+    )
+    assert ok is True
+
+    ok_fail, _ = eval_check(
+        {"op": "gt", "field": "C1", "value": 10},
+        data={"C1": "5"},
+        pack=pack,
+    )
+    assert ok_fail is False
+
+
+def test_equals_field_vs_field():
+    pack = {"fields": {"a": "A3", "b": "A4_1"}}
+    ok, _ = eval_check(
+        {"op": "equals", "field": "a", "field_b": "b"},
+        data={"A3": "Yes", "A4_1": "yes"},
+        pack=pack,
+    )
+    assert ok is True
+
+
+def test_duration_min_and_max_band():
+    pack = {}
+    check = {
+        "op": "duration_minutes_gte",
+        "start_field": "B2",
+        "end_field": "B3",
+        "min": 20,
+        "max": 180,
+    }
+    ok, details = eval_check(
+        check,
+        data={"B2": "2024-01-01T10:00:00", "B3": "2024-01-01T10:45:00"},
+        pack=pack,
+    )
+    assert ok is True
+    assert details["minutes"] == 45.0
+
+    ok_short, _ = eval_check(
+        check,
+        data={"B2": "2024-01-01T10:00:00", "B3": "2024-01-01T10:05:00"},
+        pack=pack,
+    )
+    assert ok_short is False
+
+    ok_long, _ = eval_check(
+        check,
+        data={"B2": "2024-01-01T10:00:00", "B3": "2024-01-01T14:00:00"},
+        pack=pack,
+    )
+    assert ok_long is False
+
+
+def test_duration_missing_times_is_not_applicable():
+    pack = {}
+    check = {"op": "duration_minutes_gte", "start_field": "B2", "end_field": "B3", "min": 10}
+    ok, _ = eval_check(check, data={}, pack=pack)
+    assert ok is True
+
+
+def test_if_then_with_field_vs_field():
+    pack = {"fields": {"high": "B22", "low": "B21"}}
+    check = {
+        "op": "if_then",
+        "if": {"op": "equals", "field": "high", "value": "1"},
+        "then": {"op": "gt", "field": "high", "field_b": "low"},
+    }
+    ok, _ = eval_check(
+        check,
+        data={"B22": "1", "B21": "0"},
+        pack=pack,
+    )
+    assert ok is True
+
+
+def test_gt_rejects_field_b_and_value_together():
+    pack = {"fields": {"a": "B22", "b": "B21"}}
+    ok, details = eval_check(
+        {"op": "gt", "field": "a", "field_b": "b", "value": 1},
+        data={"B22": "5", "B21": "2"},
+        pack=pack,
+    )
+    assert ok is False
+    assert "error" in details

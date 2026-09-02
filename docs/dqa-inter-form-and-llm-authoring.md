@@ -178,10 +178,12 @@ Each rule has: `id`, `severity` (red/amber), `title`, `message`, and a composabl
 | `gps_present` | Geolocation or location record exists |
 | `attachment_count_gte` | Minimum attachment count |
 
-**Not yet implemented (required for CMF):**
+**Phase 0 implemented (intra-form):**
 
-- `compare_fields` — field A vs field B (e.g. `B22 > B21`)
-- `duration_between` — min/max band between arbitrary time fields (e.g. `B2`–`B3`)
+- Field vs field compare — extend `gt` / `lt` / `gte` / `lte` / `equals` / `not_equals` with optional `field_b` (e.g. `B22 > B21`)
+- Duration band — extend `duration_minutes_gte` with optional `max` / `max_minutes` / `max_threshold` (e.g. B2–B3 min+max)
+
+See `docs/dqa-phase0-extension-points.md` for Phase 2 hooks. Do **not** add separate `compare_fields`, `duration_between`, or `cross_form_compare` operators.
 
 Unknown operators log a warning and pass (do not flag).
 
@@ -236,7 +238,7 @@ DQA rules fall into two scopes. The distinction drives UI boundaries, compiler c
 | Tool-2 B1–B6 vs B7 | Father ticked in any activity multi-select but "did father participate" is No | `B1`–`B6`, `B7` |
 | Tool-3 A3/A4 vs A4_1 | Vacancy reported Yes but headcount is zero | `A3`, `A4`, `A4_1` |
 
-**Compiled shape:** Standard `check` tree using existing or new intra-form operators (`compare_fields`, `duration_between`, `if_then` + `any` + `equals`).
+**Compiled shape:** Standard `check` tree using existing operators extended in Phase 0 (`field_b` on comparisons; optional `max` on `duration_minutes_gte`) plus composable ops (`if_then` + `any` + `equals`).
 
 ### 4.2 Inter-form rules
 
@@ -282,25 +284,20 @@ DQA rules fall into two scopes. The distinction drives UI boundaries, compiler c
   "title": "Register vs worker child count",
   "message": "A10 (register present) does not match D4 (worker reported)",
   "check": {
-    "op": "cross_form_compare",
-    "join_key": "centre_id",
-    "form_a": "<register_project_uid>",
-    "field_a": "A10",
-    "form_b": "<worker_project_uid>",
-    "field_b": "D4",
-    "relation": "eq",
-    "tolerance": 0
+    "op": "equals",
+    "field": "register.A10",
+    "field_b": "worker.D4"
   }
 }
 ```
 
-(Exact op name TBD; conceptually a cross-form variant of `compare_fields`.)
+(Phase 2 — scoped refs and relationship resolution; not implemented in Phase 0. See `docs/dqa-phase0-extension-points.md`.)
 
 ### 5.3 CMF deployment nuance
 
 CMF Tool-1 may be deployed as:
 
-1. **Single mega-form** — register (E0), observation (E2), and worker interview (E5) sections in one KoBo form. In this case A10 and D4 are on the **same submission**; the rule is **intra-form** and needs only `compare_fields`.
+1. **Single mega-form** — register (E0), observation (E2), and worker interview (E5) sections in one KoBo form. In this case A10 and D4 are on the **same submission**; the rule is **intra-form** and uses `field_b` on the same form.
 2. **Separate KoBo forms** — register and worker interview synced as distinct projects. A10 and D4 are on **different submissions** linked by centre ID. This is true **inter-form** and needs join resolution at evaluation time.
 
 The authoring system must not assume one layout. The LLM compiler should detect which fields live on which synced forms and classify the rule accordingly. If forms are split, the compiler must require an explicit join key present on both forms.
@@ -329,10 +326,10 @@ The LLM compiler prompt must include schemas for **both** forms plus known join 
 
 | Gap | Detail |
 |-----|--------|
-| `compare_fields` | `gt`/`lte` today compare a field to a **constant**, not another field |
-| Cross-submission eval | `eval_check` receives one `data` dict; no pairing logic |
-| Join resolution | No service to find submission B given submission A's join key value |
-| Flag semantics | Which submission(s) get flagged — one, both, or a synthetic pair flag? |
+| Scoped field refs | Phase 0 adds `field_b` for same submission; Phase 2 adds `register.A10`-style scopes |
+| Cross-submission eval | `eval_check` receives one `data` dict; Phase 2 populates `EvaluationContext.related` |
+| Join resolution | No DQA service yet; triangulation has reusable join helpers (see extension doc) |
+| Flag semantics | Which submission(s) get flagged — Phase 2; `details.relatedSubmissions` pattern exists |
 | Recompute scope | Changing an inter-form rule may require re-evaluating **both** forms' submissions |
 
 ### 6.4 Preview complexity
@@ -354,7 +351,7 @@ The chat disambiguation loop (already mocked in UI) is **essential** for inter-f
 
 ### 6.6 Authoring vs runtime separation
 
-Inter-form does not change the invariant: LLM compiles once; runtime is deterministic. It **does** require new deterministic ops (`cross_form_compare` or equivalent) that the validator whitelists. LLM must never run during batch recompute or daily flagging.
+Inter-form does not change the invariant: LLM compiles once; runtime is deterministic. Phase 2 adds relationship resolution and scoped refs — not a separate `cross_form_compare` operator. LLM must never run during batch recompute or daily flagging.
 
 ---
 
@@ -366,10 +363,10 @@ Honest tradeoffs for a first shippable LLM authoring release.
 
 Four of five CMF DQA rules are intra-form:
 
-| Rule | Achievable in v1 (after engine ops) |
-|------|-------------------------------------|
-| B21 vs B22 | Yes — `compare_fields` |
-| B2–B3 duration | Yes — `duration_between` |
+| Rule | Achievable after Phase 0 |
+|------|--------------------------|
+| B21 vs B22 | Yes — `gt` + `field_b` |
+| B2–B3 duration | Yes — `duration_minutes_gte` + `max` |
 | B1–B6 vs B7 | Yes — `if_then` + `any` + `in` (engine ready today) |
 | A3/A4 vs A4_1 | Yes — `if_then` + `any` + `equals` (engine ready today) |
 | A10 vs D4 | **Only if** same submission; otherwise Phase 2 |
@@ -391,12 +388,12 @@ Shipping intra-form compile + validate + preview first delivers the core UX bet 
 
 ## 8. Proposed phased approach
 
-### Phase 1 — Intra-form compile, validate, preview
+### Phase 1 — LLM compile, validate, preview (intra-form)
 
-**Engine:**
+**Engine (Phase 0 complete):**
 
-- Add `compare_fields` (`field_a`, `field_b`, `relation`, optional `tolerance`)
-- Add `duration_between` (`start_field`, `end_field`, `min_minutes?`, `max_minutes?`)
+- Field vs field — `field_b` on comparison ops
+- Duration band — optional `max` on `duration_minutes_gte`
 
 **Compiler service:**
 
@@ -412,12 +409,12 @@ Shipping intra-form compile + validate + preview first delivers the core UX bet 
 
 **LLM stack:** Use existing `app/integrations/llm/` — no new vendor coupling.
 
-### Phase 2 — Engine ops + cross-form evaluation
+### Phase 2 — Inter-form relationship resolution
 
-- Implement `cross_form_compare` (or extend `compare_fields` with form refs)
-- Join resolution service (study config or per-pack `join_key`)
-- Pairwise eval during recompute for both forms
-- Flag model: which submission(s) to attach flag to; related submission refs in details (pattern exists in `unique_in_project`)
+- Study relationship config + resolver (reuse triangulation join utilities)
+- Populate `EvaluationContext.related`; extend operand resolver for scoped refs
+- Pairwise eval during study-level recompute
+- Flag model: primary submission + `details.relatedSubmissions` (pattern exists in `unique_in_project`)
 
 ### Phase 3 — Inter-form compiler context + pair preview
 
@@ -515,7 +512,7 @@ flowchart LR
     SubA[Submission on A]
     SubB[Submission on B]
     Match[Join resolver: A.centre_id = B.centre_id]
-    Compare[cross_form_compare A10 vs D4]
+    Compare[Scoped compare register.A10 vs worker.D4]
     SubA --> Match
     SubB --> Match
     Match --> Compare
@@ -559,11 +556,11 @@ flowchart LR
 
 ## Appendix A: CMF rules reference
 
-| Tool | Rule | Type | Engine today |
-|------|------|------|--------------|
-| Tool-1 | A10 vs D4 | Inter-form (if split) or intra (if mega-form) | Needs `compare_fields` or cross-form |
-| Tool-1 | B2–B3 duration | Intra-form | Needs `duration_between` |
-| Tool-1 | B21 vs B22 | Intra-form | Needs `compare_fields` |
+| Tool | Rule | Type | Engine (Phase 0) |
+|------|------|------|------------------|
+| Tool-1 | A10 vs D4 | Inter-form (if split) or intra (if mega-form) | Phase 2 scoped refs; intra uses `field_b` |
+| Tool-1 | B2–B3 duration | Intra-form | `duration_minutes_gte` + `max` |
+| Tool-1 | B21 vs B22 | Intra-form | `gt` + `field_b` |
 | Tool-2 | B1–B6 vs B7 | Intra-form | Composable today |
 | Tool-3 | A3/A4 vs A4_1 | Intra-form | Composable today |
 
@@ -574,6 +571,9 @@ flowchart LR
 | Rules UI | `artifacts/infosutra/src/pages/dqa/DqaChecksPanel.tsx` |
 | DQA dashboard | `artifacts/infosutra/src/pages/dqa/DqaDashboard.tsx` |
 | Evaluation engine | `artifacts/api-python/app/domain/dqa/eval.py` |
+| Evaluation context | `artifacts/api-python/app/domain/dqa/context.py` |
+| Value resolution | `artifacts/api-python/app/domain/dqa/refs.py` |
+| Phase 0 extension points | `docs/dqa-phase0-extension-points.md` |
 | Rule pack service | `artifacts/api-python/app/services/dqa_rule_packs.py` |
 | Seed example | `artifacts/api-python/app/rule_packs/teachers.yml` |
 | Form fields | `artifacts/api-python/app/domain/dqa/form_fields.py` |

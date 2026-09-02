@@ -1,5 +1,6 @@
 """DQA rule evaluation domain."""
 
+from app.domain.dqa.context import EvaluationContext
 from app.domain.dqa.eval import eval_check
 from app.domain.dqa.form_fields import list_form_fields, prefer_label_text
 from app.domain.dqa.highlights import (
@@ -30,6 +31,7 @@ __all__ = [
     "resolve_highlight_fields",
     "highlight_fields_for_flag",
     "eval_check",
+    "EvaluationContext",
     "prefer_label_text",
     "list_form_fields",
 ]
