@@ -36,7 +36,9 @@ export default defineConfig({
         target: process.env.API_URL ?? 'http://127.0.0.1:8080',
         changeOrigin: true,
         // Audio playback uses Range / 206; do not time out long recordings.
+        // Compile SSE streams can also run for several minutes.
         timeout: 0,
+        proxyTimeout: 0,
       },
     },
     fs: {

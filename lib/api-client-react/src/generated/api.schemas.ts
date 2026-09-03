@@ -768,6 +768,8 @@ export interface StudyAssignProject {
   projectId: string;
   toolCode?: string | null;
   studyToolId?: string | null;
+  /** Human-readable tool label; creates/updates StudyTool when toolCode is new */
+  label?: string | null;
 }
 
 export interface StudyToolIn {

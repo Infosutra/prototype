@@ -17,6 +17,7 @@ import {
   useTestStudyKoboConnection,
   useGetStudySchedule,
   useUpdateStudySchedule,
+  useSyncProjects,
   type StudyCreate,
   type StudyOut,
   type StudyToolIn,
@@ -24,13 +25,13 @@ import {
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, CheckCircle2, CircleHelp, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleHelp, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,16 @@ function toolsFromStudy(study: StudyOut): StudyToolIn[] {
 
 type PanelMode = "idle" | "create" | "edit";
 
+type FormLabelDraft = {
+  toolCode: string;
+  label: string;
+  targetCount: number;
+};
+
+function defaultToolCode(index: number): string {
+  return `T${index + 1}`;
+}
+
 export default function StudiesPage() {
   const queryClient = useQueryClient();
   const { activeStudyId, setActiveStudyId, refetch } = useStudy();
@@ -79,11 +90,9 @@ export default function StudiesPage() {
   const [panelMode, setPanelMode] = useState<PanelMode>("idle");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StudyCreate>(emptyForm());
-  const [toolCode, setToolCode] = useState("T1");
-  const [toolLabel, setToolLabel] = useState("");
-  const [toolTarget, setToolTarget] = useState("");
   const [assignProjectId, setAssignProjectId] = useState("");
   const [assignTool, setAssignTool] = useState("T1");
+  const [assignLabel, setAssignLabel] = useState("");
   const [koboServerUrl, setKoboServerUrl] = useState("https://kf.kobotoolbox.org");
   const [koboApiToken, setKoboApiToken] = useState("");
   const [koboUsername, setKoboUsername] = useState("");
@@ -94,14 +103,18 @@ export default function StudiesPage() {
   const [scheduleRecipients, setScheduleRecipients] = useState("");
   const [scheduleFeedback, setScheduleFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [message, setMessage] = useState("");
-  const [didAutoSelect, setDidAutoSelect] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createPhase, setCreatePhase] = useState<string | null>(null);
+  const [formLabels, setFormLabels] = useState<Record<string, FormLabelDraft>>({});
+  const [isSavingLabels, setIsSavingLabels] = useState(false);
 
   const createStudy = useCreateStudy();
   const updateStudy = useUpdateStudy();
   const deleteStudy = useDeleteStudy();
   const assignStudyProject = useAssignStudyProject();
   const unassignStudyProject = useUnassignStudyProject();
+  const syncProjects = useSyncProjects();
   const studyKoboQuery = useGetStudyKobo(editingId ?? "", {
     query: { enabled: Boolean(editingId) } as never,
   });
@@ -172,18 +185,31 @@ export default function StudiesPage() {
     [studies, editingId],
   );
 
+  const studyProjects = useMemo(() => {
+    if (!editingId) return [];
+    return projects.filter((p) => p.studyId === editingId);
+  }, [projects, editingId]);
+
   const startCreate = () => {
     setPanelMode("create");
     setEditingId(null);
     setForm(emptyForm());
     setMessage("");
     setActionError(null);
+    setKoboFeedback(null);
+    setKoboServerUrl("https://kf.kobotoolbox.org");
+    setKoboApiToken("");
+    setKoboUsername("");
+    setFormLabels({});
+    setCreatePhase(null);
   };
 
   const clearPanel = () => {
     setPanelMode("idle");
     setEditingId(null);
     setForm(emptyForm());
+    setFormLabels({});
+    setCreatePhase(null);
   };
 
   const startEdit = (study: StudyOut) => {
@@ -201,27 +227,8 @@ export default function StudiesPage() {
     setActionError(null);
     setKoboFeedback(null);
     setScheduleFeedback(null);
+    setCreatePhase(null);
   };
-
-  const cancelCreate = () => {
-    const preferred =
-      studies.find((s) => s.id === activeStudyId) ?? studies[0] ?? null;
-    if (preferred) startEdit(preferred);
-    else clearPanel();
-  };
-
-  // Open the active (or first) study once the list loads — never default to Create.
-  useEffect(() => {
-    if (didAutoSelect || studiesQuery.isLoading || panelMode !== "idle") return;
-    if (studies.length === 0) {
-      setDidAutoSelect(true);
-      return;
-    }
-    const preferred =
-      studies.find((s) => s.id === activeStudyId) ?? studies[0];
-    if (preferred) startEdit(preferred);
-    setDidAutoSelect(true);
-  }, [studies, studiesQuery.isLoading, activeStudyId, didAutoSelect, panelMode]);
 
   const invalidateStudyQueries = () => {
     queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
@@ -229,8 +236,8 @@ export default function StudiesPage() {
     refetch();
   };
 
-  const applyStudyToForm = (study: StudyOut) => {
-    setMessage(`Saved study “${study.name}”. Assign synced forms below.`);
+  const applyStudyToForm = (study: StudyOut, statusMessage?: string) => {
+    setMessage(statusMessage ?? `Saved study “${study.name}”.`);
     setPanelMode("edit");
     setEditingId(study.id);
     setActiveStudyId(study.id);
@@ -256,12 +263,95 @@ export default function StudiesPage() {
       if (panelMode === "edit" && editingId) {
         const study = await updateStudy.mutateAsync({ studyId: editingId, data: payload });
         applyStudyToForm(study);
-      } else {
-        const study = await createStudy.mutateAsync({ data: payload });
-        applyStudyToForm(study);
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Save failed");
+    }
+  };
+
+  const createStudyAndPullForms = async () => {
+    setActionError(null);
+    setKoboFeedback(null);
+    if (!form.name.trim()) {
+      setActionError("Enter a study name");
+      return;
+    }
+    if (!koboApiToken.trim()) {
+      setActionError("Enter your Kobo API token to pull forms");
+      return;
+    }
+
+    setIsCreating(true);
+    let createdStudyId: string | null = null;
+    try {
+      setCreatePhase("Creating study…");
+      const payload: StudyCreate = {
+        ...form,
+        tools: [],
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
+      };
+      const study = await createStudy.mutateAsync({ data: payload });
+      createdStudyId = study.id;
+
+      setCreatePhase("Connecting Kobo…");
+      setEditingId(study.id);
+      setActiveStudyId(study.id);
+      await updateStudyKobo.mutateAsync({
+        studyId: study.id,
+        data: {
+          serverUrl: koboServerUrl,
+          apiToken: koboApiToken,
+          username: koboUsername,
+        },
+      });
+
+      setCreatePhase("Pulling forms from Kobo…");
+      const syncResult = await syncProjects.mutateAsync({
+        params: { studyId: study.id },
+      });
+
+      await queryClient.refetchQueries({ queryKey: getGetProjectsQueryKey() });
+      await queryClient.refetchQueries({ queryKey: getGetStudiesQueryKey() });
+      await refetch();
+
+      const syncedForms =
+        (queryClient.getQueryData(getGetProjectsQueryKey()) as typeof projects | undefined) ?? [];
+      const studyForms = syncedForms.filter((p) => p.studyId === study.id);
+      const drafts: Record<string, FormLabelDraft> = {};
+      studyForms.forEach((p, index) => {
+        drafts[p.id] = {
+          toolCode: (p.toolCode || defaultToolCode(index)).toUpperCase(),
+          label: p.name || defaultToolCode(index),
+          targetCount: 0,
+        };
+      });
+      setFormLabels(drafts);
+
+      const syncedCount = syncResult.projectsSynced ?? studyForms.length;
+      const errNote =
+        (syncResult.errors?.length ?? 0) > 0
+          ? ` ${syncResult.errors.length} form(s) had sync errors.`
+          : "";
+      applyStudyToForm(
+        study,
+        `Study “${study.name}” created. Pulled ${syncedCount} form(s).${errNote} Assign a tool code and label to each form below.`,
+      );
+      setCreatePhase(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Create failed");
+      setCreatePhase(null);
+      if (createdStudyId) {
+        setPanelMode("edit");
+        setEditingId(createdStudyId);
+        setActiveStudyId(createdStudyId);
+        invalidateStudyQueries();
+        setMessage(
+          "Study was created, but setup did not finish. Connect Kobo and pull forms to continue.",
+        );
+      }
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -271,7 +361,6 @@ export default function StudiesPage() {
       await deleteStudy.mutateAsync({ studyId: id });
       setMessage("Study deleted.");
       clearPanel();
-      setDidAutoSelect(false);
       if (activeStudyId === id) setActiveStudyId(null);
       invalidateStudyQueries();
     } catch (err) {
@@ -285,13 +374,20 @@ export default function StudiesPage() {
       setActionError("Select a project");
       return;
     }
+    const picked = projects.find((p) => p.id === assignProjectId);
+    const label = assignLabel.trim() || picked?.name || undefined;
     try {
       await assignStudyProject.mutateAsync({
         studyId: editingId,
-        data: { projectId: assignProjectId, toolCode: assignTool || undefined },
+        data: {
+          projectId: assignProjectId,
+          toolCode: assignTool || undefined,
+          label,
+        },
       });
       setMessage("Form assigned to study.");
       setAssignProjectId("");
+      setAssignLabel("");
       queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
     } catch (err) {
@@ -307,6 +403,11 @@ export default function StudiesPage() {
     }
     try {
       await unassignStudyProject.mutateAsync({ studyId: editingId, projectId });
+      setFormLabels((prev) => {
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
     } catch (err) {
@@ -314,31 +415,148 @@ export default function StudiesPage() {
     }
   };
 
+  const saveFormLabels = async () => {
+    if (!editingId) return;
+    setActionError(null);
+    setIsSavingLabels(true);
+    try {
+      const entries = studyProjects.map((p) => {
+        const draft = formLabels[p.id];
+        return {
+          projectId: p.id,
+          formName: p.name,
+          toolCode: (draft?.toolCode || "").trim().toUpperCase(),
+          label: (draft?.label || "").trim() || p.name,
+          targetCount: Number(draft?.targetCount ?? 0),
+        };
+      });
+      const missing = entries.find((e) => !e.toolCode);
+      if (missing) {
+        setActionError("Every form needs a tool code (T1, T2, …)");
+        return;
+      }
+
+      const toolsByCode = new Map<string, StudyToolIn>();
+      entries.forEach((e, index) => {
+        const prev = toolsByCode.get(e.toolCode);
+        const existingId = (form.tools ?? []).find(
+          (t) => t.code.toUpperCase() === e.toolCode,
+        )?.id;
+        toolsByCode.set(e.toolCode, {
+          code: e.toolCode,
+          label: e.label,
+          targetCount: e.targetCount || prev?.targetCount || 0,
+          sortOrder: prev?.sortOrder ?? index,
+          id: existingId,
+        });
+      });
+      const tools = [...toolsByCode.values()];
+
+      const study = await updateStudy.mutateAsync({
+        studyId: editingId,
+        data: { tools },
+      });
+
+      for (const entry of entries) {
+        await assignStudyProject.mutateAsync({
+          studyId: editingId,
+          data: {
+            projectId: entry.projectId,
+            toolCode: entry.toolCode,
+            label: entry.label,
+          },
+        });
+      }
+
+      applyStudyToForm(study, "Tools saved.");
+      setForm({
+        name: study.name,
+        description: study.description ?? "",
+        startDate: study.startDate ?? "",
+        endDate: study.endDate ?? "",
+        timezone: study.timezone || "Asia/Kolkata",
+        tools: toolsFromStudy(study),
+      });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to save tools");
+    } finally {
+      setIsSavingLabels(false);
+    }
+  };
+
+  const pullFormsAgain = async () => {
+    if (!editingId) return;
+    setActionError(null);
+    setCreatePhase("Pulling forms from Kobo…");
+    try {
+      const syncResult = await syncProjects.mutateAsync({
+        params: { studyId: editingId },
+      });
+      await queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+      await queryClient.invalidateQueries({ queryKey: getGetStudiesQueryKey() });
+      const errNote =
+        syncResult.errors?.length > 0
+          ? ` ${syncResult.errors.length} form(s) had sync errors.`
+          : "";
+      setMessage(`Pulled ${syncResult.projectsSynced} form(s).${errNote} Update tool codes below if needed.`);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setCreatePhase(null);
+    }
+  };
+
   useEffect(() => {
     const cred = studyKoboQuery.data ?? editing?.credential;
-    if (!cred) return;
+    if (!cred || panelMode === "create") return;
     setKoboServerUrl(cred.serverUrl || "https://kf.kobotoolbox.org");
     setKoboApiToken(cred.apiToken || "");
     setKoboUsername(cred.username || "");
-  }, [studyKoboQuery.data, editing?.credential, editingId]);
+  }, [studyKoboQuery.data, editing?.credential, editingId, panelMode]);
+
+  // Keep form/tool drafts in sync when study projects load/change
+  useEffect(() => {
+    if (panelMode !== "edit" || !editingId) return;
+    setFormLabels((prev) => {
+      const toolsByCode = new Map(
+        (editing?.tools ?? form.tools ?? []).map((t) => [
+          t.code.toUpperCase(),
+          { label: t.label ?? "", targetCount: t.targetCount ?? 0 },
+        ]),
+      );
+      const next: Record<string, FormLabelDraft> = {};
+      studyProjects.forEach((p, index) => {
+        if (prev[p.id]) {
+          next[p.id] = prev[p.id];
+          return;
+        }
+        const code = (p.toolCode || defaultToolCode(index)).toUpperCase();
+        const tool = toolsByCode.get(code);
+        next[p.id] = {
+          toolCode: code,
+          // Default label is the Kobo form name
+          label: p.name || tool?.label || code,
+          targetCount: tool?.targetCount ?? 0,
+        };
+      });
+      return next;
+    });
+  }, [studyProjects, editingId, panelMode, editing?.tools, form.tools]);
 
   const unassignedProjects = projects.filter((p) => !p.studyId);
-  const otherStudyProjects = projects.filter(
-    (p) => p.studyId && p.studyId !== editingId,
-  );
 
-  const isSaving = createStudy.isPending || updateStudy.isPending;
+  const isSaving = updateStudy.isPending;
   const error =
     studiesQuery.error?.message ||
     actionError;
 
-  const tools = form.tools ?? [];
+  const primaryBusy = isCreating || syncProjects.isPending;
 
   return (
     <Layout>
       <Header
         title="Studies"
-        description="Create a study, then assign synced Kobo forms with tool codes (T1 / T2 / T3)"
+        description="Create a study with Kobo Credentials"
         action={
           <>
             <Dialog>
@@ -358,12 +576,11 @@ export default function StudiesPage() {
                 <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
                   <li>Create forms in KoboToolbox</li>
                   <li>
-                    <Link href="/forms" className="underline text-primary">
-                      Sync from Kobo
-                    </Link>{" "}
-                    on the Forms page
+                    Click <strong>New study</strong>, enter study details and your Kobo credentials
                   </li>
-                  <li>Create a study here, define tools and Kobo credentials, then assign forms</li>
+                  <li>
+                    Forms are pulled automatically — assign each a tool code (T1, T2, …) and label
+                  </li>
                   <li>Keep this study selected in the sidebar workspace for DQA and Reports</li>
                 </ol>
               </DialogContent>
@@ -387,83 +604,135 @@ export default function StudiesPage() {
             {message}
           </div>
         )}
+        {createPhase && (
+          <div className="flex items-center gap-2 rounded-md border bg-card p-3 text-sm text-muted-foreground">
+            <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+            {createPhase}
+          </div>
+        )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <Card className="xl:col-span-1">
-            <CardHeader className="py-4 border-b">
-              <CardTitle className="text-sm">All studies</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 divide-y">
-              {studies.length === 0 && (
-                <p className="p-4 text-sm text-muted-foreground">No studies yet.</p>
-              )}
-              {studies.map((study) => (
-                <button
-                  key={study.id}
-                  type="button"
-                  onClick={() => startEdit(study)}
-                  className={`w-full text-left p-4 hover:bg-muted/40 ${
-                    panelMode === "edit" && editingId === study.id ? "bg-muted/60" : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-sm">{study.name}</span>
-                    {activeStudyId === study.id && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Active
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {study.projectCount ?? 0} forms ·{" "}
-                    {(study.submissionCount ?? 0).toLocaleString()} submissions
-                    {study.dayNumber != null ? ` · Day ${study.dayNumber}` : ""}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {(study.projects ?? []).map((p) => (
-                      <Badge key={p.id} variant="outline" className="text-[10px]">
-                        {p.toolCode || "—"} {p.name.slice(0, 24)}
-                      </Badge>
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="xl:col-span-2">
-            {panelMode === "idle" ? (
-              <>
-                <CardHeader className="py-4 border-b">
-                  <CardTitle className="text-sm">Study details</CardTitle>
-                </CardHeader>
-                <CardContent className="p-8 text-center space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {studies.length === 0
-                      ? "No studies yet. Click “New study” to create one."
-                      : "Select a study from the list, or click “New study” to create another."}
-                  </p>
-                  {studies.length === 0 && (
-                    <Button size="sm" onClick={startCreate}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      New study
-                    </Button>
-                  )}
-                </CardContent>
-              </>
-            ) : (
-              <>
-            <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">
-                {panelMode === "edit" ? "Edit study" : "Create study"}
-              </CardTitle>
-              <div className="flex gap-2">
-                {panelMode === "create" && (
-                  <Button size="sm" variant="ghost" onClick={cancelCreate}>
-                    <X className="mr-1 h-4 w-4" />
-                    Cancel
-                  </Button>
-                )}
+        {panelMode === "idle" ? (
+          studiesQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading studies…</p>
+          ) : studies.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No studies yet. Click “New study” to create one with your Kobo credentials.
+                </p>
+                <Button size="sm" onClick={startCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New study
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="overflow-x-auto rounded-md border bg-card">
+              <table className="w-full min-w-[800px] text-sm">
+                <thead className="bg-muted/50 text-left">
+                  <tr>
+                    <th className="p-3 font-medium">Study</th>
+                    <th className="p-3 font-medium">Forms</th>
+                    <th className="p-3 font-medium">Submissions</th>
+                    <th className="p-3 font-medium">Day</th>
+                    <th className="p-3 font-medium">Kobo</th>
+                    <th className="p-3 font-medium">Tools</th>
+                    <th className="p-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studies.map((study) => (
+                    <tr
+                      key={study.id}
+                      className="border-t cursor-pointer hover:bg-muted/40"
+                      onClick={() => startEdit(study)}
+                    >
+                      <td className="p-3 align-top">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{study.name}</span>
+                          {activeStudyId === study.id && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+                        {study.description ? (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                            {study.description}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="p-3 align-top tabular-nums">
+                        {study.projectCount ?? 0}
+                      </td>
+                      <td className="p-3 align-top tabular-nums">
+                        {(study.submissionCount ?? 0).toLocaleString()}
+                      </td>
+                      <td className="p-3 align-top text-muted-foreground">
+                        {study.dayNumber != null ? `Day ${study.dayNumber}` : "—"}
+                      </td>
+                      <td className="p-3 align-top">
+                        {study.credential?.connected ? (
+                          <span className="inline-flex items-center gap-1 text-green-700 text-xs font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Connected
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Not connected</span>
+                        )}
+                      </td>
+                      <td className="p-3 align-top">
+                        <div className="flex flex-wrap gap-1">
+                          {(study.tools ?? []).length === 0 && (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                          {(study.tools ?? []).map((t) => (
+                            <Badge key={t.id} variant="outline" className="text-[10px] font-mono">
+                              {t.code}
+                              {t.label ? ` · ${t.label}` : ""}
+                              {t.targetCount ? ` (${t.targetCount})` : ""}
+                            </Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td
+                        className="p-3 align-top"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex justify-end gap-2">
+                          {activeStudyId !== study.id && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setActiveStudyId(study.id)}
+                            >
+                              Set active
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" onClick={() => startEdit(study)}>
+                            Edit
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          <Card>
+            <CardHeader className="py-4 border-b flex flex-row items-center justify-between gap-3">
+              <Button
+                size="sm"
+                className="gap-1 bg-primary text-primary-foreground"
+                onClick={clearPanel}
+                disabled={primaryBusy}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+              <div className="flex gap-2 shrink-0">
                 {panelMode === "edit" && editingId && (
                   <>
                     <Button
@@ -488,16 +757,30 @@ export default function StudiesPage() {
                       <Trash2 className="mr-1 h-4 w-4" />
                       Delete
                     </Button>
+                    <Button
+                      size="sm"
+                      disabled={isSaving || !form.name.trim()}
+                      onClick={() => void saveStudy()}
+                    >
+                      <Save className="mr-1 h-4 w-4" />
+                      Save
+                    </Button>
                   </>
                 )}
-                <Button
-                  size="sm"
-                  disabled={isSaving || !form.name.trim()}
-                  onClick={() => void saveStudy()}
-                >
-                  <Save className="mr-1 h-4 w-4" />
-                  Save
-                </Button>
+                {panelMode === "create" && (
+                  <Button
+                    size="sm"
+                    disabled={primaryBusy || !form.name.trim() || !koboApiToken.trim()}
+                    onClick={() => void createStudyAndPullForms()}
+                  >
+                    {primaryBusy ? (
+                      <RefreshCw className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-1 h-4 w-4" />
+                    )}
+                    {primaryBusy ? "Working…" : "Create & pull forms"}
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
@@ -533,139 +816,38 @@ export default function StudiesPage() {
                     onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Timezone</Label>
-                  <Input
-                    value={form.timezone ?? "Asia/Kolkata"}
-                    onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
-                  />
-                </div>
               </div>
 
               <div className="border-t pt-4 space-y-3">
-                <Label>Tools (codes, labels, coverage targets)</Label>
-                <div className="space-y-2">
-                  {tools.map((tool, index) => (
-                    <div key={tool.id ?? `${tool.code}-${index}`} className="flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 text-sm">
-                      <span className="font-mono text-xs w-12">{tool.code}</span>
-                      <Input
-                        className="h-8 flex-1 min-w-[120px]"
-                        value={tool.label ?? ""}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            tools: (f.tools ?? []).map((t, i) =>
-                              i === index ? { ...t, label: e.target.value } : t,
-                            ),
-                          }))
-                        }
-                        placeholder="Label"
-                      />
-                      <Input
-                        className="h-8 w-24"
-                        type="number"
-                        value={tool.targetCount ?? 0}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            tools: (f.tools ?? []).map((t, i) =>
-                              i === index ? { ...t, targetCount: Number(e.target.value) } : t,
-                            ),
-                          }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            tools: (f.tools ?? []).filter((_, i) => i !== index),
-                          }))
-                        }
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2 max-w-xl">
-                  <Input
-                    className="w-24"
-                    value={toolCode}
-                    onChange={(e) => setToolCode(e.target.value.toUpperCase())}
-                    placeholder="T1"
-                  />
-                  <Input
-                    className="flex-1 min-w-[120px]"
-                    value={toolLabel}
-                    onChange={(e) => setToolLabel(e.target.value)}
-                    placeholder="Label"
-                  />
-                  <Input
-                    className="w-24"
-                    type="number"
-                    value={toolTarget}
-                    onChange={(e) => setToolTarget(e.target.value)}
-                    placeholder="440"
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      if (!toolCode.trim()) return;
-                      setForm((f) => ({
-                        ...f,
-                        tools: [
-                          ...(f.tools ?? []),
-                          {
-                            code: toolCode.trim().toUpperCase(),
-                            label: toolLabel.trim() || toolCode.trim().toUpperCase(),
-                            targetCount: Number(toolTarget || 0),
-                            sortOrder: (f.tools ?? []).length,
-                          },
-                        ],
-                      }));
-                      setToolLabel("");
-                      setToolTarget("");
-                    }}
-                  >
-                    Add tool
-                  </Button>
-                </div>
-              </div>
-
-              {panelMode === "edit" && editingId && (
-                <div className="border-t pt-4 space-y-3">
-                  <Label>KoboToolbox connection</Label>
-                  <p className="text-xs text-muted-foreground">
-                    One Kobo account per study. Sync on the Forms page uses these credentials.
-                  </p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1.5 md:col-span-2">
-                      <Label className="text-xs">Server URL</Label>
-                      <Input
-                        className="font-mono text-sm"
-                        value={koboServerUrl}
-                        onChange={(e) => setKoboServerUrl(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">API token</Label>
-                      <Input
-                        type="password"
-                        className="font-mono text-sm"
-                        value={koboApiToken}
-                        onChange={(e) => setKoboApiToken(e.target.value)}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Username (optional)</Label>
-                      <Input
-                        value={koboUsername}
-                        onChange={(e) => setKoboUsername(e.target.value)}
-                      />
-                    </div>
+                <Label>KoboToolbox connection</Label>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs">Server URL</Label>
+                    <Input
+                      className="font-mono text-sm"
+                      value={koboServerUrl}
+                      onChange={(e) => setKoboServerUrl(e.target.value)}
+                    />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">API token</Label>
+                    <Input
+                      type="password"
+                      className="font-mono text-sm"
+                      value={koboApiToken}
+                      onChange={(e) => setKoboApiToken(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Username (optional)</Label>
+                    <Input
+                      value={koboUsername}
+                      onChange={(e) => setKoboUsername(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {panelMode === "edit" && editingId && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
@@ -694,40 +876,224 @@ export default function StudiesPage() {
                     >
                       {testStudyKobo.isPending ? "Testing…" : "Test connection"}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={syncProjects.isPending || !editingId}
+                      onClick={() => void pullFormsAgain()}
+                    >
+                      <RefreshCw
+                        className={`mr-1 h-4 w-4 ${syncProjects.isPending ? "animate-spin" : ""}`}
+                      />
+                      Pull forms
+                    </Button>
                     {(studyKoboQuery.data?.connected || editing?.credential?.connected) && !koboFeedback && (
                       <span className="text-sm text-green-600 dark:text-green-400 flex items-center font-medium">
                         <CheckCircle2 className="w-4 h-4 mr-1" /> Connected
                       </span>
                     )}
                   </div>
-                  {koboFeedback && (
-                    <div
-                      className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
-                        koboFeedback.success
-                          ? "border-green-200 bg-green-50 text-green-800"
-                          : "border-destructive/30 bg-destructive/5 text-destructive"
-                      }`}
-                    >
-                      {koboFeedback.success ? (
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                      ) : (
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      )}
-                      {koboFeedback.message}
+                )}
+                {koboFeedback && (
+                  <div
+                    className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
+                      koboFeedback.success
+                        ? "border-green-200 bg-green-50 text-green-800"
+                        : "border-destructive/30 bg-destructive/5 text-destructive"
+                    }`}
+                  >
+                    {koboFeedback.success ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    )}
+                    {koboFeedback.message}
+                  </div>
+                )}
+              </div>
+
+              {panelMode === "edit" && editingId && (
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <Label>Tools (codes, labels, coverage targets)</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        One row per form. Label defaults to the form name — set the coverage target.
+                      </p>
                     </div>
-                  )}
+                    {studyProjects.length > 0 && (
+                      <Button
+                        size="sm"
+                        disabled={isSavingLabels}
+                        onClick={() => void saveFormLabels()}
+                      >
+                        <Save className="mr-1 h-4 w-4" />
+                        {isSavingLabels ? "Saving…" : "Save tools"}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full min-w-[640px] text-sm">
+                      <thead className="bg-muted/50 text-left">
+                        <tr>
+                          <th className="p-2.5 font-medium">Form</th>
+                          <th className="p-2.5 font-medium w-24">Code</th>
+                          <th className="p-2.5 font-medium">Label</th>
+                          <th className="p-2.5 font-medium w-36">Coverage target</th>
+                          <th className="p-2.5 font-medium w-20 text-right"> </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studyProjects.length === 0 && (
+                          <tr className="border-t">
+                            <td colSpan={5} className="p-3 text-muted-foreground">
+                              No forms yet. Use <strong>Pull forms</strong> above after connecting
+                              Kobo, or assign an unassigned form below.
+                            </td>
+                          </tr>
+                        )}
+                        {studyProjects.map((p, index) => {
+                          const draft = formLabels[p.id] ?? {
+                            toolCode: p.toolCode || defaultToolCode(index),
+                            label: p.name,
+                            targetCount: 0,
+                          };
+                          return (
+                            <tr key={p.id} className="border-t">
+                              <td className="p-2 align-middle">
+                                <Link
+                                  className="text-primary underline font-medium"
+                                  href={`/forms/${p.id}`}
+                                >
+                                  {p.name}
+                                </Link>
+                                <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                                  {(p.submissionCount ?? 0).toLocaleString()} submissions
+                                </span>
+                              </td>
+                              <td className="p-2 align-middle">
+                                <Input
+                                  className="h-8 font-mono text-xs"
+                                  value={draft.toolCode}
+                                  onChange={(e) =>
+                                    setFormLabels((prev) => ({
+                                      ...prev,
+                                      [p.id]: {
+                                        ...draft,
+                                        toolCode: e.target.value.toUpperCase(),
+                                      },
+                                    }))
+                                  }
+                                  placeholder="T1"
+                                />
+                              </td>
+                              <td className="p-2 align-middle">
+                                <Input
+                                  className="h-8"
+                                  value={draft.label}
+                                  onChange={(e) =>
+                                    setFormLabels((prev) => ({
+                                      ...prev,
+                                      [p.id]: {
+                                        ...draft,
+                                        label: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder={p.name}
+                                />
+                              </td>
+                              <td className="p-2 align-middle">
+                                <Input
+                                  className="h-8"
+                                  type="number"
+                                  value={draft.targetCount}
+                                  onChange={(e) =>
+                                    setFormLabels((prev) => ({
+                                      ...prev,
+                                      [p.id]: {
+                                        ...draft,
+                                        targetCount: Number(e.target.value),
+                                      },
+                                    }))
+                                  }
+                                  placeholder="440"
+                                />
+                              </td>
+                              <td className="p-2 align-middle text-right">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => void unassignProject(p.id)}
+                                >
+                                  Remove
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Assign a synced form ({unassignedProjects.length} unassigned)
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        className="field-control h-9 flex-1 min-w-[180px] px-2 text-sm"
+                        value={assignProjectId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setAssignProjectId(id);
+                          const picked = unassignedProjects.find((p) => p.id === id);
+                          if (picked) setAssignLabel(picked.name);
+                        }}
+                      >
+                        <option value="">Choose a form…</option>
+                        {unassignedProjects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        className="h-9 w-20"
+                        value={assignTool}
+                        onChange={(e) => setAssignTool(e.target.value.toUpperCase())}
+                        placeholder="T1"
+                      />
+                      <Input
+                        className="h-9 w-36"
+                        value={assignLabel}
+                        onChange={(e) => setAssignLabel(e.target.value)}
+                        placeholder="Label"
+                      />
+                      <Button
+                        disabled={!assignProjectId || assignStudyProject.isPending}
+                        onClick={() => void assignProject()}
+                      >
+                        Assign
+                      </Button>
+                    </div>
+                    {unassignedProjects.length === 0 && projects.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No unassigned forms. Pull forms above.
+                      </p>
+                    )}
+                    {projects.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No forms synced yet. Connect Kobo and pull forms.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
               {panelMode === "edit" && editingId && (
                 <div className="border-t pt-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <Label>Daily DQA email schedule</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Per-study schedule for the daily DQA report. SMTP stays in Settings.
-                      </p>
-                    </div>
+                    <Label>Daily DQA email schedule</Label>
                     <Switch checked={scheduleEnabled} onCheckedChange={setScheduleEnabled} />
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
@@ -801,102 +1167,9 @@ export default function StudiesPage() {
                   )}
                 </div>
               )}
-
-              {panelMode === "edit" && editingId && (
-                <div className="border-t pt-4 space-y-3">
-                  <Label>Forms in this study</Label>
-                  <div className="divide-y rounded-md border">
-                    {(editing?.projects ?? []).length === 0 && (
-                      <p className="p-3 text-sm text-muted-foreground">
-                        No forms assigned yet.{" "}
-                        <Link href="/forms" className="underline text-primary">
-                          Sync from Kobo
-                        </Link>{" "}
-                        first, then assign unassigned forms below.
-                      </p>
-                    )}
-                    {(editing?.projects ?? []).map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between gap-2 p-3 text-sm"
-                      >
-                        <div>
-                          <Badge variant="outline" className="mr-2 font-mono text-[10px]">
-                            {p.toolCode || "—"}
-                          </Badge>
-                          <Link className="text-primary underline" href={`/forms/${p.id}`}>
-                            {p.name}
-                          </Link>
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {(p.submissionCount ?? 0).toLocaleString()} submissions
-                          </span>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => void unassignProject(p.id)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Assign a synced form ({unassignedProjects.length} unassigned)
-                    </Label>
-                    <div className="flex flex-wrap gap-2">
-                      <select
-                        className="field-control h-9 flex-1 min-w-[180px] px-2 text-sm"
-                        value={assignProjectId}
-                        onChange={(e) => setAssignProjectId(e.target.value)}
-                      >
-                        <option value="">Choose a form…</option>
-                        {unassignedProjects.length > 0 && (
-                          <optgroup label="Unassigned">
-                            {unassignedProjects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {otherStudyProjects.length > 0 && (
-                          <optgroup label="In another study (will move)">
-                            {otherStudyProjects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                [{p.toolCode || "—"}] {p.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      <Input
-                        className="h-9 w-20"
-                        value={assignTool}
-                        onChange={(e) => setAssignTool(e.target.value.toUpperCase())}
-                        placeholder="T1"
-                      />
-                      <Button
-                        disabled={!assignProjectId || assignStudyProject.isPending}
-                        onClick={() => void assignProject()}
-                      >
-                        Assign
-                      </Button>
-                    </div>
-                    {projects.length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        No forms synced yet. Go to Forms → Sync from Kobo.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
             </CardContent>
-              </>
-            )}
           </Card>
-        </div>
+        )}
       </div>
     </Layout>
   );

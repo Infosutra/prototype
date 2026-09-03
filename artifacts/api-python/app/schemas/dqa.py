@@ -346,6 +346,12 @@ class DqaPreviewResult(CamelModel):
     warnings: list[DqaRuleWarning] = []
 
 
+class DqaResolvedField(CamelModel):
+    code: str
+    form: str = ""
+    label: str = ""
+
+
 class DqaCompileMeta(CamelModel):
     model: str
     attempts: int
@@ -363,7 +369,11 @@ class DqaCompileSuccess(CamelModel):
     explanation: str
     validation: DqaValidationResult
     preview: DqaPreviewResult
+    resolved_fields: list[DqaResolvedField] = []
     meta: DqaCompileMeta
+    warnings: list[DqaRuleWarning] = []
+    diff: dict[str, Any] | None = None
+    session_id: str | None = None
 
 
 class DqaCompileNeedsClarification(CamelModel):

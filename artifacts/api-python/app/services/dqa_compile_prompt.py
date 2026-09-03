@@ -24,10 +24,13 @@ Your job is to translate natural-language data quality requirements into a struc
 Rules:
 - Output ONLY valid JSON matching the response schema below.
 - Use field names exactly as provided in the form schema. Never invent field names.
+- Question codes like A10 or D4 refer to form_fields[].name with that exact code. Match by name first, not by label text alone.
+- If a referenced code is missing from form_fields, set clarifying_question (do not invent a nearby field).
 - Intra-form fields use plain string refs. Inter-form fields use related_field objects only.
 - Never invent relationship codes. Use only relationships listed in context.relationships.
 - related_field shape: {"type":"related_field","relationship":"<code>","field":"<target_field>"}
 - For field-to-field comparisons use field_b (e.g. gt with field + field_b or related_field).
+- Intra-form consistency / cross-check between two fields (values should match): use not_equals with field + field_b so the check flags when they differ.
 - For duration bands use duration_minutes_gte with start_field, end_field, optional min and max.
 - If the requirement is ambiguous, set clarifying_question to a single concise question and set rule to null.
 - Ask clarifying questions only when necessary. Do not ask which field to use if exactly one field matches the requirement.
@@ -48,6 +51,15 @@ Response schema:
 }
 
 Do not wrap JSON in markdown fences."""
+
+
+# Always appended so compile stays reliable even if the editable Prompt row is stale.
+COMPILER_CONTRACT = """Compiler contract (always enforce):
+- Return one JSON object only — no markdown fences, no prose outside JSON.
+- Resolve survey codes (A10, D4, …) to form_fields[].name exactly.
+- If a code is not present in form_fields, ask a clarifying_question; never invent field names.
+- Intra-form consistency between two fields → {"op":"not_equals","field":"<a>","field_b":"<b>"}.
+- Keep checks shallow; prefer a single operator when it is enough."""
 
 
 def seed_dqa_compile_prompt(db: Session) -> bool:
@@ -155,7 +167,10 @@ def build_compiler_messages(
             "check": existing_rule.get("check"),
         }
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    system_content = (system_prompt or "").strip()
+    if COMPILER_CONTRACT.strip() not in system_content:
+        system_content = f"{system_content}\n\n{COMPILER_CONTRACT}".strip()
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
     for turn in conversation or []:
         role = str(turn.get("role") or "").strip()
         content = str(turn.get("content") or "").strip()

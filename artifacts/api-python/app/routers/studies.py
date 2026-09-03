@@ -221,6 +221,7 @@ def assign_project(
         project,
         tool_code=payload.tool_code,
         study_tool_id=payload.study_tool_id,
+        label=payload.label,
     )
     db.refresh(study)
     study = studies_service.get_study(db, study_id)

@@ -39,3 +39,26 @@ def test_llm_config_is_immutable() -> None:
         model="test-model",
     )
     assert config.provider == "openrouter"
+
+
+def test_deepseek_v4_payload_disables_reasoning() -> None:
+    from app.integrations.llm.plugins.openai_compat import (
+        _apply_provider_payload_tweaks,
+        _model_prefers_no_reasoning,
+    )
+
+    assert _model_prefers_no_reasoning("deepseek/deepseek-v4-flash-0731")
+    assert not _model_prefers_no_reasoning("openai/gpt-4o-mini")
+
+    payload: dict = {"model": "deepseek/deepseek-v4-flash-0731"}
+    _apply_provider_payload_tweaks(
+        payload,
+        LlmConfig(
+            provider="openrouter",
+            plugin_id="openai_compat",
+            api_key="sk-test",
+            base_url="https://openrouter.ai/api/v1",
+            model="deepseek/deepseek-v4-flash-0731",
+        ),
+    )
+    assert payload["reasoning"] == {"effort": "none"}

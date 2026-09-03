@@ -82,3 +82,4 @@ class StudyAssignProject(CamelModel):
     project_id: str
     tool_code: str | None = None
     study_tool_id: str | None = None
+    label: str | None = None

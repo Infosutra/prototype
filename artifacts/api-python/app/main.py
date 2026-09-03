@@ -106,7 +106,9 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        # Reflect any Origin so LAN / other-system clients work with browsers.
+        # (allow_origins=["*"] + allow_credentials=True is rejected by browsers.)
+        allow_origin_regex=r".*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

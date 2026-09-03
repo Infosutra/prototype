@@ -336,6 +336,42 @@ def _resolve_tool(
     return None
 
 
+def _ensure_tool(
+    db: Session,
+    study: Study,
+    *,
+    tool_code: str | None = None,
+    study_tool_id: str | None = None,
+    label: str | None = None,
+) -> StudyTool | None:
+    tool = _resolve_tool(study, tool_code=tool_code, study_tool_id=study_tool_id)
+    if tool is not None:
+        if label is not None:
+            cleaned = str(label).strip()
+            if cleaned:
+                tool.label = cleaned
+        return tool
+    if study_tool_id is not None and tool_code is None:
+        return None
+    if not tool_code or not str(tool_code).strip():
+        return None
+    code = str(tool_code).strip().upper()
+    tool = StudyTool(
+        id=_new_id("tool"),
+        study_id=study.id,
+        code=code,
+        label=(str(label).strip() if label else "") or code,
+        target_count=0,
+        sort_order=len(study.tools or []),
+    )
+    db.add(tool)
+    db.flush()
+    if study.tools is None:
+        study.tools = []
+    study.tools.append(tool)
+    return tool
+
+
 def assign_project(
     db: Session,
     study: Study,
@@ -343,10 +379,17 @@ def assign_project(
     *,
     tool_code: str | None = None,
     study_tool_id: str | None = None,
+    label: str | None = None,
 ) -> Project:
     project.study_id = study.id
-    tool = _resolve_tool(study, tool_code=tool_code, study_tool_id=study_tool_id)
     if study_tool_id is not None or tool_code is not None:
+        tool = _ensure_tool(
+            db,
+            study,
+            tool_code=tool_code,
+            study_tool_id=study_tool_id,
+            label=label,
+        )
         project.study_tool_id = tool.id if tool else None
     study.updated_at = _now()
     db.commit()

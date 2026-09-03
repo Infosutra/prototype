@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
-import { DqaChecksPanel } from "@/pages/dqa/DqaChecksPanel";
+import { DqaChecksPanel, DqaStudyRulesPanel } from "@/pages/dqa/DqaChecksPanel";
 
 const TABS = [
   { id: "coverage", label: "Coverage" },
@@ -104,6 +104,10 @@ export default function DqaDashboard() {
   const [drillRuleId, setDrillRuleId] = useState<string | null>(initialParams.get("ruleId"));
   const [mismatchOnly, setMismatchOnly] = useState(true);
   const [triViewId, setTriViewId] = useState("");
+  const [rulesIntent, setRulesIntent] = useState<{
+    view: "table" | "add" | "edit" | "edit-ai";
+    editRuleId: string | null;
+  }>({ view: "table", editRuleId: null });
 
   const openRule = (ruleId: string | null) => {
     setDrillRuleId(ruleId);
@@ -130,11 +134,32 @@ export default function DqaDashboard() {
 
   const setProjectIdWithUrl = (nextProjectId: string) => {
     setProjectId(nextProjectId);
+    setRulesIntent({ view: "table", editRuleId: null });
     openRule(null);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       if (nextProjectId) url.searchParams.set("projectId", nextProjectId);
       else url.searchParams.delete("projectId");
+      window.history.replaceState({}, "", url);
+    }
+  };
+
+  const openFormRules = (
+    nextProjectId: string,
+    opts?: { editRuleId?: string; add?: boolean },
+  ) => {
+    setProjectId(nextProjectId);
+    setRulesIntent(
+      opts?.add
+        ? { view: "add", editRuleId: null }
+        : opts?.editRuleId
+          ? { view: "edit", editRuleId: opts.editRuleId }
+          : { view: "table", editRuleId: null },
+    );
+    openRule(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("projectId", nextProjectId);
       window.history.replaceState({}, "", url);
     }
   };
@@ -563,17 +588,24 @@ export default function DqaDashboard() {
           </Card>
         )}
 
-        {tab === "rules" && (
-          projectId ? (
-            <DqaChecksPanel projectId={projectId} />
+        {tab === "rules" &&
+          (projectId ? (
+            <DqaChecksPanel
+              key={`${projectId}:${rulesIntent.view}:${rulesIntent.editRuleId || ""}`}
+              projectId={projectId}
+              initialView={rulesIntent.view}
+              initialEditRuleId={rulesIntent.editRuleId}
+            />
           ) : (
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                Select a form above to configure DQA rules for that form.
-              </CardContent>
-            </Card>
-          )
-        )}
+            <DqaStudyRulesPanel
+              projects={projects.map((p) => ({
+                id: p.id,
+                name: p.name,
+                toolCode: p.toolCode,
+              }))}
+              onOpenForm={openFormRules}
+            />
+          ))}
 
         {tab === "triangulation" && (
           <div className="space-y-4">

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -43,7 +43,13 @@ from app.schemas.dqa import (
 )
 from app.services import dqa_engine
 from app.services.dqa_compile_audit import get_compile_session, list_compile_sessions
-from app.services.dqa_compile import CompileError, compile_dqa_rule, validate_dqa_rule_for_project
+from app.services.dqa_compile import (
+    CompileError,
+    camelize,
+    compile_dqa_rule,
+    compile_dqa_rule_stream,
+    validate_dqa_rule_for_project,
+)
 from app.services.dqa_relationships import (
     RelationshipError,
     create_relationship,
@@ -685,10 +691,57 @@ def compile_rule(
     except CompileError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
+    body = camelize(result)
     status = result.get("status")
     if status == "invalid":
-        return JSONResponse(status_code=422, content=result)
-    return result
+        return JSONResponse(status_code=422, content=body)
+    return body
+
+
+@projects_router.post(
+    "/{project_id}/dqa/compile/stream",
+    operation_id="compileDqaRuleStream",
+    response_model=None,
+)
+def compile_rule_stream(
+    project_id: str,
+    payload: DqaCompileInput,
+    db: Session = Depends(get_db),
+):
+    """SSE stream of compile progress, optional tokens, then a final result/error event."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    settings = get_or_create_settings(db)
+
+    def event_gen():
+        import json
+
+        try:
+            for event in compile_dqa_rule_stream(
+                db,
+                project,
+                english=payload.english,
+                conversation=[t.model_dump() for t in payload.conversation],
+                existing_rule=payload.existing_rule,
+                preview_limit=payload.preview_limit,
+                settings=settings,
+            ):
+                name = str(event.get("event") or "message")
+                data = {k: v for k, v in event.items() if k != "event"}
+                yield f"event: {name}\ndata: {json.dumps(data, default=str)}\n\n"
+        except Exception as exc:  # noqa: BLE001 — surface to client as SSE error
+            yield f"event: error\ndata: {json.dumps({'message': str(exc), 'code': 'stream_error'})}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @projects_router.post(

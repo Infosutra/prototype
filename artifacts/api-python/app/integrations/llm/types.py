@@ -50,3 +50,10 @@ class CompletionResult:
     usage: TokenUsage = field(default_factory=TokenUsage)
     request_id: str | None = None
     raw_usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StreamDone:
+    """Sentinel yielded at the end of a streaming completion."""
+
+    result: CompletionResult
