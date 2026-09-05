@@ -1,0 +1,92 @@
+[
+  {
+    "date": "2026-03-01",
+    "dayLabel": "D1",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-02",
+    "dayLabel": "D2",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-03",
+    "dayLabel": "D3",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-04",
+    "dayLabel": "D4",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-05",
+    "dayLabel": "D5",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-06",
+    "dayLabel": "D6",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-07",
+    "dayLabel": "D7",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-08",
+    "dayLabel": "D8",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-09",
+    "dayLabel": "D9",
+    "flaggedPct": 0.0,
+    "submissions": 0
+  },
+  {
+    "date": "2026-03-10",
+    "dayLabel": "D10",
+    "flaggedPct": 10.7,
+    "submissions": 28
+  },
+  {
+    "date": "2026-03-11",
+    "dayLabel": "D11",
+    "flaggedPct": 13.2,
+    "submissions": 38
+  },
+  {
+    "date": "2026-03-12",
+    "dayLabel": "D12",
+    "flaggedPct": 28.3,
+    "submissions": 46
+  },
+  {
+    "date": "2026-03-13",
+    "dayLabel": "D13",
+    "flaggedPct": 50.0,
+    "submissions": 66
+  },
+  {
+    "date": "2026-03-14",
+    "dayLabel": "D14",
+    "flaggedPct": 57.1,
+    "submissions": 77
+  },
+  {
+    "date": "2026-03-15",
+    "dayLabel": "D15",
+    "flaggedPct": 69.4,
+    "submissions": 111
+  }
+]

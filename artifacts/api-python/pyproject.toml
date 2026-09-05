@@ -21,6 +21,9 @@ dependencies = [
   "python-multipart>=0.0.20",
   "sarvamai>=0.1.30",
   "mutagen>=1.47.0",
+  "langchain-core>=0.3.0",
+  "langchain-openai>=0.2.0",
+  "langgraph>=0.2.0",
 ]
 
 [project.scripts]
@@ -40,6 +43,7 @@ packages = ["app"]
 dev = [
     "pytest>=8.0",
     "ruff>=0.16.1",
+    "freezegun>=1.5.0",
 ]
 
 [tool.uv]

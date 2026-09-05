@@ -1,0 +1,106 @@
+[
+  {
+    "detail": "2 record(s) · e.g. PriorRedBucket0",
+    "label": "Correct/back-check PRIOR_RED_00 — Prior red 00",
+    "owner": "Field supervisor",
+    "records": 2,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "2 record(s) · e.g. PriorRedBucket1",
+    "label": "Correct/back-check PRIOR_RED_01 — Prior red 01",
+    "owner": "Field supervisor",
+    "records": 2,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "2 record(s) · e.g. PriorRedBucket2",
+    "label": "Correct/back-check PRIOR_RED_02 — Prior red 02",
+    "owner": "Field supervisor",
+    "records": 2,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "2 record(s) · e.g. PriorRedBucket0",
+    "label": "Correct/back-check PRIOR_RED_03 — Prior red 03",
+    "owner": "Field supervisor",
+    "records": 2,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "2 record(s) · e.g. T2RedCluster",
+    "label": "Correct/back-check T2_RED_CLUSTER — T2 red cluster",
+    "owner": "Field supervisor",
+    "records": 2,
+    "severity": "red",
+    "toolCode": "T2"
+  },
+  {
+    "detail": "1 record(s) · e.g. PriorRedBucket1",
+    "label": "Correct/back-check PRIOR_RED_04 — Prior red 04",
+    "owner": "Field supervisor",
+    "records": 1,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "1 record(s) · e.g. PriorRedBucket2",
+    "label": "Correct/back-check PRIOR_RED_05 — Prior red 05",
+    "owner": "Field supervisor",
+    "records": 1,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "1 record(s) · e.g. PriorRedBucket0",
+    "label": "Correct/back-check PRIOR_RED_06 — Prior red 06",
+    "owner": "Field supervisor",
+    "records": 1,
+    "severity": "red",
+    "toolCode": "T1"
+  },
+  {
+    "detail": "4 flag(s) cumulative",
+    "label": "Verify T2_AMBER_LEAD — T2 leading amber",
+    "owner": "M&E officer",
+    "records": 4,
+    "severity": "amber",
+    "toolCode": "—"
+  },
+  {
+    "detail": "3 flag(s) cumulative",
+    "label": "Verify TODAY_R00 — Today rule TODAY_R00",
+    "owner": "M&E officer",
+    "records": 3,
+    "severity": "amber",
+    "toolCode": "—"
+  },
+  {
+    "detail": "3 flag(s) cumulative",
+    "label": "Verify TODAY_R01 — Today rule TODAY_R01",
+    "owner": "M&E officer",
+    "records": 3,
+    "severity": "amber",
+    "toolCode": "—"
+  },
+  {
+    "detail": "3 flag(s) cumulative",
+    "label": "Verify TODAY_R02 — Today rule TODAY_R02",
+    "owner": "M&E officer",
+    "records": 3,
+    "severity": "amber",
+    "toolCode": "—"
+  },
+  {
+    "detail": "3 flag(s) cumulative",
+    "label": "Verify TODAY_R03 — Today rule TODAY_R03",
+    "owner": "M&E officer",
+    "records": 3,
+    "severity": "amber",
+    "toolCode": "—"
+  }
+]

@@ -1,0 +1,29 @@
+[
+  {
+    "amberCumulative": 0,
+    "flaggedPct": 0.0,
+    "projectName": "Clean Survey",
+    "redCumulative": 0,
+    "summary": "No material DQA flags for this tool..",
+    "toolCode": "T3",
+    "topRule": "—"
+  },
+  {
+    "amberCumulative": 45,
+    "flaggedPct": 70.2,
+    "projectName": "Facility Survey",
+    "redCumulative": 21,
+    "summary": "Led by AMBER TODAY_R00 (3 records).",
+    "toolCode": "T1",
+    "topRule": "TODAY_R00 (Today rule TODAY_R00)"
+  },
+  {
+    "amberCumulative": 9,
+    "flaggedPct": 100.0,
+    "projectName": "Teachers Survey",
+    "redCumulative": 2,
+    "summary": "Led by AMBER T2_AMBER_LEAD (4 records). RED cluster on T2_RED_CLUSTER (2 records).",
+    "toolCode": "T2",
+    "topRule": "T2_AMBER_LEAD (T2 leading amber)"
+  }
+]

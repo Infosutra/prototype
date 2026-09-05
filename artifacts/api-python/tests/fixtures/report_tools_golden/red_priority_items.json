@@ -1,0 +1,137 @@
+[
+  {
+    "count": 2,
+    "example": "PriorRedBucket0 · UDISE 20000000",
+    "exampleEnumerator": "PriorRedBucket0",
+    "exampleUdise": "20000000",
+    "ruleId": "PRIOR_RED_00",
+    "title": "Prior red 00",
+    "toolCode": "T1"
+  },
+  {
+    "count": 2,
+    "example": "PriorRedBucket1 · UDISE 20000001",
+    "exampleEnumerator": "PriorRedBucket1",
+    "exampleUdise": "20000001",
+    "ruleId": "PRIOR_RED_01",
+    "title": "Prior red 01",
+    "toolCode": "T1"
+  },
+  {
+    "count": 2,
+    "example": "PriorRedBucket2 · UDISE 20000002",
+    "exampleEnumerator": "PriorRedBucket2",
+    "exampleUdise": "20000002",
+    "ruleId": "PRIOR_RED_02",
+    "title": "Prior red 02",
+    "toolCode": "T1"
+  },
+  {
+    "count": 2,
+    "example": "PriorRedBucket0 · UDISE 20000003",
+    "exampleEnumerator": "PriorRedBucket0",
+    "exampleUdise": "20000003",
+    "ruleId": "PRIOR_RED_03",
+    "title": "Prior red 03",
+    "toolCode": "T1"
+  },
+  {
+    "count": 2,
+    "example": "T2RedCluster · UDISE 30000000",
+    "exampleEnumerator": "T2RedCluster",
+    "exampleUdise": "30000000",
+    "ruleId": "T2_RED_CLUSTER",
+    "title": "T2 red cluster",
+    "toolCode": "T2"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket1 · UDISE 20000004",
+    "exampleEnumerator": "PriorRedBucket1",
+    "exampleUdise": "20000004",
+    "ruleId": "PRIOR_RED_04",
+    "title": "Prior red 04",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket2 · UDISE 20000005",
+    "exampleEnumerator": "PriorRedBucket2",
+    "exampleUdise": "20000005",
+    "ruleId": "PRIOR_RED_05",
+    "title": "Prior red 05",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket0 · UDISE 20000006",
+    "exampleEnumerator": "PriorRedBucket0",
+    "exampleUdise": "20000006",
+    "ruleId": "PRIOR_RED_06",
+    "title": "Prior red 06",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket1 · UDISE 20000007",
+    "exampleEnumerator": "PriorRedBucket1",
+    "exampleUdise": "20000007",
+    "ruleId": "PRIOR_RED_07",
+    "title": "Prior red 07",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket2 · UDISE 20000008",
+    "exampleEnumerator": "PriorRedBucket2",
+    "exampleUdise": "20000008",
+    "ruleId": "PRIOR_RED_08",
+    "title": "Prior red 08",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket0 · UDISE 20000009",
+    "exampleEnumerator": "PriorRedBucket0",
+    "exampleUdise": "20000009",
+    "ruleId": "PRIOR_RED_09",
+    "title": "Prior red 09",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket1 · UDISE 20000010",
+    "exampleEnumerator": "PriorRedBucket1",
+    "exampleUdise": "20000010",
+    "ruleId": "PRIOR_RED_10",
+    "title": "Prior red 10",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket2 · UDISE 20000011",
+    "exampleEnumerator": "PriorRedBucket2",
+    "exampleUdise": "20000011",
+    "ruleId": "PRIOR_RED_11",
+    "title": "Prior red 11",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket0 · UDISE 20000012",
+    "exampleEnumerator": "PriorRedBucket0",
+    "exampleUdise": "20000012",
+    "ruleId": "PRIOR_RED_12",
+    "title": "Prior red 12",
+    "toolCode": "T1"
+  },
+  {
+    "count": 1,
+    "example": "PriorRedBucket1 · UDISE 20000013",
+    "exampleEnumerator": "PriorRedBucket1",
+    "exampleUdise": "20000013",
+    "ruleId": "PRIOR_RED_13",
+    "title": "Prior red 13",
+    "toolCode": "T1"
+  }
+]

@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from app.domain.reporting.aggregate import any_, aggregate, count, first
 from app.domain.reporting.daily_enumerators import (
+    build_enumerator_submission_details,
     build_enumerators_all,
     build_enumerators_today,
 )
@@ -13,11 +15,57 @@ from app.domain.reporting.daily_trends import (
     build_flag_rate_by_day,
     build_signoff_checklist,
 )
+from app.domain.reporting.domain_rules import (
+    apply_findings_by_tool,
+    apply_red_priority_items,
+    apply_top_failing_rules,
+    build_udise_index,
+)
 from app.domain.reporting.helpers import (
     format_report_date,
     format_report_datetime,
     udise_for,
 )
+
+
+def _flag_rows(flags: list[Any]) -> list[dict[str, Any]]:
+    """Flatten DQA flag ORM rows for generic aggregation (encounter order preserved)."""
+    return [
+        {
+            "ruleId": flag.rule_id,
+            "title": flag.title,
+            "severity": flag.severity,
+            "submission_id": flag.submission_id,
+            "project_id": flag.project_id,
+        }
+        for flag in flags
+    ]
+
+
+def _red_flag_rows(
+    flags: list[Any],
+    *,
+    project_by_id: dict[str, Any],
+    subs_by_id: dict[str, Any],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for flag in flags:
+        if flag.severity != "red":
+            continue
+        project = project_by_id.get(flag.project_id)
+        tool = (project.tool_code if project else None) or "—"
+        tool_code = tool.upper() if tool != "—" else "—"
+        sub = subs_by_id.get(flag.submission_id)
+        rows.append(
+            {
+                "toolCode": tool_code,
+                "ruleId": flag.rule_id,
+                "title": flag.title,
+                "enumerator": (sub.enumerator or "—") if sub else None,
+                "submission_id": flag.submission_id if sub else None,
+            }
+        )
+    return rows
 
 
 def compute_daily_dqa_stats(
@@ -83,7 +131,7 @@ def compute_daily_dqa_stats(
             }
         )
 
-    # RED priority (today first, then open cumulative REDs)
+    # RED priority examples (sign-off input; not one of the four mixed tool splits)
     red_today = [f for f in today_flags if f.severity == "red"]
     red_open = [f for f in all_flags if f.severity == "red"]
     red_sorted = sorted(
@@ -125,114 +173,98 @@ def compute_daily_dqa_stats(
         today_flags=today_flags,
         project_by_id=project_by_id,
     )
+    enumerator_submission_details = build_enumerator_submission_details(
+        today_subs=today_subs,
+        today_flags=today_flags,
+        project_by_id=project_by_id,
+    )
     enumerators_all = build_enumerators_all(
         all_subs=all_subs,
         all_flags=all_flags,
         project_by_id=project_by_id,
     )
 
-    # Top rules today
-    rule_counts: dict[str, dict[str, Any]] = {}
-    for flag in today_flags:
-        entry = rule_counts.setdefault(
-            flag.rule_id,
-            {"ruleId": flag.rule_id, "title": flag.title, "severity": flag.severity, "count": 0},
+    # --- Mixed (C): top failing rules ---------------------------------------
+    top_rules = apply_top_failing_rules(
+        aggregate(
+            _flag_rows(today_flags),
+            group_by=["ruleId"],
+            measures={
+                "title": first("title"),
+                "count": count(),
+                "has_red": any_(lambda r: r.get("severity") == "red"),
+                "severity_first": first("severity"),
+            },
         )
-        entry["count"] += 1
-        if flag.severity == "red":
-            entry["severity"] = "red"
-    top_rules = sorted(rule_counts.values(), key=lambda r: (-r["count"], r["ruleId"]))[:12]
-
-    # Cumulative top rules (for Final / summary charts)
-    rule_all: dict[str, dict[str, Any]] = {}
-    for flag in all_flags:
-        entry = rule_all.setdefault(
-            flag.rule_id,
-            {"ruleId": flag.rule_id, "title": flag.title, "severity": flag.severity, "count": 0},
+    )
+    top_rules_all = apply_top_failing_rules(
+        aggregate(
+            _flag_rows(all_flags),
+            group_by=["ruleId"],
+            measures={
+                "title": first("title"),
+                "count": count(),
+                "has_red": any_(lambda r: r.get("severity") == "red"),
+                "severity_first": first("severity"),
+            },
         )
-        entry["count"] += 1
-        if flag.severity == "red":
-            entry["severity"] = "red"
-    top_rules_all = sorted(rule_all.values(), key=lambda r: (-r["count"], r["ruleId"]))[:12]
+    )
 
-    # RED items grouped by rule (Daily §1.2 / Final style)
-    def _group_red_flags(flags: list[Any]) -> list[dict[str, Any]]:
-        grouped: dict[str, dict[str, Any]] = {}
-        for flag in flags:
-            if flag.severity != "red":
-                continue
-            project = project_by_id.get(flag.project_id)
-            tool = (project.tool_code if project else None) or "—"
-            key = f"{tool}:{flag.rule_id}"
-            entry = grouped.setdefault(
-                key,
-                {
-                    "toolCode": tool.upper() if tool != "—" else "—",
-                    "ruleId": flag.rule_id,
-                    "title": flag.title,
-                    "count": 0,
-                    "exampleEnumerator": "—",
-                    "exampleUdise": "—",
-                },
-            )
-            entry["count"] += 1
-            if entry["exampleEnumerator"] == "—":
-                sub = subs_by_id.get(flag.submission_id)
-                pack = pack_cache.get(flag.project_id)
-                if sub:
-                    entry["exampleEnumerator"] = sub.enumerator or "—"
-                    entry["exampleUdise"] = udise_for(sub, pack)
-        return sorted(grouped.values(), key=lambda r: (-r["count"], r["ruleId"]))[:15]
+    # --- Mixed (C): red priority items (redGrouped) -------------------------
+    udise_index = build_udise_index(all_subs, pack_cache)
+    today_red_groups = aggregate(
+        _red_flag_rows(today_flags, project_by_id=project_by_id, subs_by_id=subs_by_id),
+        group_by=["toolCode", "ruleId"],
+        measures={
+            "title": first("title"),
+            "count": count(),
+            "exampleEnumerator": first("enumerator"),
+            "exampleSubmissionId": first("submission_id"),
+        },
+    )
+    all_red_groups = aggregate(
+        _red_flag_rows(all_flags, project_by_id=project_by_id, subs_by_id=subs_by_id),
+        group_by=["toolCode", "ruleId"],
+        measures={
+            "title": first("title"),
+            "count": count(),
+            "exampleEnumerator": first("enumerator"),
+            "exampleSubmissionId": first("submission_id"),
+        },
+    )
+    red_grouped_today = apply_red_priority_items(
+        today_red_groups,
+        all_red_groups,
+        udise_by_submission_id=udise_index,
+    )
 
-    red_grouped_today = _group_red_flags(today_flags) or _group_red_flags(all_flags)
-
-    # Findings by tool — top rules per tool (Final §2.4)
-    findings_by_tool: list[dict[str, Any]] = []
+    # --- Mixed (C): findings by tool ----------------------------------------
+    findings_input: list[dict[str, Any]] = []
     for project in projects:
         tool = (project.tool_code or "—").upper()
         p_flags = [f for f in all_flags if f.project_id == project.id]
-        by_rule: dict[str, dict[str, Any]] = {}
-        for flag in p_flags:
-            entry = by_rule.setdefault(
-                flag.rule_id,
-                {
-                    "ruleId": flag.rule_id,
-                    "title": flag.title,
-                    "severity": flag.severity,
-                    "count": 0,
-                },
-            )
-            entry["count"] += 1
-            if flag.severity == "red":
-                entry["severity"] = "red"
-        top = sorted(by_rule.values(), key=lambda r: (-r["count"], r["ruleId"]))[:5]
+        rules_raw = aggregate(
+            _flag_rows(p_flags),
+            group_by=["ruleId"],
+            measures={
+                "title": first("title"),
+                "count": count(),
+                "has_red": any_(lambda r: r.get("severity") == "red"),
+                "severity_first": first("severity"),
+            },
+        )
         tool_row = next((t for t in tools if t["projectId"] == project.id), None)
-        narrative_bits = []
-        reds = [r for r in top if r["severity"] == "red"]
-        ambers = [r for r in top if r["severity"] != "red"]
-        if ambers:
-            lead = ambers[0]
-            narrative_bits.append(
-                f"Led by AMBER {lead['ruleId']} ({lead['count']} records)"
-            )
-        if reds:
-            lead = reds[0]
-            narrative_bits.append(
-                f"RED cluster on {lead['ruleId']} ({lead['count']} records)"
-            )
-        if not narrative_bits:
-            narrative_bits.append("No material DQA flags for this tool.")
-        findings_by_tool.append(
+        findings_input.append(
             {
                 "toolCode": tool,
                 "projectName": project.name,
-                "summary": ". ".join(narrative_bits) + ".",
-                "rules": top,
+                "rules_raw": rules_raw,
                 "redCumulative": tool_row["redCumulative"] if tool_row else 0,
                 "amberCumulative": tool_row["amberCumulative"] if tool_row else 0,
                 "flaggedPct": tool_row["flaggedPct"] if tool_row else 0.0,
             }
         )
+    findings_by_tool = apply_findings_by_tool(findings_input)
 
     flag_rate_by_day = build_flag_rate_by_day(
         study_start_date=study_start_date,
@@ -282,6 +314,7 @@ def compute_daily_dqa_stats(
         "redPriority": red_priority,
         "redGrouped": red_grouped_today,
         "enumerators": enumerators,
+        "enumeratorSubmissionDetails": enumerator_submission_details,
         "enumeratorsAll": enumerators_all,
         "findingsByTool": findings_by_tool,
         "topRulesToday": top_rules,
