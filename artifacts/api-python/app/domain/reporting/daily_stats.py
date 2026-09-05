@@ -5,7 +5,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.domain.reporting.aggregate import any_, aggregate, count, first
+from app.domain.reporting.aggregate import (
+    any_,
+    aggregate,
+    count,
+    count_where,
+    collect_set,
+    first,
+    project_fields,
+    scalar_aggregate,
+)
 from app.domain.reporting.daily_enumerators import (
     build_enumerator_submission_details,
     build_enumerators_all,
@@ -95,39 +104,95 @@ def compute_daily_dqa_stats(
     today_ids = {s.id for s in today_subs}
     today_flags = [f for f in all_flags if f.submission_id in today_ids]
 
-    # Per-tool intake
+    # Per-tool intake (pure aggregate by project; projects list order preserved)
+    sub_rows: list[dict[str, Any]] = []
+    for sub in all_subs:
+        project = project_by_id.get(sub.project_id)
+        if project is None:
+            continue
+        sub_rows.append(
+            {
+                "projectId": sub.project_id,
+                "toolCode": (project.tool_code or "—").upper(),
+                "projectName": project.name,
+                "is_today": sub.id in today_ids,
+            }
+        )
+    sub_by_project = {
+        row["projectId"]: row
+        for row in aggregate(
+            sub_rows,
+            group_by=["projectId"],
+            measures={
+                "toolCode": first("toolCode"),
+                "projectName": first("projectName"),
+                "cumulative": count(),
+                "newToday": count_where(lambda r: bool(r.get("is_today"))),
+            },
+        )
+    }
+    flag_rows: list[dict[str, Any]] = []
+    for flag in all_flags:
+        flag_rows.append(
+            {
+                "projectId": flag.project_id,
+                "severity": flag.severity,
+                "submission_id": flag.submission_id,
+                "is_today": flag.submission_id in today_ids,
+            }
+        )
+    flag_by_project = {
+        row["projectId"]: row
+        for row in aggregate(
+            flag_rows,
+            group_by=["projectId"],
+            measures={
+                "redToday": count_where(
+                    lambda r: r.get("severity") == "red" and bool(r.get("is_today"))
+                ),
+                "amberToday": count_where(
+                    lambda r: r.get("severity") == "amber" and bool(r.get("is_today"))
+                ),
+                "redCumulative": count_where(lambda r: r.get("severity") == "red"),
+                "amberCumulative": count_where(lambda r: r.get("severity") == "amber"),
+                "flaggedTodayIds": collect_set(
+                    "submission_id", where=lambda r: bool(r.get("is_today"))
+                ),
+                "flaggedAllIds": collect_set("submission_id"),
+            },
+        )
+    }
+
     tools: list[dict[str, Any]] = []
     for project in projects:
         tool = (project.tool_code or "—").upper()
-        p_all = [s for s in all_subs if s.project_id == project.id]
-        p_today = [s for s in today_subs if s.project_id == project.id]
-        p_today_ids = {s.id for s in p_today}
-        p_flags = [f for f in all_flags if f.project_id == project.id]
-        p_today_flags = [f for f in p_flags if f.submission_id in p_today_ids]
-        flagged_today = {f.submission_id for f in p_today_flags}
-        flagged_all = {f.submission_id for f in p_flags}
+        srow = sub_by_project.get(project.id) or {}
+        frow = flag_by_project.get(project.id) or {}
         target = int(targets.get(tool) or targets.get(tool.lower()) or 0)
-        cumulative = len(p_all)
+        cumulative = int(srow.get("cumulative") or 0)
+        new_today = int(srow.get("newToday") or 0)
+        flagged_today = len(frow.get("flaggedTodayIds") or [])
+        flagged_all = len(frow.get("flaggedAllIds") or [])
         tools.append(
             {
                 "toolCode": tool,
                 "projectId": project.id,
                 "projectName": project.name,
                 "target": target,
-                "newToday": len(p_today),
+                "newToday": new_today,
                 "cumulative": cumulative,
                 "remaining": max(0, target - cumulative) if target else None,
                 "coveragePct": round(100.0 * cumulative / target, 1) if target else None,
-                "redToday": sum(1 for f in p_today_flags if f.severity == "red"),
-                "amberToday": sum(1 for f in p_today_flags if f.severity == "amber"),
-                "flaggedSubmissionsToday": len(flagged_today),
-                "flaggedPctToday": round(100.0 * len(flagged_today) / len(p_today), 1)
-                if p_today
+                "redToday": int(frow.get("redToday") or 0),
+                "amberToday": int(frow.get("amberToday") or 0),
+                "flaggedSubmissionsToday": flagged_today,
+                "flaggedPctToday": round(100.0 * flagged_today / new_today, 1)
+                if new_today
                 else 0.0,
-                "redCumulative": sum(1 for f in p_flags if f.severity == "red"),
-                "amberCumulative": sum(1 for f in p_flags if f.severity == "amber"),
-                "flaggedSubmissions": len(flagged_all),
-                "flaggedPct": round(100.0 * len(flagged_all) / cumulative, 1) if cumulative else 0.0,
+                "redCumulative": int(frow.get("redCumulative") or 0),
+                "amberCumulative": int(frow.get("amberCumulative") or 0),
+                "flaggedSubmissions": flagged_all,
+                "flaggedPct": round(100.0 * flagged_all / cumulative, 1) if cumulative else 0.0,
             }
         )
 
@@ -284,32 +349,63 @@ def compute_daily_dqa_stats(
         if project.last_sync_at and (last_sync is None or project.last_sync_at > last_sync):
             last_sync = project.last_sync_at
 
+    # study_metadata fields (projector still applies Infosutra default for org)
+    metadata = project_fields(
+        {
+            "studyName": study_name,
+            "organizationName": organization_name,
+            "reportDate": date_key,
+            "reportDateDisplay": format_report_date(date_key),
+            "dayNumber": day_n,
+            "timezone": tz_name,
+            "generatedAtDisplay": format_report_datetime(
+                datetime.now(timezone.utc), tz_name=tz_name
+            ),
+            "lastKoboPullDisplay": (
+                format_report_datetime(last_sync, tz_name=tz_name, fallback="never")
+                if last_sync
+                else "never"
+            ),
+        },
+        [
+            "studyName",
+            "organizationName",
+            "reportDate",
+            "reportDateDisplay",
+            "dayNumber",
+            "timezone",
+            "generatedAtDisplay",
+            "lastKoboPullDisplay",
+        ],
+    )
+
+    today_flag_counts = scalar_aggregate(
+        [{"severity": f.severity} for f in today_flags],
+        measures={
+            "redToday": count_where(lambda r: r.get("severity") == "red"),
+            "amberToday": count_where(lambda r: r.get("severity") == "amber"),
+        },
+    )
+    all_flag_counts = scalar_aggregate(
+        [{"severity": f.severity} for f in all_flags],
+        measures={
+            "redOpen": count_where(lambda r: r.get("severity") == "red"),
+            "amberOpen": count_where(lambda r: r.get("severity") == "amber"),
+        },
+    )
+    totals = {
+        "newToday": len(today_subs),
+        "cumulative": len(all_subs),
+        **today_flag_counts,
+        **all_flag_counts,
+    }
+
     return {
         "studyId": study_id,
-        "studyName": study_name,
-        "reportDate": date_key,
-        "timezone": tz_name,
-        "dayNumber": day_n,
-        "organizationName": organization_name,
+        **metadata,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "lastKoboPullAt": last_sync.isoformat() if last_sync else None,
-        "lastKoboPullDisplay": format_report_datetime(
-            last_sync, tz_name=tz_name, fallback="never"
-        )
-        if last_sync
-        else "never",
-        "generatedAtDisplay": format_report_datetime(
-            datetime.now(timezone.utc), tz_name=tz_name
-        ),
-        "reportDateDisplay": format_report_date(date_key),
-        "totals": {
-            "newToday": len(today_subs),
-            "cumulative": len(all_subs),
-            "redToday": sum(1 for f in today_flags if f.severity == "red"),
-            "amberToday": sum(1 for f in today_flags if f.severity == "amber"),
-            "redOpen": sum(1 for f in all_flags if f.severity == "red"),
-            "amberOpen": sum(1 for f in all_flags if f.severity == "amber"),
-        },
+        "totals": totals,
         "tools": tools,
         "redPriority": red_priority,
         "redGrouped": red_grouped_today,

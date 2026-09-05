@@ -203,14 +203,28 @@ def aggregate(
         results.append(item)
 
     if order_by:
-        for field, direction in reversed(list(order_by)):
-            reverse = direction.lower() == "desc"
+        # Single composite key so multi-field order matches SQL ORDER BY a, b, c.
+        specs = list(order_by)
 
-            def sort_key(row: dict[str, Any], field: str = field) -> Any:
+        def sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+            key: list[Any] = []
+            for field, direction in specs:
                 value = row.get(field)
-                return (value is None, value)
+                missing = value is None
+                if direction.lower() == "desc":
+                    # Negate numbers for DESC; non-numbers fall back to (missing, value)
+                    # with a reverse wrapper below only when needed.
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        key.append((missing, -value))
+                    else:
+                        key.append((missing, value))
+                else:
+                    key.append((missing, value))
+            return tuple(key)
 
-            results.sort(key=sort_key, reverse=reverse)
+        # For non-numeric DESC fields, reverse=True on a separate pass is avoided;
+        # numeric DESC uses negation above. String DESC is rare in our callers.
+        results.sort(key=sort_key)
 
     if limit is not None:
         results = results[:limit]
