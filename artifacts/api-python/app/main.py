@@ -23,6 +23,8 @@ from app.routers import (
     insights,
     projects,
     prompts,
+    report_conversations,
+    report_templates,
     reports,
     settings,
     studies,
@@ -79,9 +81,22 @@ async def lifespan(_app: FastAPI):
         if seeded:
             logger.info("Seeded %s DQA rule pack(s)", seeded)
         from app.services.dqa_compile_prompt import seed_dqa_compile_prompt
+        from app.services.dqa_report_prompts import seed_dqa_report_prompts
 
         if seed_dqa_compile_prompt(db):
             logger.info("Seeded DQA compile prompt template")
+        report_prompts = seed_dqa_report_prompts(db)
+        if report_prompts:
+            logger.info("Seeded %s DQA report prompt template(s)", report_prompts)
+        from app.services.report_planner_prompts import seed_report_ai_prompts
+        from app.services.report_seed_templates import seed_report_templates
+
+        ai_prompts = seed_report_ai_prompts(db)
+        if ai_prompts:
+            logger.info("Seeded %s report AI prompt template(s)", ai_prompts)
+        templates = seed_report_templates(db)
+        if templates:
+            logger.info("Seeded/updated %s system report template(s)", templates)
         assigned = studies_service.apply_all_study_form_maps(db)
         if assigned:
             logger.info("Assigned %s project(s) to studies from seed tool links", assigned)
@@ -130,6 +145,9 @@ def create_app() -> FastAPI:
     app.include_router(insights.router, prefix=prefix)
     app.include_router(prompts.router, prefix=prefix)
     app.include_router(reports.router, prefix=prefix)
+    app.include_router(report_templates.catalog_router, prefix=prefix)
+    app.include_router(report_templates.router, prefix=prefix)
+    app.include_router(report_conversations.router, prefix=prefix)
     app.include_router(settings.router, prefix=prefix)
     app.include_router(dqa.router, prefix=prefix)
     app.include_router(dqa.projects_router, prefix=prefix)

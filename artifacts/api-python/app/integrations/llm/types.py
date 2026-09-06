@@ -1,10 +1,9 @@
-"""Shared types for LLM provider plugins."""
+"""Shared types for LLM access."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-
 
 ChatMessage = dict[str, str]
 
@@ -17,7 +16,6 @@ class LlmConfig:
     """Resolved provider configuration for a single completion request."""
 
     provider: str
-    plugin_id: str
     api_key: str
     base_url: str
     model: str

@@ -10,7 +10,18 @@ from app.db.models.dqa import (
     TriangulationView,
 )
 from app.db.models.project import Project
-from app.db.models.reporting import Insight, Prompt, Report, ReportProject, ReportSchedule
+from app.db.models.reporting import (
+    Insight,
+    Prompt,
+    Report,
+    ReportConversation,
+    ReportConversationMessage,
+    ReportProject,
+    ReportRun,
+    ReportSchedule,
+    ReportTemplate,
+    ReportTemplateVersion,
+)
 from app.db.models.settings import AppSettings
 from app.db.models.study import Study, StudyCredential, StudyTool
 from app.db.models.submission import Submission
@@ -25,8 +36,13 @@ __all__ = [
     "Project",
     "Prompt",
     "Report",
+    "ReportConversation",
+    "ReportConversationMessage",
     "ReportProject",
+    "ReportRun",
     "ReportSchedule",
+    "ReportTemplate",
+    "ReportTemplateVersion",
     "RulePack",
     "RulePackVersion",
     "Study",

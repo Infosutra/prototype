@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Project, Study, StudyCredential, StudyTool
+from app.db.models import Project, Prompt, Study, StudyCredential, StudyTool
 from app.seeds import (
     DEFAULT_STUDY_DESCRIPTION,
     DEFAULT_STUDY_FORMS,
@@ -65,6 +65,8 @@ def study_to_dict(study: Study, *, projects: list[Project] | None = None) -> dic
         "start_date": study.start_date,
         "end_date": study.end_date,
         "timezone": study.timezone or "Asia/Kolkata",
+        "daily_dqa_prompt_id": study.daily_dqa_prompt_id,
+        "final_dqa_prompt_id": study.final_dqa_prompt_id,
         "tools": [
             {
                 "id": t.id,
@@ -265,8 +267,32 @@ def get_study(db: Session, study_id: str) -> Study | None:
     return _load_study(db, study_id)
 
 
+def _normalize_prompt_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _resolve_prompt(db: Session, prompt_id: str | None) -> Prompt | None:
+    if not prompt_id:
+        return None
+    row = db.get(Prompt, prompt_id)
+    if row is None:
+        raise ValueError(f"Prompt not found: {prompt_id}")
+    return row
+
+
 def create_study(db: Session, payload: dict[str, Any]) -> Study:
     study_id = str(payload.get("id") or f"study-{uuid.uuid4().hex[:12]}")
+    daily_prompt_id = _normalize_prompt_id(
+        payload.get("daily_dqa_prompt_id") or payload.get("dailyDqaPromptId")
+    )
+    final_prompt_id = _normalize_prompt_id(
+        payload.get("final_dqa_prompt_id") or payload.get("finalDqaPromptId")
+    )
+    _resolve_prompt(db, daily_prompt_id)
+    _resolve_prompt(db, final_prompt_id)
     study = Study(
         id=study_id,
         name=str(payload["name"]).strip(),
@@ -274,6 +300,8 @@ def create_study(db: Session, payload: dict[str, Any]) -> Study:
         start_date=payload.get("start_date") or payload.get("startDate"),
         end_date=payload.get("end_date") or payload.get("endDate"),
         timezone=str(payload.get("timezone") or "Asia/Kolkata"),
+        daily_dqa_prompt_id=daily_prompt_id,
+        final_dqa_prompt_id=final_prompt_id,
         created_at=_now(),
         updated_at=_now(),
     )
@@ -300,6 +328,22 @@ def update_study(db: Session, study: Study, payload: dict[str, Any]) -> Study:
         study.end_date = payload.get("end_date") or payload.get("endDate")
     if "timezone" in payload and payload["timezone"]:
         study.timezone = str(payload["timezone"])
+    if "daily_dqa_prompt_id" in payload or "dailyDqaPromptId" in payload:
+        daily_prompt_id = _normalize_prompt_id(
+            payload.get("daily_dqa_prompt_id")
+            if "daily_dqa_prompt_id" in payload
+            else payload.get("dailyDqaPromptId")
+        )
+        _resolve_prompt(db, daily_prompt_id)
+        study.daily_dqa_prompt_id = daily_prompt_id
+    if "final_dqa_prompt_id" in payload or "finalDqaPromptId" in payload:
+        final_prompt_id = _normalize_prompt_id(
+            payload.get("final_dqa_prompt_id")
+            if "final_dqa_prompt_id" in payload
+            else payload.get("finalDqaPromptId")
+        )
+        _resolve_prompt(db, final_prompt_id)
+        study.final_dqa_prompt_id = final_prompt_id
     if "tools" in payload and isinstance(payload["tools"], list):
         _sync_tools(db, study, payload["tools"])
     study.updated_at = _now()

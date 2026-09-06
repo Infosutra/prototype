@@ -46,6 +46,7 @@ class AppSettings(Base):
         String, nullable=False, default="nvidia/nemotron-3-super-120b-a12b:free"
     )
     ai_compile_model: Mapped[str] = mapped_column(String, nullable=False, default="")
+    ai_report_planner_model: Mapped[str] = mapped_column(String, nullable=False, default="")
     ai_temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
     ai_max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=2048)
     ai_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)

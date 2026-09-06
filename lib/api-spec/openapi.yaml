@@ -786,6 +786,14 @@ paths:
           - type: string
           - type: 'null'
           title: Dateto
+      - name: dqa
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dqa
       - name: page
         in: query
         required: false
@@ -1194,6 +1202,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /prompts/{prompt_id}/revert:
+    post:
+      tags:
+      - prompts
+      summary: Revert Prompt
+      description: Restore a seeded system prompt to its packaged original content.
+      operationId: revertPrompt
+      parameters:
+      - name: prompt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Prompt Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /reports:
     get:
       tags:
@@ -1471,6 +1506,596 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ShareResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-spec/catalog:
+    get:
+      tags:
+      - report-spec
+      summary: Get Catalog
+      description: Component types and business data sources a report may use.
+      operationId: getReportSpecCatalog
+      parameters:
+      - name: includeSchema
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Includeschema
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecCatalogOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates:
+    get:
+      tags:
+      - report-templates
+      summary: List Templates
+      operationId: listReportTemplates
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: reportKind
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reportkind
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportTemplateOut'
+                title: Response Listreporttemplates
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - report-templates
+      summary: Create Template
+      description: Plan a specification from the prompt (or accept one directly) and
+        save v1.
+      operationId: createReportTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportTemplateInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePlanResultOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/create/stream:
+    post:
+      tags:
+      - report-templates
+      summary: Create Template Stream
+      description: SSE stream of planner progress, then the same create result as
+        POST /report-templates.
+      operationId: createReportTemplateStream
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportTemplateInput'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}:
+    get:
+      tags:
+      - report-templates
+      summary: Get Template
+      operationId: getReportTemplate
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplateDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - report-templates
+      summary: Update Template
+      operationId: updateReportTemplate
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportTemplateMetaInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplateDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - report-templates
+      summary: Delete Template
+      operationId: deleteReportTemplate
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}/prompt:
+    put:
+      tags:
+      - report-templates
+      summary: Update Template Prompt
+      description: Re-plan from an edited prompt and append a new version.
+      operationId: updateReportTemplatePrompt
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportTemplatePromptInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePlanResultOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}/versions:
+    get:
+      tags:
+      - report-templates
+      summary: List Versions
+      operationId: listReportTemplateVersions
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportTemplateVersionOut'
+                title: Response Listreporttemplateversions
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}/versions/{version}:
+    get:
+      tags:
+      - report-templates
+      summary: Get Version
+      operationId: getReportTemplateVersion
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplateVersionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}/preview:
+    post:
+      tags:
+      - report-templates
+      summary: Preview Template
+      description: Execute a template and return the rendered result without saving
+        a report.
+      operationId: previewReportTemplate
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteTemplateInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutedReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}/preview.html:
+    get:
+      tags:
+      - report-templates
+      summary: Preview Template Html
+      description: Server-rendered preview for embedding in the template editor.
+      operationId: previewReportTemplateHtml
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: executionDate
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Executiondate
+      - name: runAi
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Runai
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/html:
+              schema:
+                type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-templates/{template_id}/execute:
+    post:
+      tags:
+      - report-templates
+      summary: Execute Template
+      description: Execute a template, persist the report, and return the same preview
+        payload.
+      operationId: executeReportTemplate
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteTemplateInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteTemplateResultOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-conversations:
+    get:
+      tags:
+      - report-conversations
+      summary: List Conversations
+      operationId: listReportConversations
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportConversationOut'
+                title: Response Listreportconversations
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - report-conversations
+      summary: Create Conversation
+      operationId: createReportConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportConversationInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportConversationTurnOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-conversations/{conversation_id}:
+    get:
+      tags:
+      - report-conversations
+      summary: Get Conversation
+      operationId: getReportConversation
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportConversationOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-conversations/{conversation_id}/messages:
+    post:
+      tags:
+      - report-conversations
+      summary: Add Message
+      operationId: addReportConversationMessage
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportConversationTurnInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportConversationTurnOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-conversations/{conversation_id}/preview:
+    post:
+      tags:
+      - report-conversations
+      summary: Preview Conversation
+      operationId: previewReportConversation
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteTemplateInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutedReportOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /report-conversations/{conversation_id}/save-as-template:
+    post:
+      tags:
+      - report-conversations
+      summary: Save As Template
+      operationId: saveReportConversationAsTemplate
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveConversationAsTemplateInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePlanResultOut'
         '422':
           description: Validation Error
           content:
@@ -2373,6 +2998,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /projects/{project_id}/dqa/compile/stream:
+    post:
+      tags:
+      - dqa
+      summary: Compile Rule Stream
+      description: SSE stream of compile progress, optional tokens, then a final result/error
+        event.
+      operationId: compileDqaRuleStream
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DqaCompileInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /projects/{project_id}/dqa/validate-rule:
     post:
       tags:
@@ -3105,6 +3763,36 @@ components:
       - label
       - value
       title: ChartDataPoint
+    ComponentDescriptor:
+      properties:
+        type:
+          type: string
+          title: Type
+        required:
+          items:
+            type: string
+          type: array
+          title: Required
+        optional:
+          items:
+            type: string
+          type: array
+          title: Optional
+        sourceKind:
+          anyOf:
+          - type: string
+            enum:
+            - object
+            - table
+          - type: 'null'
+          title: Sourcekind
+      additionalProperties: false
+      type: object
+      required:
+      - type
+      - required
+      - optional
+      title: ComponentDescriptor
     ConnectionTestResult:
       properties:
         success:
@@ -3123,6 +3811,55 @@ components:
       - success
       - message
       title: ConnectionTestResult
+    CreateReportConversationInput:
+      properties:
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        title:
+          type: string
+          title: Title
+          default: Untitled report
+        message:
+          type: string
+          title: Message
+          default: ''
+      type: object
+      title: CreateReportConversationInput
+    CreateReportTemplateInput:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+          default: ''
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        reportKind:
+          type: string
+          title: Reportkind
+          default: adhoc
+        prompt:
+          type: string
+          title: Prompt
+          default: ''
+        spec:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Spec
+      type: object
+      required:
+      - name
+      title: CreateReportTemplateInput
     DailyReportSettings:
       properties:
         enabled:
@@ -3193,6 +3930,115 @@ components:
       - submissionsByStatus
       - topProjects
       title: DashboardSummary
+    DataField:
+      properties:
+        name:
+          type: string
+          title: Name
+        label:
+          type: string
+          title: Label
+        type:
+          type: string
+          enum:
+          - string
+          - int
+          - float
+          - percent
+          - datetime
+          - bool
+          title: Type
+        description:
+          type: string
+          title: Description
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - label
+      - type
+      title: DataField
+    DataSourceDescriptor:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        kind:
+          type: string
+          enum:
+          - object
+          - table
+          title: Kind
+        fields:
+          items:
+            $ref: '#/components/schemas/DataField'
+          type: array
+          title: Fields
+        params:
+          items:
+            $ref: '#/components/schemas/DataSourceParam'
+          type: array
+          title: Params
+        businessDefinition:
+          type: string
+          title: Businessdefinition
+          default: ''
+        benchmarkFields:
+          items:
+            type: string
+          type: array
+          title: Benchmarkfields
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - description
+      - kind
+      title: DataSourceDescriptor
+      description: Business-language description of one semantic tool.
+    DataSourceParam:
+      properties:
+        name:
+          type: string
+          title: Name
+        type:
+          type: string
+          enum:
+          - string
+          - int
+          - bool
+          title: Type
+          default: string
+        required:
+          type: boolean
+          title: Required
+          default: false
+        allowed:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Allowed
+        default:
+          title: Default
+        description:
+          type: string
+          title: Description
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: DataSourceParam
     DqaCompileInput:
       properties:
         english:
@@ -3981,6 +4827,112 @@ components:
       required:
       - valid
       title: DqaValidationResult
+    ExecuteTemplateInput:
+      properties:
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        executionDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Executiondate
+        dateFrom:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+        dateTo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
+        reportKind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reportkind
+        runAi:
+          type: boolean
+          title: Runai
+          default: true
+        version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Version
+      type: object
+      title: ExecuteTemplateInput
+    ExecuteTemplateResultOut:
+      properties:
+        report:
+          $ref: '#/components/schemas/ReportOut'
+        preview:
+          $ref: '#/components/schemas/ExecutedReportOut'
+      type: object
+      required:
+      - report
+      - preview
+      title: ExecuteTemplateResultOut
+      description: Persisted report plus the same rendered payload Preview returns.
+    ExecutedReportOut:
+      properties:
+        templateId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Templateid
+        templateVersion:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Templateversion
+        spec:
+          additionalProperties: true
+          type: object
+          title: Spec
+        data:
+          additionalProperties: true
+          type: object
+          title: Data
+        narratives:
+          additionalProperties:
+            type: string
+          type: object
+          title: Narratives
+          default: {}
+        unavailable:
+          additionalProperties:
+            type: string
+          type: object
+          title: Unavailable
+          default: {}
+        meta:
+          additionalProperties: true
+          type: object
+          title: Meta
+          default: {}
+        html:
+          type: string
+          title: Html
+        plainText:
+          type: string
+          title: Plaintext
+        aiSource:
+          type: string
+          title: Aisource
+          default: none
+      type: object
+      required:
+      - spec
+      - data
+      - html
+      - plainText
+      title: ExecutedReportOut
+      description: 'Rendered preview: specification, resolved data and HTML, without
+        persisting.'
     FieldDistribution:
       properties:
         field:
@@ -4083,6 +5035,10 @@ components:
         aiCompileModel:
           type: string
           title: Aicompilemodel
+          default: ''
+        aiReportPlannerModel:
+          type: string
+          title: Aireportplannermodel
           default: ''
         aiTemperature:
           type: number
@@ -4781,6 +5737,16 @@ components:
             type: string
           type: array
           title: Projectids
+        studyIds:
+          items:
+            type: string
+          type: array
+          title: Studyids
+          default: []
+        isSystem:
+          type: boolean
+          title: Issystem
+          default: false
         createdAt:
           type: string
           title: Createdat
@@ -4829,6 +5795,132 @@ components:
           title: Projectids
       type: object
       title: PromptUpdate
+    ReportConversationMessageOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        role:
+          type: string
+          title: Role
+        content:
+          type: string
+          title: Content
+        spec:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Spec
+        changes:
+          items:
+            type: string
+          type: array
+          title: Changes
+          default: []
+        createdAt:
+          type: string
+          title: Createdat
+      type: object
+      required:
+      - id
+      - role
+      - content
+      - createdAt
+      title: ReportConversationMessageOut
+    ReportConversationOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        studyId:
+          type: string
+          title: Studyid
+        title:
+          type: string
+          title: Title
+        status:
+          type: string
+          title: Status
+        savedTemplateId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Savedtemplateid
+        spec:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Spec
+        messages:
+          items:
+            $ref: '#/components/schemas/ReportConversationMessageOut'
+          type: array
+          title: Messages
+          default: []
+        createdAt:
+          type: string
+          title: Createdat
+        updatedAt:
+          type: string
+          title: Updatedat
+      type: object
+      required:
+      - id
+      - studyId
+      - title
+      - status
+      - createdAt
+      - updatedAt
+      title: ReportConversationOut
+    ReportConversationTurnInput:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: ReportConversationTurnInput
+    ReportConversationTurnOut:
+      properties:
+        status:
+          type: string
+          title: Status
+        conversation:
+          $ref: '#/components/schemas/ReportConversationOut'
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+        question:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Question
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        errors:
+          items:
+            $ref: '#/components/schemas/SpecIssueOut'
+          type: array
+          title: Errors
+          default: []
+      type: object
+      required:
+      - status
+      - conversation
+      title: ReportConversationTurnOut
     ReportInput:
       properties:
         title:
@@ -5027,6 +6119,207 @@ components:
           title: Recipients
       type: object
       title: ReportScheduleUpdate
+    ReportTemplateDetailOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        reportKind:
+          type: string
+          title: Reportkind
+        status:
+          type: string
+          title: Status
+        isSystem:
+          type: boolean
+          title: Issystem
+          default: false
+        versionCount:
+          type: integer
+          title: Versioncount
+          default: 0
+        currentVersion:
+          type: integer
+          title: Currentversion
+          default: 0
+        promptText:
+          type: string
+          title: Prompttext
+          default: ''
+        defaultExecutionDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Defaultexecutiondate
+        createdAt:
+          type: string
+          title: Createdat
+        updatedAt:
+          type: string
+          title: Updatedat
+        spec:
+          additionalProperties: true
+          type: object
+          title: Spec
+          default: {}
+        versions:
+          items:
+            $ref: '#/components/schemas/ReportTemplateVersionOut'
+          type: array
+          title: Versions
+          default: []
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - reportKind
+      - status
+      - createdAt
+      - updatedAt
+      title: ReportTemplateDetailOut
+    ReportTemplateMetaInput:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      type: object
+      title: ReportTemplateMetaInput
+    ReportTemplateOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        studyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+        reportKind:
+          type: string
+          title: Reportkind
+        status:
+          type: string
+          title: Status
+        isSystem:
+          type: boolean
+          title: Issystem
+          default: false
+        versionCount:
+          type: integer
+          title: Versioncount
+          default: 0
+        currentVersion:
+          type: integer
+          title: Currentversion
+          default: 0
+        promptText:
+          type: string
+          title: Prompttext
+          default: ''
+        defaultExecutionDate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Defaultexecutiondate
+        createdAt:
+          type: string
+          title: Createdat
+        updatedAt:
+          type: string
+          title: Updatedat
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - reportKind
+      - status
+      - createdAt
+      - updatedAt
+      title: ReportTemplateOut
+    ReportTemplateVersionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        templateId:
+          type: string
+          title: Templateid
+        version:
+          type: integer
+          title: Version
+        promptText:
+          type: string
+          title: Prompttext
+        spec:
+          additionalProperties: true
+          type: object
+          title: Spec
+        specVersion:
+          type: string
+          title: Specversion
+        plannerModel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Plannermodel
+        source:
+          type: string
+          title: Source
+        notes:
+          type: string
+          title: Notes
+        changes:
+          items:
+            type: string
+          type: array
+          title: Changes
+          default: []
+        createdAt:
+          type: string
+          title: Createdat
+      type: object
+      required:
+      - id
+      - templateId
+      - version
+      - promptText
+      - spec
+      - specVersion
+      - source
+      - notes
+      - createdAt
+      title: ReportTemplateVersionOut
     RulePackOut:
       properties:
         projectId:
@@ -5098,6 +6391,23 @@ components:
       - source
       - createdAt
       title: RulePackVersionOut
+    SaveConversationAsTemplateInput:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+          default: ''
+        reportKind:
+          type: string
+          title: Reportkind
+          default: adhoc
+      type: object
+      required:
+      - name
+      title: SaveConversationAsTemplateInput
     SettingsOut:
       properties:
         smtp:
@@ -5217,6 +6527,55 @@ components:
           default: {}
       type: object
       title: SpeakerLabelsUpdate
+    SpecCatalogOut:
+      properties:
+        specVersion:
+          type: string
+          title: Specversion
+        componentTypes:
+          items:
+            type: string
+          type: array
+          title: Componenttypes
+        components:
+          items:
+            $ref: '#/components/schemas/ComponentDescriptor'
+          type: array
+          title: Components
+        dataSources:
+          items:
+            $ref: '#/components/schemas/DataSourceDescriptor'
+          type: array
+          title: Datasources
+        specSchema:
+          additionalProperties: true
+          type: object
+          title: Specschema
+          default: {}
+      type: object
+      required:
+      - specVersion
+      - componentTypes
+      - components
+      - dataSources
+      title: SpecCatalogOut
+    SpecIssueOut:
+      properties:
+        path:
+          type: string
+          title: Path
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - path
+      - code
+      - message
+      title: SpecIssueOut
     StatusCount:
       properties:
         status:
@@ -5245,6 +6604,11 @@ components:
           - type: string
           - type: 'null'
           title: Studytoolid
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
       type: object
       required:
       - projectId
@@ -5273,6 +6637,16 @@ components:
           type: string
           title: Timezone
           default: Asia/Kolkata
+        dailyDqaPromptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dailydqapromptid
+        finalDqaPromptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finaldqapromptid
         tools:
           items:
             $ref: '#/components/schemas/StudyToolIn'
@@ -5354,6 +6728,16 @@ components:
           type: string
           title: Timezone
           default: Asia/Kolkata
+        dailyDqaPromptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dailydqapromptid
+        finalDqaPromptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finaldqapromptid
         tools:
           items:
             $ref: '#/components/schemas/StudyToolOut'
@@ -5511,6 +6895,16 @@ components:
           - type: string
           - type: 'null'
           title: Timezone
+        dailyDqaPromptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dailydqapromptid
+        finalDqaPromptId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finaldqapromptid
         tools:
           anyOf:
           - items:
@@ -5613,6 +7007,19 @@ components:
         attachmentCount:
           type: integer
           title: Attachmentcount
+        dqaSeverity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dqaseverity
+        redFlags:
+          type: integer
+          title: Redflags
+          default: 0
+        amberFlags:
+          type: integer
+          title: Amberflags
+          default: 0
       type: object
       required:
       - id
@@ -5668,6 +7075,10 @@ components:
         newSubmissions:
           type: integer
           title: Newsubmissions
+        deletedSubmissions:
+          type: integer
+          title: Deletedsubmissions
+          default: 0
         syncedAt:
           type: string
           title: Syncedat
@@ -5685,6 +7096,48 @@ components:
       - syncedAt
       - errors
       title: SyncResult
+    TemplatePlanResultOut:
+      properties:
+        status:
+          type: string
+          title: Status
+        template:
+          anyOf:
+          - $ref: '#/components/schemas/ReportTemplateDetailOut'
+          - type: 'null'
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        question:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Question
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        errors:
+          items:
+            $ref: '#/components/schemas/SpecIssueOut'
+          type: array
+          title: Errors
+          default: []
+        warnings:
+          items:
+            $ref: '#/components/schemas/SpecIssueOut'
+          type: array
+          title: Warnings
+          default: []
+      type: object
+      required:
+      - status
+      title: TemplatePlanResultOut
+      description: 'Result of planning: either a saved template or something the user
+        must resolve.'
     TranscribeRequest:
       properties:
         languageCode:
@@ -6028,6 +7481,19 @@ components:
       - rows
       - mismatchCount
       title: TriangulationViewOut
+    UpdateReportTemplatePromptInput:
+      properties:
+        prompt:
+          type: string
+          title: Prompt
+        notes:
+          type: string
+          title: Notes
+          default: ''
+      type: object
+      required:
+      - prompt
+      title: UpdateReportTemplatePromptInput
     UsageEventOut:
       properties:
         id:

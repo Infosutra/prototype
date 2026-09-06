@@ -95,6 +95,54 @@
       "medianTimeLabel": "22 min"
     }
   ],
+  "enumeratorSubmissionDetails": [
+    {
+      "enumerator": "Ada",
+      "submissionsToday": 3,
+      "redSubmissions": 1,
+      "amberSubmissions": 1,
+      "submissions": [
+        {
+          "koboId": "9001",
+          "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          "toolCode": "T1",
+          "projectName": "Facility",
+          "status": "red",
+          "flags": [
+            {
+              "ruleId": "R1",
+              "severity": "red",
+              "title": "Missing GPS",
+              "message": "GPS required"
+            }
+          ]
+        },
+        {
+          "koboId": "9002",
+          "uuid": null,
+          "toolCode": "T1",
+          "projectName": "Facility",
+          "status": "amber",
+          "flags": [
+            {
+              "ruleId": "R2",
+              "severity": "amber",
+              "title": "Skip residue",
+              "message": "Unexpected answer after skip"
+            }
+          ]
+        },
+        {
+          "koboId": "9003",
+          "uuid": null,
+          "toolCode": "T2",
+          "projectName": "Teachers",
+          "status": "clean",
+          "flags": []
+        }
+      ]
+    }
+  ],
   "enumeratorsAll": [
     {
       "enumerator": "Ada",

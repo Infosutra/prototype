@@ -34,6 +34,7 @@ class GeneralSettings(CamelModel):
     ai_base_url: str = "https://openrouter.ai/api/v1"
     ai_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     ai_compile_model: str = ""
+    ai_report_planner_model: str = ""
     ai_temperature: float = 0.3
     ai_max_tokens: int = 2048
     ai_timeout_seconds: int = 60

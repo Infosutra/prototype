@@ -22,7 +22,6 @@ from app.schemas.misc import (
     ShareReportInput,
     ShareResult,
 )
-from app.rendering import docx as report_docx
 from app.services import dqa_daily_email as dqa_daily_email
 from app.services import dqa_daily_report as dqa_daily
 from app.services import dqa_final_report as dqa_final
@@ -249,30 +248,9 @@ def download_report(
             filename=f"{ascii_title}.docx",
         )
 
-    # Rebuild from stored stats so older reports still download as DOCX.
-    stats: dict | None = None
-    if row.generated_content:
-        try:
-            payload = json.loads(row.generated_content)
-            stats = payload.get("stats") if isinstance(payload, dict) else None
-        except json.JSONDecodeError:
-            stats = None
-    if not isinstance(stats, dict):
-        raise HTTPException(
-            status_code=404,
-            detail="DOCX not available — regenerate the report",
-        )
-    try:
-        docx_bytes = report_docx.render_report_docx(row.report_type, stats)
-    except Exception as exc:  # noqa: BLE001 — surface generation failures cleanly
-        raise HTTPException(status_code=500, detail=f"Failed to build DOCX: {exc}") from exc
-    path.write_bytes(docx_bytes)
-    return Response(
-        content=docx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": f'attachment; filename="{ascii_title}.docx"',
-        },
+    raise HTTPException(
+        status_code=404,
+        detail="DOCX not available — regenerate the report",
     )
 
 
@@ -339,34 +317,10 @@ def generate_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
             return _map(row)
         return _map(fresh)
 
-    # Legacy stub for custom reports
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    from app.db.models import DqaFlag, Submission
-
-    project_ids = list(row.project_ids or [])
-    lines = [f"# {row.title}", "", "## Data quality summary", ""]
-    if project_ids:
-        subs = db.scalars(select(Submission).where(Submission.project_id.in_(project_ids))).all()
-        flags = db.scalars(select(DqaFlag).where(DqaFlag.project_id.in_(project_ids))).all()
-    else:
-        subs = db.scalars(select(Submission)).all()
-        flags = db.scalars(select(DqaFlag)).all()
-    flagged = {f.submission_id for f in flags}
-    red = [f for f in flags if f.severity == "red"]
-    amber = [f for f in flags if f.severity == "amber"]
-    lines.append(f"- Total submissions: {len(subs)}")
-    lines.append(f"- Submissions with any flag: {len(flagged)}")
-    lines.append(f"- RED flags: {len(red)}")
-    lines.append(f"- AMBER flags: {len(amber)}")
-    row.status = "ready"
-    row.generated_content = "\n".join(lines)
-    row.download_url = None
-    row.page_count = max(1, len(lines) // 40)
-    row.file_size_kb = round(len(row.generated_content) / 1024, 1)
-    row.generated_at = now
-    db.commit()
-    db.refresh(row)
-    return _map(row)
+    raise HTTPException(
+        status_code=400,
+        detail="Custom reports are generated from a report template. Use /report-templates.",
+    )
 
 
 @router.post("/{report_id}/share", response_model=ShareResult, operation_id="shareReport")

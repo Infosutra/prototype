@@ -112,40 +112,68 @@ class KoboClient:
     def get_asset(self, uid: str) -> dict[str, Any]:
         return self._get(f"/api/v2/assets/{uid}/")
 
+    def _paginate_asset_data(
+        self,
+        asset_uid: str,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        path = f"/api/v2/assets/{asset_uid}/data/"
+        absolute: str | None = None
+        page_params: dict[str, Any] | None = {"limit": 1000, **(params or {})}
+        while True:
+            payload = (
+                self._get_absolute(absolute)
+                if absolute
+                else self._get(path, params=page_params)
+            )
+            if isinstance(payload, list):
+                results.extend(item for item in payload if isinstance(item, dict))
+                break
+            batch = payload.get("results") or []
+            results.extend(item for item in batch if isinstance(item, dict))
+            next_url = payload.get("next")
+            if not next_url:
+                break
+            absolute = next_url
+            page_params = None
+        return results
+
     def list_submissions(
         self,
         asset_uid: str,
         *,
         modified_after: str | None = None,
     ) -> list[dict[str, Any]]:
-        results: list[dict[str, Any]] = []
-        params: dict[str, Any] = {"limit": 1000}
+        params: dict[str, Any] = {}
         if modified_after:
             # Kobo submission payloads expose _submission_time; _date_modified is
             # often null, so watermark queries on that field silently return nothing.
             params["query"] = (
                 '{"_submission_time": {"$gt": "' + modified_after + '"}}'
             )
+        return self._paginate_asset_data(asset_uid, params=params)
 
-        path = f"/api/v2/assets/{asset_uid}/data/"
-        absolute: str | None = None
-        while True:
-            payload = (
-                self._get_absolute(absolute)
-                if absolute
-                else self._get(path, params=params)
-            )
-            if isinstance(payload, list):
-                results.extend(payload)
-                break
-            batch = payload.get("results") or []
-            results.extend(batch)
-            next_url = payload.get("next")
-            if not next_url:
-                break
-            absolute = next_url
-            params = {}
-        return results
+    def list_submission_ids(self, asset_uid: str) -> set[str]:
+        """Return every remote submission id for reconcile/prune.
+
+        Prefers a fields-limited query; falls back to full payloads if the
+        server rejects the fields parameter.
+        """
+        try:
+            rows = self._paginate_asset_data(asset_uid, params={"fields": '["_id"]'})
+        except KoboApiError:
+            rows = self._paginate_asset_data(asset_uid)
+        ids: set[str] = set()
+        for row in rows:
+            raw = row.get("_id")
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if text:
+                ids.add(text)
+        return ids
 
     def list_versions(self, asset_uid: str) -> list[dict[str, Any]]:
         payload = self._get(f"/api/v2/assets/{asset_uid}/versions/")

@@ -56,5 +56,6 @@ class SubmissionsListQuery(CamelModel):
     status: str | None = None
     date_from: str | None = None
     date_to: str | None = None
+    dqa: str | None = None
     page: int = 1
     limit: int = Field(default=20, ge=1, le=200)

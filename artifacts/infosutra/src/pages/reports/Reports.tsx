@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetReportsQueryKey,
@@ -81,6 +82,9 @@ export default function Reports() {
         }
         action={
           <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/report-templates">Templates</Link>
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -174,6 +178,7 @@ export default function Reports() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {report.reportDate || "—"}
+                    {report.promptName ? ` · ${report.promptName}` : ""}
                     {report.fileSizeKb != null ? ` · ${report.fileSizeKb} KB` : ""}
                     {report.generatedAt
                       ? ` · ${formatReportDatetime(report.generatedAt)}`

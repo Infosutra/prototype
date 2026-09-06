@@ -9,6 +9,7 @@ import {
   useCreateStudy,
   useDeleteStudy,
   useGetProjects,
+  useGetPrompts,
   useGetStudies,
   useUnassignStudyProject,
   useUpdateStudy,
@@ -53,6 +54,8 @@ function emptyForm(): StudyCreate {
     startDate: "",
     endDate: "",
     timezone: "Asia/Kolkata",
+    dailyDqaPromptId: null,
+    finalDqaPromptId: null,
     tools: [],
   };
 }
@@ -84,8 +87,10 @@ export default function StudiesPage() {
   const { activeStudyId, setActiveStudyId, refetch } = useStudy();
   const studiesQuery = useGetStudies();
   const projectsQuery = useGetProjects();
+  const promptsQuery = useGetPrompts();
   const studies = studiesQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
+  const prompts = promptsQuery.data ?? [];
 
   const [panelMode, setPanelMode] = useState<PanelMode>("idle");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -221,6 +226,8 @@ export default function StudiesPage() {
       startDate: study.startDate ?? "",
       endDate: study.endDate ?? "",
       timezone: study.timezone || "Asia/Kolkata",
+      dailyDqaPromptId: study.dailyDqaPromptId ?? null,
+      finalDqaPromptId: study.finalDqaPromptId ?? null,
       tools: toolsFromStudy(study),
     });
     setMessage("");
@@ -247,6 +254,8 @@ export default function StudiesPage() {
       startDate: study.startDate ?? "",
       endDate: study.endDate ?? "",
       timezone: study.timezone || "Asia/Kolkata",
+      dailyDqaPromptId: study.dailyDqaPromptId ?? null,
+      finalDqaPromptId: study.finalDqaPromptId ?? null,
       tools: toolsFromStudy(study),
     });
     invalidateStudyQueries();
@@ -258,6 +267,8 @@ export default function StudiesPage() {
       ...form,
       startDate: form.startDate || null,
       endDate: form.endDate || null,
+      dailyDqaPromptId: form.dailyDqaPromptId || null,
+      finalDqaPromptId: form.finalDqaPromptId || null,
     };
     try {
       if (panelMode === "edit" && editingId) {
@@ -475,6 +486,8 @@ export default function StudiesPage() {
         startDate: study.startDate ?? "",
         endDate: study.endDate ?? "",
         timezone: study.timezone || "Asia/Kolkata",
+        dailyDqaPromptId: study.dailyDqaPromptId ?? null,
+        finalDqaPromptId: study.finalDqaPromptId ?? null,
         tools: toolsFromStudy(study),
       });
     } catch (err) {
@@ -1086,6 +1099,79 @@ export default function StudiesPage() {
                         No forms synced yet. Connect Kobo and pull forms.
                       </p>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {panelMode === "edit" && editingId && (
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <Label>DQA report prompts</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Leave as default to share the built-in prompt across studies. Create a
+                        dedicated prompt under Prompt Templates when a study needs its own voice.
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href="/prompts">Manage prompts</Link>
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Daily DQA</Label>
+                      <select
+                        className="field-control h-9 w-full px-2 text-sm"
+                        value={form.dailyDqaPromptId ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            dailyDqaPromptId: e.target.value || null,
+                          }))
+                        }
+                      >
+                        <option value="">Default (shared Daily DQA)</option>
+                        {prompts
+                          .filter(
+                            (p) =>
+                              p.category === "daily-dqa" ||
+                              p.id === form.dailyDqaPromptId,
+                          )
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                              {p.isSystem ? " · default" : ""}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Final DQA</Label>
+                      <select
+                        className="field-control h-9 w-full px-2 text-sm"
+                        value={form.finalDqaPromptId ?? ""}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            finalDqaPromptId: e.target.value || null,
+                          }))
+                        }
+                      >
+                        <option value="">Default (shared Final DQA)</option>
+                        {prompts
+                          .filter(
+                            (p) =>
+                              p.category === "final-dqa" ||
+                              p.id === form.finalDqaPromptId,
+                          )
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                              {p.isSystem ? " · default" : ""}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}

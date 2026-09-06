@@ -94,4 +94,5 @@ def _ensure_loaded() -> None:
     if _loaded:
         return
     _loaded = True
+    from app.services.report_tools import query_aggregate  # noqa: F401
     from app.services.report_tools import sources  # noqa: F401

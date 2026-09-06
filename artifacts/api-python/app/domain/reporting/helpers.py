@@ -41,6 +41,23 @@ def day_bounds(date_key: str, tz_name: str) -> tuple[datetime, datetime]:
     ).replace(tzinfo=None)
 
 
+def local_calendar_day(ts: datetime | None, tz_name: str) -> str | None:
+    """Calendar date (YYYY-MM-DD) for ``ts`` in ``tz_name``.
+
+    Inverse of :func:`day_bounds`: UTC-naive timestamps are treated as UTC,
+    matching how sync times are stored in this app.
+    """
+    if ts is None:
+        return None
+    try:
+        tz = ZoneInfo(tz_name or "Asia/Kolkata")
+    except Exception:
+        tz = ZoneInfo("Asia/Kolkata")
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(tz).date().isoformat()
+
+
 def _parse_display_dt(value: Any) -> datetime | None:
     if value is None:
         return None

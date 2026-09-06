@@ -97,6 +97,7 @@ def test_registry_exposes_the_phase_one_sources() -> None:
         "enumerator_performance_study",
         "findings_by_tool",
         "triangulation_summary",
+        "query_aggregate",
     }
 
 
@@ -302,7 +303,8 @@ def test_statistics_are_computed_once_per_execution(db: Session) -> None:
     real = context.stats
 
     def counted():
-        if context._stats is None:
+        key = context.default_range_key()
+        if key not in context._stats_by_range:
             calls["n"] += 1
         return real()
 

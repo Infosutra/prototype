@@ -1,0 +1,33 @@
+[
+  {
+    "id": "todays-submissions",
+    "prompt": "today's submissions",
+    "dataSources": ["study_totals"]
+  },
+  {
+    "id": "by-enumerator",
+    "prompt": "by enumerator",
+    "dataSources": ["enumerator_performance_today"]
+  },
+  {
+    "id": "poor-performers",
+    "prompt": "poor performers",
+    "dataSources": ["enumerator_performance_today"],
+    "requiresBenchmarkHighlight": true
+  },
+  {
+    "id": "coverage-against-plan",
+    "prompt": "coverage against plan",
+    "dataSources": ["tool_coverage"]
+  },
+  {
+    "id": "top-failing-rules",
+    "prompt": "rules failing most often today",
+    "dataSources": ["top_failing_rules"]
+  },
+  {
+    "id": "triangulation",
+    "prompt": "triangulation concordance",
+    "dataSources": ["triangulation_summary"]
+  }
+]

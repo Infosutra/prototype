@@ -12,10 +12,13 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Report, ReportSchedule
+from app.db.models import Report, ReportSchedule, ReportTemplate, Study
 from app.integrations.smtp import SmtpError, send_email
 from app.services.daily_report import parse_send_time
 from app.services.dqa_daily_report import generate_daily_dqa_report
+from app.services.dqa_final_report import generate_final_dqa_report
+from app.services.report_execution import build_context
+from app.services.report_templates import execute_template, persist_report
 from app.services.report_storage import pdf_path_for
 from app.services.settings import (
     get_or_create_settings,
@@ -92,16 +95,29 @@ def send_dqa_daily_now(
     return send_dqa_daily_email(db, report)
 
 
+def _generate_for_schedule(db: Session, schedule: ReportSchedule, date_key: str) -> Report:
+    """Execute the schedule's template when set, otherwise the study default for that kind."""
+    if schedule.template_id:
+        template = db.get(ReportTemplate, schedule.template_id)
+        study = db.get(Study, schedule.study_id)
+        if template is None or study is None:
+            raise ValueError("Scheduled template or study is missing")
+        kind = template.report_kind if template.report_kind in {"daily", "final", "adhoc"} else "daily"
+        context = build_context(study, report_kind=kind, execution_date=date_key)
+        executed, version = execute_template(db, template, context, run_ai=True)
+        return persist_report(db, executed, template=template, version=version)
+    if schedule.report_type == "final_dqa":
+        return generate_final_dqa_report(db, study_id=schedule.study_id, run_ai=True)
+    return generate_daily_dqa_report(
+        db, study_id=schedule.study_id, report_date=date_key, run_ai=True
+    )
+
+
 def maybe_send_scheduled_dqa_daily(db: Session) -> bool:
-    """Scheduler tick for DQA Daily via ReportSchedule rows."""
+    """Scheduler tick for report schedules (templates or study Daily/Final defaults)."""
     sent_any = False
     schedules = list(
-        db.scalars(
-            select(ReportSchedule).where(
-                ReportSchedule.enabled.is_(True),
-                ReportSchedule.report_type == "daily_dqa",
-            )
-        ).all()
+        db.scalars(select(ReportSchedule).where(ReportSchedule.enabled.is_(True))).all()
     )
     for schedule in schedules:
         parsed = parse_send_time(schedule.time or "21:30")
@@ -116,11 +132,17 @@ def maybe_send_scheduled_dqa_daily(db: Session) -> bool:
         if schedule.last_sent_on == date_key:
             continue
         try:
-            send_dqa_daily_now(db, study_id=schedule.study_id, report_date=date_key)
+            report = _generate_for_schedule(db, schedule, date_key)
+            send_dqa_daily_email(db, report)
             schedule.last_sent_on = date_key
             db.commit()
-            logger.info("Scheduled DQA Daily sent for study %s on %s", schedule.study_id, date_key)
+            logger.info(
+                "Scheduled report sent for study %s on %s (template=%s)",
+                schedule.study_id,
+                date_key,
+                schedule.template_id,
+            )
             sent_any = True
         except Exception:
-            logger.exception("Scheduled DQA Daily failed for study %s", schedule.study_id)
+            logger.exception("Scheduled report failed for study %s", schedule.study_id)
     return sent_any

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import delete, distinct, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Project, Study, Submission
@@ -13,7 +13,10 @@ from app.integrations.kobo import (
     get_asset_name,
     get_asset_status,
 )
-from app.services.form_labels import extract_enumerator_name
+from app.services.form_labels import (
+    build_enumerator_canonical_map,
+    extract_enumerator_name,
+)
 from app.services.settings import get_kobo_token_from_credential, get_study_credential
 
 logger = logging.getLogger(__name__)
@@ -28,6 +31,33 @@ META_QUESTION_TYPES = {
     "calculate",
     "note",
 }
+
+
+def _prune_missing_submissions(
+    db: Session,
+    project_id: str,
+    remote_ids: set[str],
+) -> int:
+    """Hard-delete local submissions that no longer exist on Kobo.
+
+    DQA flags cascade via FK. Only call after a successful full remote ID inventory.
+    """
+    local_ids = {
+        row[0]
+        for row in db.execute(
+            select(Submission.kobo_id).where(Submission.project_id == project_id)
+        ).all()
+    }
+    orphan_ids = local_ids - remote_ids
+    if not orphan_ids:
+        return 0
+    result = db.execute(
+        delete(Submission).where(
+            Submission.project_id == project_id,
+            Submission.kobo_id.in_(orphan_ids),
+        )
+    )
+    return int(result.rowcount or 0)
 
 
 def _as_date(value: Any) -> datetime | None:
@@ -86,6 +116,67 @@ def _submission_location(submission: dict[str, Any]) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def refresh_submission_enumerators(
+    db: Session,
+    *,
+    project_ids: list[str],
+    projects_by_id: dict[str, Project] | None = None,
+) -> int:
+    """Re-extract and canonicalize enumerator names for submissions in scope."""
+    if not project_ids:
+        return 0
+    projects_by_id = projects_by_id or {
+        p.id: p
+        for p in db.scalars(select(Project).where(Project.id.in_(project_ids))).all()
+    }
+    scope_rows = list(
+        db.scalars(select(Submission).where(Submission.project_id.in_(project_ids))).all()
+    )
+    updated = 0
+    for row in scope_rows:
+        project = projects_by_id.get(row.project_id)
+        form_definition = (
+            project.form_definition
+            if project and isinstance(project.form_definition, dict)
+            else None
+        )
+        data = row.data if isinstance(row.data, dict) else {}
+        derived = extract_enumerator_name(data, form_definition) or (
+            data.get("_submitted_by") if isinstance(data, dict) else None
+        ) or "Unknown"
+        derived = str(derived).strip() or "Unknown"
+        if derived != (row.enumerator or ""):
+            row.enumerator = derived
+            updated += 1
+
+    name_counts: dict[str, int] = {}
+    for row in scope_rows:
+        name = (row.enumerator or "").strip()
+        if name:
+            name_counts[name] = name_counts.get(name, 0) + 1
+    canonical = build_enumerator_canonical_map(
+        list(name_counts.keys()), counts=name_counts
+    )
+    for row in scope_rows:
+        mapped = canonical.get(row.enumerator or "")
+        if mapped and mapped != row.enumerator:
+            row.enumerator = mapped
+            updated += 1
+
+    for pid in project_ids:
+        project = projects_by_id.get(pid)
+        if not project:
+            continue
+        enumerator_count = db.scalar(
+            select(func.count(distinct(Submission.enumerator))).where(
+                Submission.project_id == pid
+            )
+        ) or 0
+        project.enumerator_count = int(enumerator_count)
+
+    return updated
 
 
 def _configured_client(db: Session, study_id: str) -> KoboClient:
@@ -183,6 +274,7 @@ def _sync_asset(
     }
 
     new_submissions = 0
+    deleted_submissions = 0
     latest_submission_at = _naive_utc(previous.last_submission_at) if previous else None
     form_definition = project.form_definition if isinstance(project.form_definition, dict) else None
 
@@ -228,6 +320,45 @@ def _sync_asset(
 
     db.flush()
 
+    # Incremental upsert cannot observe deletes. After a successful full remote
+    # ID inventory, hard-delete local rows that Kobo no longer has.
+    if status != "draft":
+        remote_ids = client.list_submission_ids(uid)
+        deleted_submissions = _prune_missing_submissions(db, uid, remote_ids)
+        if deleted_submissions:
+            logger.info(
+                "Pruned %s local submission(s) missing from Kobo for project %s",
+                deleted_submissions,
+                uid,
+            )
+            db.flush()
+
+    # Watermarked sync only rewrites newly fetched payloads. Re-derive enumerator
+    # from stored JSON for every local row so extractor fixes apply without a
+    # full historical re-download from Kobo.
+    scope_ids = [uid]
+    if project.study_id:
+        scope_ids = list(
+            db.scalars(
+                select(Project.id).where(Project.study_id == project.study_id)
+            ).all()
+        ) or [uid]
+    refreshed_enumerators = refresh_submission_enumerators(
+        db,
+        project_ids=scope_ids,
+        projects_by_id={
+            p.id: p
+            for p in db.scalars(select(Project).where(Project.id.in_(scope_ids))).all()
+        },
+    )
+    if refreshed_enumerators:
+        logger.info(
+            "Refreshed enumerator on %s submission(s) for project %s",
+            refreshed_enumerators,
+            uid,
+        )
+        db.flush()
+
     submission_count = db.scalar(
         select(func.count()).select_from(Submission).where(Submission.project_id == uid)
     ) or 0
@@ -262,7 +393,11 @@ def _sync_asset(
     except Exception:
         logger.exception("DQA evaluation failed for project %s", uid)
 
-    return {"submissions_fetched": len(submissions), "new_submissions": new_submissions}
+    return {
+        "submissions_fetched": len(submissions),
+        "new_submissions": new_submissions,
+        "deleted_submissions": deleted_submissions,
+    }
 
 
 def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
@@ -279,6 +414,7 @@ def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
     projects_synced = 0
     submissions_fetched = 0
     new_submissions = 0
+    deleted_submissions = 0
 
     for asset in assets:
         try:
@@ -286,6 +422,7 @@ def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
             projects_synced += 1
             submissions_fetched += result["submissions_fetched"]
             new_submissions += result["new_submissions"]
+            deleted_submissions += result["deleted_submissions"]
         except Exception as exc:
             message = str(exc)
             errors.append(f"{get_asset_name(asset)}: {message}")
@@ -303,6 +440,7 @@ def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
         "projects_synced": projects_synced,
         "submissions_fetched": submissions_fetched,
         "new_submissions": new_submissions,
+        "deleted_submissions": deleted_submissions,
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "errors": errors,
     }
@@ -326,6 +464,7 @@ def sync_project(db: Session, project_id: str) -> dict[str, Any]:
         "projects_synced": 1,
         "submissions_fetched": result["submissions_fetched"],
         "new_submissions": result["new_submissions"],
+        "deleted_submissions": result["deleted_submissions"],
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "errors": [],
     }

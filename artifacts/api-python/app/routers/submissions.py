@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from math import ceil
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Project, Submission
+from app.db.models import DqaFlag, Project, Submission
 from app.db.session import get_db
 from app.schemas.common import SubmissionsListQuery
 from app.schemas.submissions import FormResponse, SubmissionOut, SubmissionsPage
@@ -21,8 +21,54 @@ def _iso(value: datetime) -> str:
     return value.isoformat()
 
 
-def _map_submission(row: Submission, responses: list[dict] | None = None) -> SubmissionOut:
+def _dqa_summary(flags: list[DqaFlag]) -> tuple[str | None, int, int]:
+    red = sum(1 for flag in flags if (flag.severity or "").lower() == "red")
+    amber = len(flags) - red
+    if red:
+        return "red", red, amber
+    if amber:
+        return "amber", red, amber
+    return None, 0, 0
+
+
+def _flagged_ids(project_id: str | None = None, study_id: str | None = None):
+    query = select(DqaFlag.submission_id)
+    if project_id:
+        query = query.where(DqaFlag.project_id == project_id)
+    elif study_id:
+        query = query.where(
+            DqaFlag.project_id.in_(select(Project.id).where(Project.study_id == study_id))
+        )
+    return query
+
+
+def _dqa_condition(
+    dqa: str | None,
+    *,
+    project_id: str | None,
+    study_id: str | None,
+):
+    sev = (dqa or "").strip().lower()
+    if sev in {"", "all"}:
+        return None
+    flagged = _flagged_ids(project_id=project_id, study_id=study_id)
+    if sev in {"red", "amber"}:
+        return Submission.id.in_(flagged.where(DqaFlag.severity == sev))
+    if sev == "flagged":
+        return Submission.id.in_(flagged)
+    if sev == "clean":
+        return ~Submission.id.in_(flagged)
+    return None
+
+
+def _map_submission(
+    row: Submission,
+    responses: list[dict] | None = None,
+    *,
+    flags: list[DqaFlag] | None = None,
+) -> SubmissionOut:
     project_name = row.project.name if row.project is not None else row.form_name
+    severity, red, amber = _dqa_summary(flags or [])
     return SubmissionOut(
         id=row.id,
         display_id=f"Submission-{row.kobo_id}",
@@ -37,7 +83,19 @@ def _map_submission(row: Submission, responses: list[dict] | None = None) -> Sub
         data=row.data if isinstance(row.data, dict) else {},
         responses=[FormResponse.model_validate(item) for item in (responses or [])],
         attachment_count=row.attachment_count,
+        dqa_severity=severity,
+        red_flags=red,
+        amber_flags=amber,
     )
+
+
+def _flags_by_submission(db: Session, submission_ids: list[str]) -> dict[str, list[DqaFlag]]:
+    grouped: dict[str, list[DqaFlag]] = {sid: [] for sid in submission_ids}
+    if not submission_ids:
+        return grouped
+    for flag in db.scalars(select(DqaFlag).where(DqaFlag.submission_id.in_(submission_ids))).all():
+        grouped.setdefault(flag.submission_id, []).append(flag)
+    return grouped
 
 
 @router.get("", response_model=SubmissionsPage, operation_id="getSubmissions")
@@ -52,7 +110,7 @@ def list_submissions(
     date_to = params.date_to
     page = params.page
     limit = params.limit
-    conditions = []
+    conditions: list[Any] = []
     if project_id:
         conditions.append(Submission.project_id == project_id)
     elif study_id:
@@ -62,9 +120,18 @@ def list_submissions(
     if status and status != "all":
         conditions.append(Submission.status == status)
     if date_from:
-        conditions.append(Submission.submitted_at >= datetime.fromisoformat(date_from.replace("Z", "+00:00")).replace(tzinfo=None))
+        conditions.append(
+            Submission.submitted_at
+            >= datetime.fromisoformat(date_from.replace("Z", "+00:00")).replace(tzinfo=None)
+        )
     if date_to:
-        conditions.append(Submission.submitted_at <= datetime.fromisoformat(date_to.replace("Z", "+00:00")).replace(tzinfo=None))
+        conditions.append(
+            Submission.submitted_at
+            <= datetime.fromisoformat(date_to.replace("Z", "+00:00")).replace(tzinfo=None)
+        )
+    dqa_filter = _dqa_condition(params.dqa, project_id=project_id, study_id=study_id)
+    if dqa_filter is not None:
+        conditions.append(dqa_filter)
 
     where = and_(*conditions) if conditions else None
     total = db.scalar(select(func.count()).select_from(Submission).where(where)) or 0
@@ -78,9 +145,10 @@ def list_submissions(
     )
     if where is not None:
         query = query.where(where)
-    rows = db.scalars(query).unique().all()
+    rows = list(db.scalars(query).unique().all())
+    flags = _flags_by_submission(db, [row.id for row in rows])
     return SubmissionsPage(
-        data=[_map_submission(row) for row in rows],
+        data=[_map_submission(row, flags=flags.get(row.id, [])) for row in rows],
         total=int(total),
         page=page,
         limit=limit,
@@ -106,4 +174,5 @@ def get_submission(submission_id: str, db: Session = Depends(get_db)) -> Submiss
     label_language = project.label_language if project else "English"
     data = row.data if isinstance(row.data, dict) else {}
     responses = build_form_responses(data, form_definition, label_language)
-    return _map_submission(row, responses)
+    flags = _flags_by_submission(db, [row.id]).get(row.id, [])
+    return _map_submission(row, responses, flags=flags)

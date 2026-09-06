@@ -11,13 +11,13 @@ from app.db.models import Project, ReportSchedule
 from app.db.session import get_db
 from app.integrations.kobo import KoboApiError
 from app.schemas.common import OkResponse
-from app.schemas.settings import ConnectionTestResult
 from app.schemas.dqa import (
     TriangulationViewDefinitionCreate,
     TriangulationViewDefinitionOut,
     TriangulationViewDefinitionUpdate,
 )
 from app.schemas.misc import ReportScheduleOut, ReportScheduleUpdate
+from app.schemas.settings import ConnectionTestResult
 from app.schemas.studies import (
     StudyAssignProject,
     StudyCreate,
@@ -83,7 +83,10 @@ def list_studies(db: Session = Depends(get_db)) -> list[StudyOut]:
 
 @router.post("", response_model=StudyOut, operation_id="createStudy")
 def create_study(payload: StudyCreate, db: Session = Depends(get_db)) -> StudyOut:
-    study = studies_service.create_study(db, payload.model_dump(by_alias=False))
+    try:
+        study = studies_service.create_study(db, payload.model_dump(by_alias=False))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _out(study)
 
 
@@ -105,7 +108,10 @@ def update_study(
     if not study:
         raise HTTPException(status_code=404, detail="Study not found")
     data = payload.model_dump(exclude_unset=True, by_alias=False)
-    study = studies_service.update_study(db, study, data)
+    try:
+        study = studies_service.update_study(db, study, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _out(study)
 
 

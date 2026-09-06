@@ -12,7 +12,12 @@ from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_
 
 logger = logging.getLogger(__name__)
 
-def generate_ai_narratives(stats: dict[str, Any], settings: AppSettings) -> dict[str, str]:
+def generate_ai_narratives(
+    stats: dict[str, Any],
+    settings: AppSettings,
+    *,
+    system_prompt: str | None = None,
+) -> dict[str, str]:
     """Call OpenRouter with structured stats. Returns headline + coverage note."""
     if not settings.ai_enabled:
         return {
@@ -51,16 +56,12 @@ def generate_ai_narratives(stats: dict[str, Any], settings: AppSettings) -> dict
         "enumeratorWatch": stats["enumerators"][:5],
         "flagRateByDay": (stats.get("flagRateByDay") or [])[-5:],
     }
-    system = (
-        "You are a field data quality analyst for an NGO education baseline study. "
-        "Write concise, factual prose for a daily DQA email used to drive same-day back-checks. "
-        "No markdown. No speculation beyond the numbers. "
-        "Respond with exactly two paragraphs separated by a blank line: "
-        "(1) Today's headline — 1–3 sentences naming new submissions, RED count to back-check tomorrow, "
-        "and the leading AMBER theme by tool; "
-        "(2) Coverage & trend — coverage vs plan (call out any lagging tool), how the cumulative flag rate "
-        "has moved across study days, and the concrete action for tomorrow."
+    from app.services.dqa_report_prompts import (
+        DEFAULT_DAILY_DQA_PROMPT,
+        apply_output_contract,
     )
+
+    system = apply_output_contract("daily", system_prompt or DEFAULT_DAILY_DQA_PROMPT)
     user = (
         "Produce the two paragraphs from this JSON stats payload only:\n"
         + json.dumps(compact, ensure_ascii=False)

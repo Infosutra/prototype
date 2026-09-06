@@ -48,5 +48,6 @@ class SyncResult(CamelModel):
     projects_synced: int
     submissions_fetched: int
     new_submissions: int
+    deleted_submissions: int = 0
     synced_at: str
     errors: list[str]

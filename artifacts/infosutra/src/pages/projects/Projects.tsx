@@ -12,8 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Search, RefreshCw, ArrowRight, Clock, AlertCircle } from "lucide-react";
+import { Search, RefreshCw, ArrowRight, Clock, AlertCircle, CircleHelp } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type Scope = "study" | "unassigned" | "all";
 
@@ -39,14 +47,18 @@ export default function FormsPage() {
   const studyCount = activeStudyId
     ? allForms.filter((p) => p.studyId === activeStudyId).length
     : 0;
+  const workspaceForms = useMemo(() => {
+    if (!activeStudyId) return allForms.filter((p) => !p.studyId);
+    return allForms.filter((p) => !p.studyId || p.studyId === activeStudyId);
+  }, [allForms, activeStudyId]);
 
   const scopedForms = useMemo(() => {
     if (scope === "unassigned") return allForms.filter((p) => !p.studyId);
     if (scope === "study" && activeStudyId) {
       return allForms.filter((p) => p.studyId === activeStudyId);
     }
-    return allForms;
-  }, [allForms, scope, activeStudyId]);
+    return workspaceForms;
+  }, [allForms, scope, activeStudyId, workspaceForms]);
 
   const filteredForms = scopedForms.filter(
     (p) =>
@@ -66,35 +78,49 @@ export default function FormsPage() {
             : "Kobo forms — sync from Kobo, then assign them to a study"
         }
         action={
-          <Button
-            onClick={() => {
-              if (!activeStudyId) return;
-              syncProjects.mutate({ params: { studyId: activeStudyId } });
-            }}
-            disabled={syncProjects.isPending || !activeStudyId}
-            className="bg-primary text-primary-foreground"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncProjects.isPending ? "animate-spin" : ""}`} />
-            Sync from Kobo
-          </Button>
+          <>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" aria-label="Study workspace help">
+                  <CircleHelp className="mr-2 h-4 w-4" />
+                  Help
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Study workspace flow</DialogTitle>
+                  <DialogDescription>
+                    How Kobo forms connect to a study workspace.
+                  </DialogDescription>
+                </DialogHeader>
+                <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
+                  <li>Create or select a study (sidebar / Studies)</li>
+                  <li>Create instruments in KoboToolbox, then sync them here</li>
+                  <li>
+                    Assign each form to the study with a tool code (T1 / T2 / T3) on{" "}
+                    <Link href="/studies" className="underline text-primary">
+                      Studies
+                    </Link>
+                  </li>
+                </ol>
+              </DialogContent>
+            </Dialog>
+            <Button
+              onClick={() => {
+                if (!activeStudyId) return;
+                syncProjects.mutate({ params: { studyId: activeStudyId } });
+              }}
+              disabled={syncProjects.isPending || !activeStudyId}
+              className="bg-primary text-primary-foreground"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncProjects.isPending ? "animate-spin" : ""}`} />
+              Sync from Kobo
+            </Button>
+          </>
         }
       />
 
       <div className="flex-1 overflow-auto p-4 md:p-6 bg-muted/30">
-        <div className="mb-4 rounded-md border bg-card p-3 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground mb-1">Study workspace flow</p>
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Create or select a study (sidebar / Studies)</li>
-            <li>Create instruments in KoboToolbox, then sync them here</li>
-            <li>
-              Assign each form to the study with a tool code (T1 / T2 / T3) on{" "}
-              <Link href="/studies" className="underline text-primary">
-                Studies
-              </Link>
-            </li>
-          </ol>
-        </div>
-
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -126,7 +152,7 @@ export default function FormsPage() {
               variant={scope === "all" ? "default" : "outline"}
               onClick={() => setScope("all")}
             >
-              All synced ({allForms.length})
+              All synced ({workspaceForms.length})
             </Button>
           </div>
         </div>
@@ -203,77 +229,72 @@ export default function FormsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredForms.map((form) => (
-            <Card
-              key={form.id}
-              className="flex flex-col overflow-hidden hover:border-primary/50 transition-colors"
-            >
-              <div className="p-5 flex-1">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {form.toolCode ? (
+            <Link key={form.id} href={`/forms/${form.id}`} className="block h-full">
+              <Card className="flex h-full flex-col overflow-hidden cursor-pointer hover:border-primary/50 transition-colors">
+                <div className="p-5 flex-1">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {form.toolCode ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-primary/10 text-primary border-primary/20 font-mono"
+                        >
+                          {form.toolCode}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          Unassigned
+                        </Badge>
+                      )}
                       <Badge
                         variant="outline"
-                        className="bg-primary/10 text-primary border-primary/20 font-mono"
+                        className={
+                          form.status === "deployed"
+                            ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                            : form.status === "draft"
+                              ? "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+                              : "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800"
+                        }
                       >
-                        {form.toolCode}
+                        {form.status}
                       </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Unassigned
-                      </Badge>
-                    )}
-                    <Badge
-                      variant="outline"
-                      className={
-                        form.status === "deployed"
-                          ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
-                          : form.status === "draft"
-                            ? "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
-                            : "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800"
-                      }
-                    >
-                      {form.status}
-                    </Badge>
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {form.lastSyncAt ? new Date(form.lastSyncAt).toLocaleDateString() : "Never"}
-                  </span>
-                </div>
-
-                <h3 className="font-semibold text-lg leading-tight mb-1">{form.name}</h3>
-                <div className="text-xs text-muted-foreground mb-4">
-                  {[form.sector, form.country].filter(Boolean).join(" • ")}
-                  {(form.sector || form.country) && " • "}
-                  UID: <span className="font-mono">{form.uid}</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 border-t pt-4">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted-foreground mb-1">Submissions</span>
-                    <span className="font-mono font-medium">
-                      {form.submissionCount.toLocaleString()}
+                    </div>
+                    <span className="text-xs font-mono text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {form.lastSyncAt ? new Date(form.lastSyncAt).toLocaleDateString() : "Never"}
                     </span>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted-foreground mb-1">Tool</span>
-                    <span className="font-mono font-medium">{form.toolCode || "—"}</span>
+
+                  <h3 className="font-semibold text-lg leading-tight mb-1">{form.name}</h3>
+                  <div className="text-xs text-muted-foreground mb-4">
+                    {[form.sector, form.country].filter(Boolean).join(" • ")}
+                    {(form.sector || form.country) && " • "}
+                    UID: <span className="font-mono">{form.uid}</span>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted-foreground mb-1">Staff</span>
-                    <span className="font-mono font-medium">{form.enumeratorCount}</span>
+
+                  <div className="grid grid-cols-3 gap-2 border-t pt-4">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-muted-foreground mb-1">Submissions</span>
+                      <span className="font-mono font-medium">
+                        {form.submissionCount.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-muted-foreground mb-1">Tool</span>
+                      <span className="font-mono font-medium">{form.toolCode || "—"}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-muted-foreground mb-1">Staff</span>
+                      <span className="font-mono font-medium">{form.enumeratorCount}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="bg-muted/50 p-3 border-t flex justify-end">
-                <Link href={`/forms/${form.id}`}>
-                  <Button variant="ghost" size="sm" className="w-full text-sm justify-between">
-                    View form
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </Link>
-              </div>
-            </Card>
+                <div className="bg-muted/50 p-3 border-t flex items-center justify-between text-sm">
+                  <span>View form</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </Card>
+            </Link>
           ))}
         </div>
       </div>

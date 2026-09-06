@@ -191,6 +191,7 @@ ENUMERATOR_PERFORMANCE_TODAY = DataSourceDescriptor(
         "group benchmarks so performance can be compared without inventing a threshold."
     ),
     kind="table",
+    execution_day_scoped=True,
     business_definition=(
         f"{TODAY_DEFINITION} {CLEAN_DEFINITION} Flag rate is the share of an "
         "enumerator's submissions today carrying at least one flag. groupFlagRate and "
@@ -256,6 +257,7 @@ ENUMERATOR_SUBMISSION_QUALITY = DataSourceDescriptor(
         "the exact DQA issues raised against their records."
     ),
     kind="table",
+    execution_day_scoped=True,
     business_definition=f"{TODAY_DEFINITION} {CLEAN_DEFINITION}",
     fields=[
         _f("enumerator", "Enumerator", "string"),

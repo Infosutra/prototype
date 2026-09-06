@@ -326,10 +326,10 @@ export default function SubmissionDetail() {
         title={submission.displayId}
         description={submission.projectName}
         action={
-          <Link href={`/forms/${submission.projectId}/submissions`}>
+          <Link href={`/forms/${submission.projectId}`}>
             <Button variant="outline" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              All submissions
+              Form details
             </Button>
           </Link>
         }

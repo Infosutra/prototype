@@ -26,6 +26,9 @@ class SubmissionOut(CamelModel):
     data: dict[str, Any]
     responses: list[FormResponse] = []
     attachment_count: int
+    dqa_severity: str | None = None
+    red_flags: int = 0
+    amber_flags: int = 0
 
 
 class SubmissionsPage(CamelModel):

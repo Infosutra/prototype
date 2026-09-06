@@ -89,6 +89,7 @@ export default function Settings() {
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState("nvidia/nemotron-3-super-120b-a12b:free");
   const [aiCompileModel, setAiCompileModel] = useState("");
+  const [aiReportPlannerModel, setAiReportPlannerModel] = useState("");
   const [aiBaseUrl, setAiBaseUrl] = useState("https://openrouter.ai/api/v1");
 
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(false);
@@ -119,6 +120,7 @@ export default function Settings() {
         setAiApiKey(settings.general.aiApiKey || "");
         setAiModel(settings.general.aiModel || "nvidia/nemotron-3-super-120b-a12b:free");
         setAiCompileModel(settings.general.aiCompileModel || "");
+        setAiReportPlannerModel(settings.general.aiReportPlannerModel || "");
         setAiBaseUrl(settings.general.aiBaseUrl || "https://openrouter.ai/api/v1");
         setTranscriptionApiKey(settings.general.transcriptionApiKey || "");
         setTranscriptionEnabled(Boolean(settings.general.transcriptionEnabled));
@@ -184,6 +186,7 @@ export default function Settings() {
     setAiApiKey(settingsQuery.data.general.aiApiKey || "");
     setAiModel(settingsQuery.data.general.aiModel || "nvidia/nemotron-3-super-120b-a12b:free");
     setAiCompileModel(settingsQuery.data.general.aiCompileModel || "");
+    setAiReportPlannerModel(settingsQuery.data.general.aiReportPlannerModel || "");
     setAiBaseUrl(settingsQuery.data.general.aiBaseUrl || "https://openrouter.ai/api/v1");
     setTranscriptionEnabled(Boolean(settingsQuery.data.general.transcriptionEnabled));
     setTranscriptionProvider(settingsQuery.data.general.transcriptionProvider || "sarvam");
@@ -244,6 +247,7 @@ export default function Settings() {
           aiBaseUrl,
           aiModel,
           aiCompileModel,
+          aiReportPlannerModel,
           aiTemperature: 0.3,
           aiMaxTokens: 2048,
           aiTimeoutSeconds: 60,
@@ -572,8 +576,8 @@ export default function Settings() {
                   <div className="pt-6 border-t mt-6 space-y-4">
                     <h3 className="text-lg font-medium">AI Configuration (OpenRouter)</h3>
                     <p className="text-sm text-muted-foreground">
-                      Powers DQA Daily headlines and other narratives. DQA rule compilation can
-                      use a separate model below.
+                      Powers DQA Daily / Final narratives. Edit prompts under Prompt Templates and
+                      assign them per study. DQA rule compilation can use a separate model below.
                     </p>
                     <div className="setting-toggle-row">
                       <div className="space-y-0.5">
@@ -612,7 +616,23 @@ export default function Settings() {
                         className="font-mono text-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Used only when compiling DQA rules from English (not runtime evaluation).
+                        Used when compiling DQA English rules into executable checks. Leave blank
+                        to use the Model above.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ai-report-planner-model">Report planner model</Label>
+                      <Input
+                        id="ai-report-planner-model"
+                        value={aiReportPlannerModel}
+                        onChange={(e) => setAiReportPlannerModel(e.target.value)}
+                        placeholder="Leave blank to use the model above"
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Powers free-form report generation. Used at runtime for every report
+                        planning request. Leave blank to use the Model above (not the DQA compile
+                        model).
                       </p>
                     </div>
                     <div className="space-y-2">

@@ -13,17 +13,21 @@ import {
   Library,
   LayoutGrid,
   Mic,
+  LayoutTemplate,
   type LucideIcon,
 } from "lucide-react";
 import { cn, sidebarFieldClasses } from "@/lib/utils";
 import { useGetProjects } from "@workspace/api-client-react";
 import { useStudy } from "@/components/study/StudyProvider";
+import { useActiveStudySync } from "@/components/study/useActiveStudySync";
 
 const globalNavigation = [
   { name: "Portfolio", href: "/portfolio", icon: LayoutGrid },
   { name: "Studies", href: "/studies", icon: Library },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
+
+const SYNC_ON_CLICK = new Set(["/", "/forms"]);
 
 const studyNavigation = [
   { name: "Dashboard", href: "/", icon: Activity },
@@ -35,6 +39,7 @@ const studyNavigation = [
   { name: "Recordings", href: "/recordings", icon: Mic },
   { name: "Prompts", href: "/prompts", icon: MessageSquare },
   { name: "Reports", href: "/reports", icon: FileText },
+  { name: "Templates", href: "/report-templates", icon: LayoutTemplate },
 ];
 
 type SidebarNavProps = {
@@ -52,10 +57,12 @@ function NavLinks({
   items,
   location,
   onNavigate,
+  onItemClick,
 }: {
   items: NavItem[];
   location: string;
   onNavigate?: () => void;
+  onItemClick?: (item: NavItem) => void;
 }) {
   return (
     <>
@@ -66,7 +73,10 @@ function NavLinks({
           <Link
             key={item.name}
             href={item.href}
-            onClick={() => onNavigate?.()}
+            onClick={() => {
+              onItemClick?.(item);
+              onNavigate?.();
+            }}
             className={cn(
               "group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors",
               isActive
@@ -96,6 +106,7 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
   const [location] = useLocation();
   const projects = useGetProjects();
   const { studies, activeStudy, activeStudyId, setActiveStudyId } = useStudy();
+  const { trigger: syncStudy, isPending: syncPending } = useActiveStudySync();
   const isConnected = activeStudy?.credential?.connected ?? false;
   const latestSync = (projects.data ?? [])
     .map((project) => project.lastSyncAt)
@@ -151,7 +162,14 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
 
       <div className="flex-1 overflow-y-auto py-4">
         <nav className="space-y-1 px-2">
-          <NavLinks items={studyNavigation} location={location} onNavigate={onNavigate} />
+          <NavLinks
+            items={studyNavigation}
+            location={location}
+            onNavigate={onNavigate}
+            onItemClick={(item) => {
+              if (SYNC_ON_CLICK.has(item.href)) syncStudy();
+            }}
+          />
         </nav>
       </div>
 
@@ -166,7 +184,7 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
           <span>KoboToolbox {isConnected ? "Connected" : "Not connected"}</span>
         </div>
         <div className="mt-2 flex items-center text-xs text-sidebar-foreground/50">
-          <RefreshCw className="w-3 h-3 mr-1 shrink-0" />
+          <RefreshCw className={cn("w-3 h-3 mr-1 shrink-0", syncPending && "animate-spin")} />
           <span className="truncate">
             Last sync: {latestSync ? new Date(latestSync).toLocaleString() : "Never"}
           </span>

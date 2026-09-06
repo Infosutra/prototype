@@ -49,6 +49,11 @@ table.rpt td.ctr, table.rpt th.ctr { text-align: center; font-variant-numeric: t
 table.rpt td.left, table.rpt th.left { text-align: left; }
 .sev-red { color: #b91c1c; font-weight: 600; }
 .sev-amber { color: #b45309; font-weight: 600; }
+.sev-clean { color: #15803d; font-weight: 600; }
+.mono { font-family: 'IBM Plex Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 12px; font-variant-numeric: tabular-nums; }
+.uuid { display: block; font-size: 10.5px; color: #78716c; margin-top: 2px;
+  font-family: 'IBM Plex Mono', 'Consolas', 'Menlo', monospace; }
 .chart { margin: 8px 0 6px; }
 .caption { font-size: 11px; color: #78716c; font-style: italic; margin: 0 0 18px;
   font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; }

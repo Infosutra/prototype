@@ -139,6 +139,8 @@ class PromptOut(CamelModel):
     content: str
     category: str
     project_ids: list[str]
+    study_ids: list[str] = []
+    is_system: bool = False
     created_at: str
     updated_at: str
 

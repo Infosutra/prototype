@@ -13,9 +13,8 @@ from app.domain.reporting.final_stats import (
     enrich_final_checklist,
 )
 from app.domain.reporting.narratives import _fallback_coverage, _fallback_headline
-from app.rendering.daily import render_html as render_daily_html
-from app.rendering.daily import render_plaintext as render_daily_plaintext
-from app.rendering.final_html import render_final_html
+from app.domain.report_spec.spec import MetricComponent, ReportSpec, Section
+from app.rendering.spec import RenderPayload, render_spec_html, render_spec_plaintext
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -89,15 +88,30 @@ def test_executive_summary_mentions_study_totals():
 
 def test_render_identity_smoke_daily_and_final():
     daily = _load("sample_daily_stats.json")
-    final = _load("sample_final_stats.json")
-
-    daily_html = render_daily_html(daily)
-    daily_text = render_daily_plaintext(daily)
-    final_html = render_final_html(final)
-
-    assert "Fixture Study" in daily_html
-    assert "Fixture Study" in daily_text
-    assert "Fixture Study" in final_html
-    # Identity: same fixture yields stable non-empty output
-    assert render_daily_html(daily) == daily_html
-    assert render_final_html(final) == final_html
+    spec = ReportSpec(
+        title=f"DQA Daily — {daily['studyName']}",
+        sections=[
+            Section(
+                title="Totals",
+                components=[
+                    MetricComponent(
+                        id="t",
+                        label="Cumulative",
+                        data_source="study_totals",
+                        field="cumulative",
+                        format="int",
+                    )
+                ],
+            )
+        ],
+    )
+    payload = RenderPayload(
+        spec=spec,
+        data={"study_totals": daily["totals"]},
+        meta={"organizationName": daily["organizationName"], "rows": []},
+    )
+    html = render_spec_html(payload)
+    text = render_spec_plaintext(payload)
+    assert daily["studyName"] in html
+    assert "120" in text
+    assert render_spec_html(payload) == html

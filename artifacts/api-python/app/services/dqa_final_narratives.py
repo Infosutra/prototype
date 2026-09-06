@@ -6,18 +6,22 @@ import json
 import logging
 from typing import Any
 
-from app.domain.reporting.final_stats import (
-    _exhaustive_executive_summary as exhaustive_executive_summary,
-    _pass_rate as pass_rate,
-    _section_prose as section_prose,
-    _tr1_summary as tr1_summary,
-)
+from app.domain.reporting import final_stats as _final_stats
+
+exhaustive_executive_summary = _final_stats._exhaustive_executive_summary
+pass_rate = _final_stats._pass_rate
+section_prose = _final_stats._section_prose
+tr1_summary = _final_stats._tr1_summary
 
 logger = logging.getLogger(__name__)
 
 
 def _build_final_narratives(
-    stats: dict[str, Any], settings, *, run_ai: bool
+    stats: dict[str, Any],
+    settings,
+    *,
+    run_ai: bool,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     prose = section_prose(stats)
     fallback_exec = exhaustive_executive_summary(stats)
@@ -72,17 +76,12 @@ def _build_final_narratives(
         "tr1WidestGaps": tr1["widest"][:3],
         "draftExecutiveSummary": fallback_exec,
     }
-    system = (
-        "You write Final DQA close-out reports for NGO education baseline studies. "
-        "This document is submitted to clients for dataset sign-off. "
-        "Write an EXHAUSTIVE executive summary in 3–5 short paragraphs (blank-line separated). "
-        "No markdown. Cover: (1) analysis-readiness verdict and pass rate; "
-        "(2) RED/AMBER volumes, where they concentrate (tools + enumerators), leading rules; "
-        "(3) whether flag rates improved across the collection window; "
-        "(4) coverage vs plan by tool; "
-        "(5) the main triangulation finding (TR-1 say–do concordance and widest gaps) plus TR-3/TR-5 if relevant. "
-        "Stay factual; use only the JSON. Tone matches a concluding client brief."
+    from app.services.dqa_report_prompts import (
+        DEFAULT_FINAL_DQA_PROMPT,
+        apply_output_contract,
     )
+
+    system = apply_output_contract("final", system_prompt or DEFAULT_FINAL_DQA_PROMPT)
     user = "Write the executive summary from this payload:\n" + json.dumps(
         compact, ensure_ascii=False
     )
