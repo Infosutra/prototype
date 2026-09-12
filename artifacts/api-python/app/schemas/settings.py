@@ -52,12 +52,14 @@ class SettingsOut(CamelModel):
     smtp: SmtpSettings
     daily_report: DailyReportSettings
     general: GeneralSettings
+    active_study_id: str | None = None
 
 
 class SettingsUpdate(CamelModel):
     smtp: SmtpSettings | None = None
     daily_report: DailyReportSettings | None = None
     general: GeneralSettings | None = None
+    active_study_id: str | None = None
 
 
 class ConnectionTestResult(CamelModel):

@@ -987,12 +987,14 @@ export interface SettingsOut {
   smtp: SmtpSettings;
   dailyReport: DailyReportSettings;
   general: GeneralSettings;
+  activeStudyId?: string | null;
 }
 
 export interface SettingsUpdate {
   smtp?: SmtpSettings | null;
   dailyReport?: DailyReportSettings | null;
   general?: GeneralSettings | null;
+  activeStudyId?: string | null;
 }
 
 export interface ShareReportInput {

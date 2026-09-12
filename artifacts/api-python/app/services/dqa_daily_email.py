@@ -18,6 +18,7 @@ from app.integrations.smtp import SmtpError, send_email
 from app.services.daily_report import parse_send_time
 from app.services.dqa_daily_report import generate_daily_dqa_report
 from app.services.dqa_final_report import generate_final_dqa_report
+from app.services.kobo_sync import sync_all_projects
 from app.services.report_execution import build_context
 from app.services.report_templates import execute_template, persist_report
 from app.services.report_storage import pdf_path_for
@@ -147,6 +148,14 @@ def maybe_send_scheduled_dqa_daily(db: Session) -> bool:
         if schedule.last_sent_on == date_key:
             continue
         try:
+            try:
+                sync_all_projects(db, schedule.study_id)
+                db.expire_all()
+            except Exception:
+                logger.exception(
+                    "scheduled_report_pre_sync_failed",
+                    study_id=schedule.study_id,
+                )
             report = _generate_for_schedule(db, schedule, date_key)
             send_dqa_daily_email(db, report)
             schedule.last_sent_on = date_key

@@ -6604,6 +6604,11 @@ components:
           $ref: '#/components/schemas/DailyReportSettings'
         general:
           $ref: '#/components/schemas/GeneralSettings'
+        activeStudyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activestudyid
       type: object
       required:
       - smtp
@@ -6624,6 +6629,11 @@ components:
           anyOf:
           - $ref: '#/components/schemas/GeneralSettings'
           - type: 'null'
+        activeStudyId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activestudyid
       type: object
       title: SettingsUpdate
     ShareReportInput:

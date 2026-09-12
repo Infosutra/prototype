@@ -30,6 +30,8 @@ logger = structlog.stdlib.get_logger(__name__)
 # SQLite allows one writer at a time. Parallel sync overlaps Kobo HTTP, then
 # serializes all ORM writes through this lock.
 _SYNC_DB_LOCK = threading.Lock()
+# One full study/form sync at a time (manual, auto, activate, pre-mail).
+_SYNC_RUN_LOCK = threading.Lock()
 
 META_QUESTION_TYPES = {
     "start",
@@ -810,6 +812,22 @@ def _slowest_form_s(phase_lists: list[dict[str, float]]) -> dict[str, float]:
 
 
 def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
+    with _SYNC_RUN_LOCK:
+        return _sync_all_projects_unlocked(db, study_id)
+
+
+def try_sync_all_projects(db: Session, study_id: str) -> dict[str, Any] | None:
+    """Non-blocking sync for the periodic auto-sync tick. Returns None if busy."""
+    if not _SYNC_RUN_LOCK.acquire(blocking=False):
+        logger.info("auto_sync_skipped", reason="sync_busy", study_id=study_id)
+        return None
+    try:
+        return _sync_all_projects_unlocked(db, study_id)
+    finally:
+        _SYNC_RUN_LOCK.release()
+
+
+def _sync_all_projects_unlocked(db: Session, study_id: str) -> dict[str, Any]:
     study = db.get(Study, study_id)
     if not study:
         raise LookupError("Study not found")
@@ -943,6 +961,11 @@ def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
 
 
 def sync_project(db: Session, project_id: str) -> dict[str, Any]:
+    with _SYNC_RUN_LOCK:
+        return _sync_project_unlocked(db, project_id)
+
+
+def _sync_project_unlocked(db: Session, project_id: str) -> dict[str, Any]:
     project = db.scalars(
         select(Project).options(joinedload(Project.study)).where(Project.id == project_id)
     ).first()

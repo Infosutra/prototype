@@ -162,11 +162,16 @@ def _sync_tools(db: Session, study: Study, tools_payload: list[dict[str, Any]]) 
 def seed_default_study(db: Session) -> Study:
     """Ensure the default demo study exists with tools, credential, and triangulation views."""
     from app.services import triangulation as tri
+    from app.services.settings import get_or_create_settings
 
     existing = _load_study(db, DEFAULT_STUDY_ID)
     if existing:
         apply_seed_tool_links(db, existing)
         tri.seed_triangulation_views(db, existing.id)
+        settings = get_or_create_settings(db)
+        if not settings.active_study_id:
+            settings.active_study_id = existing.id
+            db.commit()
         return existing
 
     study = Study(
@@ -200,6 +205,10 @@ def seed_default_study(db: Session) -> Study:
     assert study is not None
     apply_seed_tool_links(db, study)
     tri.seed_triangulation_views(db, study.id)
+    settings = get_or_create_settings(db)
+    if not settings.active_study_id:
+        settings.active_study_id = study.id
+        db.commit()
     return study
 
 

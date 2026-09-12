@@ -2,19 +2,35 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.integrations.smtp import SmtpError
 from app.schemas.common import StudyIdQuery
 from app.schemas.settings import ConnectionTestResult, SettingsOut, SettingsUpdate
 from app.services import daily_report as daily_report_service
 from app.services import dqa_daily_email as dqa_daily_email
 from app.services import settings as settings_service
+from app.services.kobo_sync import sync_all_projects
+
+logger = structlog.stdlib.get_logger(__name__)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+def _background_sync_study(study_id: str) -> None:
+    """Sync a study after settings PATCH/PUT returns (own DB session)."""
+    db = SessionLocal()
+    try:
+        sync_all_projects(db, study_id)
+        logger.info("active_study_sync_complete", study_id=study_id)
+    except Exception:
+        logger.exception("active_study_sync_failed", study_id=study_id)
+    finally:
+        db.close()
 
 
 @router.get("", response_model=SettingsOut, operation_id="getSettings")
@@ -29,11 +45,19 @@ def get_settings(db: Session = Depends(get_db)) -> SettingsOut:
     operation_id="updateSettings",
     responses={400: {"description": "Bad request"}},
 )
-def put_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> SettingsOut:
+def put_settings(
+    payload: SettingsUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> SettingsOut:
     try:
-        return settings_service.update_settings(db, payload)
+        out, sync_study_id = settings_service.update_settings(db, payload)
     except (ValueError, SmtpError) as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
+    if sync_study_id:
+        background_tasks.add_task(_background_sync_study, sync_study_id)
+        logger.info("active_study_sync_scheduled", study_id=sync_study_id)
+    return out
 
 
 @router.post("/test-smtp", response_model=ConnectionTestResult, operation_id="testSmtpConnection")

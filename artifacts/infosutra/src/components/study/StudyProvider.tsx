@@ -4,12 +4,14 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "wouter";
 import {
   getGetStudiesQueryKey,
+  updateSettings,
   useGetStudies,
   type StudyOut,
 } from "@workspace/api-client-react";
@@ -35,12 +37,20 @@ function readInitialStudyId(): string | null {
   return localStorage.getItem(STORAGE_KEY);
 }
 
+/** Best-effort mirror of active study to the API (drives server auto-sync). */
+function persistActiveStudyOnServer(id: string | null) {
+  void updateSettings({ activeStudyId: id }).catch(() => {
+    // Local UX must not depend on this; scheduler falls back to skip until set.
+  });
+}
+
 export function StudyProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const studyFromUrl = searchParams.get("study");
 
   const [activeStudyId, setActiveStudyIdState] = useState<string | null>(readInitialStudyId);
+  const lastPersistedRef = useRef<string | null | undefined>(undefined);
 
   const studiesQuery = useGetStudies();
   const studies = studiesQuery.data ?? [];
@@ -60,6 +70,12 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     [setSearchParams],
   );
 
+  const mirrorToServer = useCallback((id: string | null) => {
+    if (lastPersistedRef.current === id) return;
+    lastPersistedRef.current = id;
+    persistActiveStudyOnServer(id);
+  }, []);
+
   // Shared URLs / browser back-forward: URL study wins when valid.
   useEffect(() => {
     if (!studyFromUrl || studyFromUrl === activeStudyId) return;
@@ -76,6 +92,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
         setActiveStudyIdState(null);
         localStorage.removeItem(STORAGE_KEY);
         if (studyFromUrl) writeStudyParam(null);
+        mirrorToServer(null);
       }
       return;
     }
@@ -83,6 +100,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     if (activeStudyId && studies.some((s) => s.id === activeStudyId)) {
       localStorage.setItem(STORAGE_KEY, activeStudyId);
       if (studyFromUrl !== activeStudyId) writeStudyParam(activeStudyId);
+      mirrorToServer(activeStudyId);
       return;
     }
 
@@ -92,7 +110,8 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     setActiveStudyIdState(preferred);
     localStorage.setItem(STORAGE_KEY, preferred);
     writeStudyParam(preferred);
-  }, [studies, activeStudyId, studyFromUrl, writeStudyParam]);
+    mirrorToServer(preferred);
+  }, [studies, activeStudyId, studyFromUrl, writeStudyParam, mirrorToServer]);
 
   const setActiveStudyId = useCallback(
     (id: string | null) => {
@@ -100,8 +119,9 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
       if (id) localStorage.setItem(STORAGE_KEY, id);
       else localStorage.removeItem(STORAGE_KEY);
       writeStudyParam(id);
+      mirrorToServer(id);
     },
-    [writeStudyParam],
+    [writeStudyParam, mirrorToServer],
   );
 
   const activeStudy = useMemo(

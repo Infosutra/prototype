@@ -94,6 +94,7 @@ def to_settings_out(row: AppSettings) -> SettingsOut:
                 getattr(row, "transcription_rate_per_minute", None) or 0.0
             ),
         ),
+        active_study_id=getattr(row, "active_study_id", None),
     )
 
 
@@ -153,8 +154,16 @@ def smtp_config_from_row(row: AppSettings, password: str) -> SmtpConfig:
     )
 
 
-def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
+def update_settings(db: Session, payload: SettingsUpdate) -> tuple[SettingsOut, str | None]:
+    """Apply settings update.
+
+    Returns ``(settings_out, study_id_to_background_sync)``. The second value is
+    set when ``active_study_id`` changes to a new non-null id (caller should
+    schedule a background Kobo sync).
+    """
     row = get_or_create_settings(db)
+    previous_active = getattr(row, "active_study_id", None)
+    sync_study_id: str | None = None
 
     if payload.smtp is not None:
         smtp = payload.smtp
@@ -216,9 +225,20 @@ def update_settings(db: Session, payload: SettingsUpdate) -> SettingsOut:
         row.transcription_currency = (general.transcription_currency or "INR").strip()
         row.transcription_rate_per_minute = float(general.transcription_rate_per_minute)
 
+    if "active_study_id" in payload.model_fields_set:
+        new_active = payload.active_study_id
+        if new_active is not None:
+            from app.db.models import Study
+
+            if db.get(Study, new_active) is None:
+                raise ValueError("Active study not found")
+        row.active_study_id = new_active
+        if new_active and new_active != previous_active:
+            sync_study_id = new_active
+
     db.commit()
     db.refresh(row)
-    return to_settings_out(row)
+    return to_settings_out(row), sync_study_id
 
 
 def test_smtp(db: Session) -> ConnectionTestResult:

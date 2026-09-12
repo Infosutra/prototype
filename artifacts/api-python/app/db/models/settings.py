@@ -32,6 +32,9 @@ class AppSettings(Base):
     daily_report_recipients: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     daily_report_last_sent_on: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Workspace active study (UI selection mirrored for scheduler auto-sync).
+    active_study_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
     organization_name: Mapped[str] = mapped_column(String, nullable=False, default="Infosutra")
     timezone: Mapped[str] = mapped_column(String, nullable=False, default="UTC")
     date_format: Mapped[str] = mapped_column(String, nullable=False, default="YYYY-MM-DD")

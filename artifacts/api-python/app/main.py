@@ -34,6 +34,7 @@ from app.routers import (
 )
 from app.services.daily_report import maybe_send_scheduled_report
 from app.services.dqa_daily_email import maybe_send_scheduled_dqa_daily
+from app.services.kobo_auto_sync import maybe_run_scheduled_kobo_sync
 from app.services.transcription_job import drain_pending_transcriptions
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -47,16 +48,21 @@ def _serve_frontend_enabled() -> bool:
     return os.environ.get("SERVE_FRONTEND", "").strip().lower() in {"1", "true", "yes"}
 
 
+def _scheduler_tick() -> None:
+    db = SessionLocal()
+    try:
+        maybe_run_scheduled_kobo_sync(db)
+        maybe_send_scheduled_report(db)
+        maybe_send_scheduled_dqa_daily(db)
+    finally:
+        db.close()
+    drain_pending_transcriptions()
+
+
 async def _scheduler_loop(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
-            db = SessionLocal()
-            try:
-                maybe_send_scheduled_report(db)
-                maybe_send_scheduled_dqa_daily(db)
-            finally:
-                db.close()
-            drain_pending_transcriptions()
+            await asyncio.to_thread(_scheduler_tick)
         except Exception:
             logger.exception("scheduler_tick_failed")
         try:

@@ -29,3 +29,9 @@ Fresh SQLite is created automatically. Configure Kobo in study settings, then Sy
 
 Study sync overlaps Kobo HTTP across forms (default 4 workers), then serializes
 SQLite writes. Override with `KOBO_SYNC_CONCURRENCY` (1–8; use `1` for sequential).
+
+The scheduler auto-syncs the **active study** every 30 minutes
+(`KOBO_AUTO_SYNC_INTERVAL_MINUTES`; set `0` to disable). Choosing an active study
+in the UI updates `settings.active_study_id` and schedules a background sync after
+the settings PUT returns. Scheduled Daily/Final report emails sync that schedule’s
+study immediately before generate+send.
