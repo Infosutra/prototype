@@ -40,6 +40,7 @@ from app.domain.reporting.query_aggregate_catalog import (
     MAX_DISTINCT_DATE_RANGES,
     MAX_GROUP_BY_FIELDS,
     MEASURES_REQUIRING_FIELD,
+    certified_cumulative_date_range_token,
     parse_group_by,
     semantic_date_range_token,
 )
@@ -351,7 +352,30 @@ def _check_params(
             )
     if source.id == "query_aggregate":
         issues.extend(_check_query_aggregate_params(component, path))
+    if source.id == "top_failing_rules":
+        issues.extend(_check_top_failing_rules_params(component, path))
     return issues
+
+
+def _check_top_failing_rules_params(component: DataBound, path: str) -> list[SpecIssue]:
+    """Cross-field: dateWindow is only valid with scope=cumulative."""
+    params = component.params or {}
+    raw_window = params.get("dateWindow")
+    has_window = raw_window is not None and not (
+        isinstance(raw_window, str) and not str(raw_window).strip()
+    )
+    if not has_window:
+        return []
+    scope = params.get("scope") or "today"
+    if str(scope).strip() == "cumulative":
+        return []
+    return [
+        SpecIssue(
+            path=f"{path}.params.dateWindow",
+            code="param_conflict",
+            message="dateWindow is only valid with scope=cumulative.",
+        )
+    ]
 
 
 def _check_query_aggregate_params(component: DataBound, path: str) -> list[SpecIssue]:
@@ -499,11 +523,35 @@ def _iter_data_bound_components(spec: ReportSpec) -> list[tuple[str, Any]]:
     return out
 
 
-def _check_distinct_date_ranges(spec: ReportSpec) -> list[SpecIssue]:
+def _component_date_range_token(
+    component: DataBound, source: DataSourceDescriptor | None
+) -> str:
+    """Validation-time range identity for one data-bound component."""
+    params = component.params or {}
+    if source is None:
+        return DEFAULT_RANGE_TOKEN
+    if source.id == "query_aggregate":
+        return semantic_date_range_token(params.get("dateWindow"))
+    if not source.supports_date_window:
+        return DEFAULT_RANGE_TOKEN
+    # dateWindow-capable certified tools.
+    if source.id == "top_failing_rules":
+        scope = str(params.get("scope") or "today").strip()
+        if scope != "cumulative":
+            # scope=today stays on the execution-day / default bag.
+            return DEFAULT_RANGE_TOKEN
+        return certified_cumulative_date_range_token(params.get("dateWindow"))
+    return certified_cumulative_date_range_token(params.get("dateWindow"))
+
+
+def _check_distinct_date_ranges(
+    spec: ReportSpec, sources: dict[str, DataSourceDescriptor]
+) -> list[SpecIssue]:
     """Option A: at most MAX_DISTINCT_DATE_RANGES distinct resolved ranges per spec.
 
-    Certified tools always use the default/context bag. ``query_aggregate``
-    contributes ``default`` when dateWindow is omitted, otherwise its token.
+    ``query_aggregate`` omit → context-bag ``default``. Cumulative certified tools
+    with ``supports_date_window`` omit → ``study_to_date`` (matches runtime).
+    Other certified tools contribute ``default``.
     """
     tokens: set[str] = set()
     for _path, component in _iter_data_bound_components(spec):
@@ -515,10 +563,8 @@ def _check_distinct_date_ranges(spec: ReportSpec) -> list[SpecIssue]:
             continue
         if not isinstance(component, DataBound):
             continue
-        if component.data_source == "query_aggregate":
-            tokens.add(semantic_date_range_token((component.params or {}).get("dateWindow")))
-        else:
-            tokens.add(DEFAULT_RANGE_TOKEN)
+        source = sources.get(component.data_source)
+        tokens.add(_component_date_range_token(component, source))
 
     if len(tokens) <= MAX_DISTINCT_DATE_RANGES:
         return []
@@ -743,7 +789,7 @@ def validate_spec(
             errors.extend(_component_issues(component, sources, path))
 
     errors.extend(_check_literal_dates(spec))
-    errors.extend(_check_distinct_date_ranges(spec))
+    errors.extend(_check_distinct_date_ranges(spec, sources))
     errors.extend(_check_unsafe_content(spec))
     errors.extend(_check_text_standing_in_for_data(spec))
     errors.extend(_check_has_retrievable_content(spec))

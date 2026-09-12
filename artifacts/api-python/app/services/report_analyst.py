@@ -9,24 +9,28 @@ renderer will present as authoritative, and it never chooses which data to fetch
 from __future__ import annotations
 
 import json
-import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.db.models import AppSettings, Prompt
 from app.domain.report_spec.keys import data_key
 from app.domain.report_spec.spec import NarrativeComponent, ReportSpec
-from app.domain.reporting.narratives import _fallback_coverage, _fallback_headline
+from app.domain.reporting.narratives import (
+    _fallback_coverage,
+    _fallback_headline,
+    fallback_stats_from_resolved_data,
+)
 from app.integrations.llm import (
     LlmError,
     chat_completion_detailed,
     llm_config_from_app_settings,
 )
+from app.integrations.llm.json_object import parse_json_object
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 REPORT_ANALYST_CATEGORY = "report-analyst"
 REPORT_ANALYST_PROMPT_ID = "seed-report-analyst"
@@ -93,24 +97,8 @@ def _apply_contract(system_prompt: str) -> str:
 
 
 def _parse_payload(text: str) -> dict[str, Any]:
-    stripped = (text or "").strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", stripped).strip()
-    try:
-        data = json.loads(stripped)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r"\{[\s\S]*\}", stripped)
-    if match:
-        try:
-            data = json.loads(match.group(0))
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
-    return {}
+    """Best-effort JSON object from model output; logs empty vs malformed distinctly."""
+    return parse_json_object(text, log_label="Report analyst").data or {}
 
 
 def _summarize(payload: Any) -> Any:
@@ -145,7 +133,7 @@ def apply_fallbacks(
         try:
             texts[component.id] = builder(stats)
         except Exception:
-            logger.exception("Narrative fallback '%s' failed", component.fallback)
+            logger.exception("narrative_fallback_failed", fallback=component.fallback)
     return texts
 
 
@@ -170,7 +158,11 @@ def generate_narratives(
     if not components:
         return NarrativeResult(source="none")
 
-    fallback_texts = apply_fallbacks(components, stats)
+    # Prefer tool-resolved data (Phase 3); fall back to injected/legacy stats dict.
+    fallback_view = fallback_stats_from_resolved_data(data)
+    if fallback_view is None:
+        fallback_view = stats
+    fallback_texts = apply_fallbacks(components, fallback_view)
 
     if not run_ai or not settings.ai_enabled:
         return NarrativeResult(texts=fallback_texts, source="fallback")
@@ -178,7 +170,7 @@ def generate_narratives(
     try:
         llm = llm_config_from_app_settings(settings)
     except LlmError as exc:
-        logger.info("Report analyst disabled: %s", exc)
+        logger.info("report_analyst_disabled", error=str(exc))
         return NarrativeResult(texts=fallback_texts, source="fallback", error=str(exc))
 
     prompt_id: str | None = None
@@ -231,7 +223,7 @@ def generate_narratives(
             timeout_seconds=float(settings.ai_timeout_seconds or 60),
         )
     except LlmError as exc:
-        logger.warning("Report analyst call failed: %s", exc)
+        logger.warning("report_analyst_call_failed", error=str(exc))
         return NarrativeResult(texts=fallback_texts, source="fallback", error=str(exc))
 
     parsed = _parse_payload(completion.text)

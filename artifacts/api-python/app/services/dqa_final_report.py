@@ -6,19 +6,21 @@ Final template, executes it against the close-out context, and persists the resu
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.db.models import Report, Study
+from app.domain.report_spec.context import ReportExecutionContext
 from app.domain.reporting.final_stats import enrich_final_checklist, mismatch_detail
 from app.services import triangulation as tri
 from app.services.dqa_report_prompts import resolve_report_prompt
 from app.services.report_execution import build_context
 from app.services.report_runs import record_run
-from app.services.report_stats import build_daily_dqa_stats
+from app.services.report_tools import ReportDataContext
+from app.services.report_tools.signoff import compose_signoff_checklist
 from app.services.report_templates import (
     TemplateError,
     execute_template,
@@ -28,7 +30,7 @@ from app.services.report_templates import (
 from app.services.settings import get_or_create_settings
 from app.services.triangulation import TriangulationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 __all__ = ["build_final_dqa_stats", "generate_final_dqa_report"]
 
@@ -40,12 +42,24 @@ def build_final_dqa_stats(
     run_ai: bool = True,
     system_prompt: str | None = None,
 ) -> dict[str, Any]:
-    """Cumulative study stats + triangulation summaries for Final report."""
+    """Triangulation summaries + sign-off checklist for Final report stats overlay.
+
+    Phase 3: no longer bases on a full ``build_daily_dqa_stats`` collapse. Certified
+    tools self-serve via entity_rows; this blob exists for ``triangulation_summary``
+    and checklist enrichment only.
+    """
+    _ = run_ai, system_prompt  # retained for call-site compatibility
     settings = get_or_create_settings(db)
     report_date = study.end_date or datetime.now(timezone.utc).date().isoformat()
-    base = build_daily_dqa_stats(db, study, report_date=report_date, settings=settings)
-    base["reportKind"] = "final_dqa"
-    base["title"] = f"Final DQA — {study.name}"
+    context = ReportExecutionContext(
+        report_kind="final",
+        study_id=study.id,
+        execution_date=report_date,
+        timezone=study.timezone or "Asia/Kolkata",
+        date_from=study.start_date,
+        date_to=report_date,
+    )
+    ctx = ReportDataContext(db, context, settings=settings)
 
     triangulation: dict[str, Any] = {}
     view_infos = tri.list_views(db, study.id)
@@ -72,7 +86,7 @@ def build_final_dqa_stats(
                 ][:12],
             }
         except (TriangulationError, Exception):
-            logger.exception("Triangulation %s failed for final report", view_id)
+            logger.exception("final_report_triangulation_failed", view_id=view_id)
             triangulation[view_id] = {
                 "id": view_id,
                 "title": info.get("title") or view_id,
@@ -82,11 +96,17 @@ def build_final_dqa_stats(
                 "mismatchExamples": [],
                 "error": "failed",
             }
-    base["triangulation"] = triangulation
-    base["signOffChecklist"] = enrich_final_checklist(
-        list(base.get("signOffChecklist") or []), triangulation
-    )
-    return base
+
+    checklist = compose_signoff_checklist(ctx)
+    return {
+        "studyId": study.id,
+        "studyName": study.name,
+        "reportKind": "final_dqa",
+        "title": f"Final DQA — {study.name}",
+        "reportDate": report_date,
+        "triangulation": triangulation,
+        "signOffChecklist": enrich_final_checklist(checklist, triangulation),
+    }
 
 
 def _final_template(db: Session, study: Study):

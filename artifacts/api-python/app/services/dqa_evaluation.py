@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,7 @@ from app.services.dqa_relationship_resolver import (
 from app.domain.dqa.rule_management import active_rules
 from app.services.dqa_rule_packs import get_pack_for_project, get_pack_version
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 DQA_FLAG_NAMESPACE = uuid.UUID("a3f7c2e1-4b5d-4e6f-9a0b-1c2d3e4f5a6b")
 
@@ -66,9 +66,9 @@ def evaluate_rule(
         )
     except Exception as exc:
         logger.exception(
-            "DQA evaluation failed submission_id=%s rule_id=%s",
-            current.id,
-            rule_id,
+            "dqa_rule_evaluation_failed",
+            submission_id=current.id,
+            rule_id=rule_id,
         )
         if metrics is not None:
             metrics.evaluation_errors.append(f"{rule_id}: {exc}")
@@ -195,8 +195,18 @@ def evaluate_submission(
 
 
 def evaluate_project(
-    db: Session, project_id: str, *, metrics: EvaluationMetrics | None = None
+    db: Session,
+    project_id: str,
+    *,
+    metrics: EvaluationMetrics | None = None,
+    submission_ids: set[str] | list[str] | None = None,
 ) -> dict[str, Any]:
+    """Evaluate DQA rules for a project.
+
+    When ``submission_ids`` is provided, only those submissions are re-evaluated
+    (still using all project rows as ``project_rows`` context). An empty set
+    skips work. ``None`` evaluates every local submission.
+    """
     started = time.perf_counter()
     local_metrics = metrics or EvaluationMetrics()
     pack = get_pack_for_project(db, project_id)
@@ -212,15 +222,40 @@ def evaluate_project(
             select(Submission).where(Submission.project_id == project_id)
         ).all()
     )
+    if submission_ids is not None:
+        wanted = set(submission_ids)
+        if not wanted:
+            local_metrics.submissions = 0
+            local_metrics.flagged_submissions = 0
+            local_metrics.duration_ms = (time.perf_counter() - started) * 1000.0
+            logger.info(
+                "dqa_evaluate",
+                project_id=project_id,
+                submissions=0,
+                flags=0,
+                duration_ms=round(local_metrics.duration_ms, 1),
+                errors=0,
+                skipped="empty",
+            )
+            return {
+                "submissions": 0,
+                "flagged_submissions": 0,
+                "flags": 0,
+                "metrics": local_metrics.to_dict(),
+            }
+        targets = [row for row in rows if row.id in wanted]
+    else:
+        targets = rows
+
     flagged_submissions = 0
-    for submission in rows:
+    for submission in targets:
         try:
             flags = evaluate_submission(
                 db,
                 submission,
                 pack=pack,
                 project_rows=rows,
-                commit=True,
+                commit=False,
                 study_id=study_id,
                 rel_map=rel_map,
                 target_rows_cache=target_rows_cache,
@@ -230,24 +265,25 @@ def evaluate_project(
             )
         except Exception as exc:
             logger.exception(
-                "DQA submission evaluation failed project_id=%s submission_id=%s",
-                project_id,
-                submission.id,
+                "dqa_submission_evaluation_failed",
+                project_id=project_id,
+                submission_id=submission.id,
             )
             local_metrics.evaluation_errors.append(f"{submission.id}: {exc}")
             continue
         if flags:
             flagged_submissions += 1
-    local_metrics.submissions = len(rows)
+    db.commit()
+    local_metrics.submissions = len(targets)
     local_metrics.flagged_submissions = flagged_submissions
     local_metrics.duration_ms = (time.perf_counter() - started) * 1000.0
     logger.info(
-        "DQA evaluate project_id=%s submissions=%s flags=%s duration_ms=%.1f errors=%s",
-        project_id,
-        local_metrics.submissions,
-        local_metrics.flags_produced,
-        local_metrics.duration_ms,
-        len(local_metrics.evaluation_errors),
+        "dqa_evaluate",
+        project_id=project_id,
+        submissions=local_metrics.submissions,
+        flags=local_metrics.flags_produced,
+        duration_ms=round(local_metrics.duration_ms, 1),
+        errors=len(local_metrics.evaluation_errors),
     )
     result = {
         "submissions": local_metrics.submissions,

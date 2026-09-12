@@ -97,6 +97,9 @@ class _FakeCaller:
         item = self.queue.pop(0)
         if isinstance(item, Exception):
             raise item
+        # Allow (reply, error, payload) triples to simulate structured-output parse failures.
+        if isinstance(item, tuple) and len(item) == 3:
+            return item
         return item, None, None
 
 
@@ -118,6 +121,26 @@ def test_plan_returns_a_valid_spec(db: Session) -> None:
         db,
         "today's submissions",
         [PlannerReply(status="ok", spec=_valid_spec(), summary="Intake table.")],
+    )
+    assert result.ok
+    assert result.spec is not None
+    assert result.spec.data_source_ids() == ["study_totals"]
+
+
+def test_plan_salvages_bare_report_spec_without_status_wrapper(db: Session) -> None:
+    """Models often emit the ReportSpec JSON alone; PlannerReply then lacks status."""
+    _seed(db)
+    bare = _valid_spec().model_dump(by_alias=True)
+    result = _plan(
+        db,
+        "today's submissions",
+        [
+            (
+                None,
+                "1 validation error for PlannerReply\nstatus\n  Field required",
+                bare,
+            )
+        ],
     )
     assert result.ok
     assert result.spec is not None
@@ -527,9 +550,20 @@ def test_temporal_mismatch_guard_is_descriptor_driven() -> None:
     assert by_id["enumerator_submission_quality"].supports_date_window is False
     assert by_id["enumerator_submission_quality"].execution_day_scoped is True
     assert by_id["enumerator_performance_today"].execution_day_scoped is True
-    # Certified tools default to no dateWindow (pinned to execution default bag).
+
+    # Phase 4: these three cumulative tools accept dateWindow.
+    phase4_capable = (
+        "enumerator_performance_study",
+        "findings_by_tool",
+        "top_failing_rules",
+    )
+    for tool_id in phase4_capable:
+        assert by_id[tool_id].supports_date_window is True, tool_id
+        assert by_id[tool_id].execution_day_scoped is False, tool_id
+
+    # Everything else stays False (including flag_rate_trend / composites / today-tools).
     for source in sources:
-        if source.id == "query_aggregate":
+        if source.id == "query_aggregate" or source.id in phase4_capable:
             continue
         assert source.supports_date_window is False, source.id
 
@@ -539,14 +573,21 @@ def test_temporal_mismatch_guard_is_descriptor_driven() -> None:
     assert "enumerator_submission_quality" in unsafe
     assert "enumerator_performance_today" in unsafe
     assert "query_aggregate" not in unsafe
-    assert "enumerator_performance_study" not in unsafe
-    assert guard["dateWindowCapable"] == ["query_aggregate"]
-    # List is not a hardcoded constant — it is computed from flags on the live descriptors.
+    # Phase 4 tools are capable but not execution-day scoped → never on the unsafe list.
+    for tool_id in phase4_capable:
+        assert tool_id not in unsafe
+        assert tool_id in guard["dateWindowCapable"]
+    assert set(guard["dateWindowCapable"]) == {
+        "enumerator_performance_study",
+        "findings_by_tool",
+        "query_aggregate",
+        "top_failing_rules",
+    }
     assert unsafe == sorted(
         s.id for s in sources if s.execution_day_scoped and not s.supports_date_window
     )
 
-    # Flipping supports_date_window removes the tool from the multi-day off-limits list.
+    # Flipping supports_date_window removes an execution-day tool from the unsafe list.
     flipped = [
         (
             source.model_copy(update={"supports_date_window": True})
@@ -559,6 +600,21 @@ def test_temporal_mismatch_guard_is_descriptor_driven() -> None:
     assert "enumerator_submission_quality" not in flipped_unsafe
     assert "enumerator_performance_today" in flipped_unsafe
 
+    # Flipping supports_date_window OFF on each Phase 4 tool must not put it on the
+    # unsafe list (still not execution_day_scoped) — and drops it from capable.
+    for tool_id in phase4_capable:
+        flipped_off = [
+            (
+                source.model_copy(update={"supports_date_window": False})
+                if source.id == tool_id
+                else source
+            )
+            for source in sources
+        ]
+        g = temporal_mismatch_guard(flipped_off)
+        assert tool_id not in g["dateWindowCapable"]
+        assert tool_id not in g["unsafeForMultiDayOrEntireRange"]
+
 
 def test_plan_request_embeds_temporal_mismatch_guard() -> None:
     from app.services.report_planner.prompting import build_plan_request
@@ -569,15 +625,37 @@ def test_plan_request_embeds_temporal_mismatch_guard() -> None:
         instructions="entire date range",
         sources=all_descriptors(),
         report_kind="adhoc",
-        include_schema=False,
     )
     payload = json.loads(raw.split("\n\n", 1)[1])
     guard = payload["temporalMismatchGuard"]
     assert "enumerator_submission_quality" in guard["unsafeForMultiDayOrEntireRange"]
     brief = {e["id"]: e for e in payload["dataSources"]}
     assert brief["query_aggregate"]["supportsDateWindow"] is True
+    assert brief["enumerator_performance_study"]["supportsDateWindow"] is True
+    assert brief["findings_by_tool"]["supportsDateWindow"] is True
+    assert brief["top_failing_rules"]["supportsDateWindow"] is True
+    assert brief["flag_rate_trend"]["supportsDateWindow"] is False
     assert brief["enumerator_submission_quality"]["supportsDateWindow"] is False
     assert brief["enumerator_submission_quality"]["executionDayScoped"] is True
+    assert set(guard["dateWindowCapable"]) == {
+        "enumerator_performance_study",
+        "findings_by_tool",
+        "query_aggregate",
+        "top_failing_rules",
+    }
+
+
+def test_few_shots_include_windowed_enumerator_performance_study() -> None:
+    from app.services.report_planner.prompting import query_aggregate_few_shots
+    from app.services.report_planner_prompts import DEFAULT_PLANNER_PROMPT
+
+    shots = query_aggregate_few_shots()
+    shot = next(s for s in shots if "enumerator performance for the last 14 days" in s["request"])
+    assert shot["binding"]["dataSource"] == "enumerator_performance_study"
+    assert shot["binding"]["params"]["dateWindow"] == "last_14_days"
+    assert "enumerator_performance_study" in DEFAULT_PLANNER_PROMPT
+    assert "dateWindow=last_14_days" in DEFAULT_PLANNER_PROMPT
+    assert "temporalMismatchGuard.dateWindowCapable" in DEFAULT_PLANNER_PROMPT
 
 
 def test_few_shots_include_hello_temporal_antipattern() -> None:
@@ -667,3 +745,41 @@ def test_hello_case_accepts_cumulative_redirect(db: Session) -> None:
     ids = set(result.spec.data_source_ids())
     assert ids.isdisjoint(_TODAY_ONLY)
     assert "enumerator_performance_study" in ids
+
+
+def test_parse_json_object_distinguishes_empty_from_malformed() -> None:
+    from structlog.testing import capture_logs
+
+    from app.integrations.llm.json_object import parse_json_object
+    from app.services.report_planner.graph import _parse_json_object
+
+    empty = _parse_json_object("")
+    assert empty.data is None
+    assert empty.kind == "empty"
+    assert empty.error == "Model returned no content"
+
+    with capture_logs() as captured:
+        bad = _parse_json_object('{"status":"ok","spec":{"sections":[}}]}')
+    assert bad.data is None
+    assert bad.kind == "malformed"
+    assert bad.error and "malformed JSON" in bad.error
+    assert any(
+        entry.get("event") == "json_parse_failed" and entry.get("label") == "Planner"
+        for entry in captured
+    )
+
+    ok = _parse_json_object('{"status":"ok","spec":null}')
+    assert ok.kind == "ok"
+    assert ok.data == {"status": "ok", "spec": None}
+    assert ok.error is None
+
+    # Shared helper used by compiler / analyst / insights keeps the same kinds.
+    with capture_logs() as captured:
+        shared = parse_json_object("[1, 2]", log_label="DQA compiler")
+    assert shared.kind == "not_object"
+    assert shared.data is None
+    assert any(
+        entry.get("event") == "json_parse_non_object"
+        and entry.get("label") == "DQA compiler"
+        for entry in captured
+    )

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Project, Submission
 from app.db.session import get_db
+from app.repositories.dqa import parse_submitted_at_bound
 from app.schemas.common import StudyIdQuery
 from app.schemas.misc import (
     AnalyticsOverview,
@@ -37,6 +38,8 @@ def analytics_overview(
     q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> AnalyticsOverview:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
     study_filter = _submission_study_filter(q.study_id)
     total_q = select(func.count()).select_from(Submission)
     if study_filter is not None:
@@ -126,14 +129,27 @@ def project_analytics(project_id: str, db: Session = Depends(get_db)) -> Project
 def submission_trends(
     period: str = Query(default="30d"),
     study_id: str | None = Query(default=None, alias="studyId"),
+    date_from: str | None = Query(default=None, alias="dateFrom"),
+    date_to: str | None = Query(default=None, alias="dateTo"),
     db: Session = Depends(get_db),
 ) -> list[TrendPoint]:
-    days = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}.get(period, 30)
-    start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    if not study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
     study_filter = _submission_study_filter(study_id)
-    conditions = [Submission.submitted_at >= start]
+    conditions = []
     if study_filter is not None:
         conditions.append(study_filter)
+
+    start = parse_submitted_at_bound(date_from, end=False)
+    finish = parse_submitted_at_bound(date_to, end=True)
+    if start is None and finish is None:
+        days = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}.get(period, 30)
+        start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    if start is not None:
+        conditions.append(Submission.submitted_at >= start)
+    if finish is not None:
+        conditions.append(Submission.submitted_at <= finish)
+
     rows = db.execute(
         select(
             func.date(Submission.submitted_at),

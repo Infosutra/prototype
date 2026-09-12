@@ -25,6 +25,31 @@ paths:
       - dashboard
       summary: Dashboard Summary
       operationId: getDashboardSummary
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response
@@ -32,22 +57,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DashboardSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /dashboard/activity:
     get:
       tags:
       - dashboard
       summary: Dashboard Activity
       operationId: getDashboardActivity
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
+                type: array
                 items:
                   $ref: '#/components/schemas/ActivityItem'
-                type: array
                 title: Response Getdashboardactivity
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /studies:
     get:
       tags:
@@ -925,6 +987,22 @@ paths:
           - type: string
           - type: 'null'
           title: Studyid
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response
@@ -2160,6 +2238,15 @@ paths:
       - settings
       summary: Send Daily Report
       operationId: sendDailyReport
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
         '200':
           description: Successful Response
@@ -2169,6 +2256,12 @@ paths:
                 $ref: '#/components/schemas/ConnectionTestResult'
         '400':
           description: Bad request
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /settings/send-dqa-daily-report:
     post:
       tags:
@@ -2177,6 +2270,15 @@ paths:
       description: Generate and email today's DQA Daily (separate from submission
         digest).
       operationId: sendDqaDailyReport
+      parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       responses:
         '200':
           description: Successful Response
@@ -2186,6 +2288,12 @@ paths:
                 $ref: '#/components/schemas/ConnectionTestResult'
         '400':
           description: Bad request
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /dqa/summary:
     get:
       tags:
@@ -2209,6 +2317,22 @@ paths:
           - type: string
           - type: 'null'
           title: Projectid
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response
@@ -2238,6 +2362,22 @@ paths:
           - type: string
           - type: 'null'
           title: Studyid
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response
@@ -2309,6 +2449,22 @@ paths:
           - type: string
           - type: 'null'
           title: Enumerator
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       - name: limit
         in: query
         required: false
@@ -2357,6 +2513,22 @@ paths:
           - type: string
           - type: 'null'
           title: Projectid
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response
@@ -2380,6 +2552,14 @@ paths:
       summary: Recompute
       operationId: recomputeDqa
       parameters:
+      - name: studyId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Studyid
       - name: projectId
         in: query
         required: false
@@ -3995,6 +4175,14 @@ components:
             type: string
           type: array
           title: Benchmarkfields
+        supportsDateWindow:
+          type: boolean
+          title: Supportsdatewindow
+          default: false
+        executionDayScoped:
+          type: boolean
+          title: Executiondayscoped
+          default: false
       additionalProperties: false
       type: object
       required:

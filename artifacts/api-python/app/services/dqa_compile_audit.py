@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import Any
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,7 @@ from app.db.models import DqaCompileSession
 from app.domain.dqa.rule_audit import sanitize_english
 from app.services.usage_ledger import record_usage_event
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class CompileSessionRecorder:
@@ -120,13 +120,13 @@ class CompileSessionRecorder:
         self.db.commit()
         self.db.refresh(row)
         logger.info(
-            "DQA compile session project_id=%s session_id=%s status=%s attempts=%s latency_ms=%s tokens=%s",
-            self.project_id,
-            self.session_id,
-            status,
-            self.attempts,
-            row.latency_ms_total,
-            row.prompt_tokens + row.completion_tokens,
+            "dqa_compile_session",
+            project_id=self.project_id,
+            session_id=self.session_id,
+            status=status,
+            attempts=self.attempts,
+            latency_ms=row.latency_ms_total,
+            tokens=row.prompt_tokens + row.completion_tokens,
         )
         return row
 

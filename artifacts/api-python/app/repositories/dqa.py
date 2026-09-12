@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, time
 from statistics import median
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import DqaFlag, Project, Submission
@@ -18,14 +19,52 @@ def project_ids_for_study(db: Session, study_id: str) -> list[str]:
     ]
 
 
+def parse_submitted_at_bound(value: str | None, *, end: bool = False) -> datetime | None:
+    """Parse optional ISO date/datetime for inclusive submitted_at windows.
+
+    Date-only values (``YYYY-MM-DD``) map to start or end of that calendar day.
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    normalized = raw.replace("Z", "+00:00")
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is not None:
+        dt = dt.replace(tzinfo=None)
+    date_only = "T" not in normalized and " " not in normalized
+    if date_only:
+        return datetime.combine(dt.date(), time.max if end else time.min)
+    return dt
+
+
+def _apply_submitted_at_window(
+    query: Select[Any],
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> Select[Any]:
+    start = parse_submitted_at_bound(date_from, end=False)
+    finish = parse_submitted_at_bound(date_to, end=True)
+    if start is not None:
+        query = query.where(Submission.submitted_at >= start)
+    if finish is not None:
+        query = query.where(Submission.submitted_at <= finish)
+    return query
+
+
 def load_submissions_and_flags(
     db: Session,
     *,
     project_id: str | None = None,
     study_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> tuple[list[Submission], list[DqaFlag]] | None:
     """Return (submissions, flags) scoped by study or project.
 
+    Optional ``date_from`` / ``date_to`` filter by submission ``submitted_at``.
     Returns ``None`` when study scope has no projects (caller should return empty).
     """
     sub_q = select(Submission)
@@ -39,6 +78,12 @@ def load_submissions_and_flags(
     elif project_id:
         sub_q = sub_q.where(Submission.project_id == project_id)
         flag_q = flag_q.where(DqaFlag.project_id == project_id)
+
+    if date_from or date_to:
+        sub_q = _apply_submitted_at_window(sub_q, date_from=date_from, date_to=date_to)
+        flag_q = flag_q.join(Submission, Submission.id == DqaFlag.submission_id)
+        flag_q = _apply_submitted_at_window(flag_q, date_from=date_from, date_to=date_to)
+
     return list(db.scalars(sub_q).all()), list(db.scalars(flag_q).all())
 
 
@@ -46,27 +91,25 @@ def load_projects_with_dqa(
     db: Session,
     *,
     study_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> tuple[list[Project], list[Submission], list[DqaFlag]]:
     project_q = select(Project).order_by(Project.name)
     if study_id:
         project_q = project_q.where(Project.study_id == study_id)
     projects = list(db.scalars(project_q).all())
     project_ids = [p.id for p in projects]
-    submissions = list(
-        db.scalars(
-            select(Submission).where(Submission.project_id.in_(project_ids))
-            if project_ids
-            else select(Submission).where(False)
-        ).all()
-    )
-    flags = list(
-        db.scalars(
-            select(DqaFlag).where(DqaFlag.project_id.in_(project_ids))
-            if project_ids
-            else select(DqaFlag).where(False)
-        ).all()
-    )
-    return projects, submissions, flags
+    if not project_ids:
+        return projects, [], []
+
+    sub_q = select(Submission).where(Submission.project_id.in_(project_ids))
+    flag_q = select(DqaFlag).where(DqaFlag.project_id.in_(project_ids))
+    if date_from or date_to:
+        sub_q = _apply_submitted_at_window(sub_q, date_from=date_from, date_to=date_to)
+        flag_q = flag_q.join(Submission, Submission.id == DqaFlag.submission_id)
+        flag_q = _apply_submitted_at_window(flag_q, date_from=date_from, date_to=date_to)
+
+    return projects, list(db.scalars(sub_q).all()), list(db.scalars(flag_q).all())
 
 
 def load_flags_filtered(
@@ -77,6 +120,8 @@ def load_flags_filtered(
     submission_id: str | None = None,
     rule_id: str | None = None,
     severity: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     limit: int = 100,
 ) -> list[DqaFlag] | None:
     """Return filtered flags, or ``None`` when study scope is empty."""
@@ -94,6 +139,9 @@ def load_flags_filtered(
         q = q.where(DqaFlag.rule_id == rule_id)
     if severity:
         q = q.where(DqaFlag.severity == severity.lower())
+    if date_from or date_to:
+        q = q.join(Submission, Submission.id == DqaFlag.submission_id)
+        q = _apply_submitted_at_window(q, date_from=date_from, date_to=date_to)
     return list(db.scalars(q).all())
 
 

@@ -33,6 +33,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Save, CheckCircle2, Mail, Settings2, AlertCircle, ChevronDown, CircleHelp, Receipt } from "lucide-react";
+import { useStudy } from "@/components/study/StudyProvider";
 
 const SARVAM_MODELS = [
   { value: "saaras:v3", label: "Saaras v3 (recommended)" },
@@ -70,6 +71,7 @@ function parseRecipientInput(value: string): string[] {
 
 export default function Settings() {
   const queryClient = useQueryClient();
+  const { activeStudy, activeStudyId } = useStudy();
   const settingsQuery = useGetSettings();
   const [activeTab, setActiveTab] = useState("smtp");
 
@@ -470,7 +472,7 @@ export default function Settings() {
                       <div className="space-y-0.5">
                         <Label className="text-base">Enable daily report</Label>
                         <p className="text-sm text-muted-foreground">
-                          Sends automatically at the time below when SMTP and recipients are set.
+                          Sends one email per study at the time below when SMTP and recipients are set.
                         </p>
                       </div>
                       <Switch checked={dailyReportEnabled} onCheckedChange={setDailyReportEnabled} />
@@ -511,16 +513,27 @@ export default function Settings() {
                       className={smtpActionButtonClass}
                       disabled={
                         sendDailyReport.isPending ||
+                        !activeStudyId ||
                         parseRecipientInput(dailyReportRecipients).length === 0 ||
                         !settingsQuery.data?.smtp.connected
                       }
                       onClick={() => {
+                        if (!activeStudyId) return;
                         setFeedback(null);
-                        sendDailyReport.mutate();
+                        sendDailyReport.mutate({ params: { studyId: activeStudyId } });
                       }}
                     >
-                      {sendDailyReport.isPending ? "Sending…" : "Send today’s report now"}
+                      {sendDailyReport.isPending
+                        ? "Sending…"
+                        : activeStudy
+                          ? `Send today’s report for ${activeStudy.name}`
+                          : "Send today’s report now"}
                     </Button>
+                    {!activeStudyId && (
+                      <p className="text-xs text-muted-foreground">
+                        Select an active study in the sidebar to send a study-scoped digest.
+                      </p>
+                    )}
                   </div>
 
                   {feedback && activeTab === "smtp" && (

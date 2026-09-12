@@ -22,26 +22,43 @@ import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowLeft, CalendarRange, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
 import { DqaChecksPanel, DqaStudyRulesPanel } from "@/pages/dqa/DqaChecksPanel";
+import { formatFlagFailureDetails } from "@/pages/dqa/formatFlagFailureDetails";
 
 const TABS = [
   { id: "coverage", label: "Coverage" },
   { id: "flags", label: "DQA flags" },
   { id: "enumerators", label: "Enumerators" },
-  { id: "rules", label: "Rules" },
   { id: "triangulation", label: "Triangulation" },
+  { id: "rules", label: "Rules" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+type DrillRule = { ruleId: string; title: string; severity: string; count: number };
 
 function isTabId(value: string | null): value is TabId {
   return TABS.some((item) => item.id === value);
 }
 
-type DrillRule = { ruleId: string; title: string; severity: string; count: number };
+function FlagMessage({
+  message,
+  details,
+}: {
+  message: string;
+  details?: Record<string, unknown> | null;
+}) {
+  const failure = formatFlagFailureDetails(details);
+  return (
+    <div className="max-w-md space-y-1 text-muted-foreground whitespace-normal break-words">
+      <p>{message}</p>
+      {failure && <p className="font-mono text-xs text-foreground/80">{failure}</p>}
+    </div>
+  );
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -100,6 +117,8 @@ export default function DqaDashboard() {
   const initialTab = initialParams.get("tab");
   const [tab, setTab] = useState<TabId>(isTabId(initialTab) ? initialTab : "coverage");
   const [projectId, setProjectId] = useState<string>(initialParams.get("projectId") || "");
+  const [dateFrom, setDateFrom] = useState<string>(initialParams.get("dateFrom") || "");
+  const [dateTo, setDateTo] = useState<string>(initialParams.get("dateTo") || "");
   const [severity, setSeverity] = useState<string>("");
   const [drillRuleId, setDrillRuleId] = useState<string | null>(initialParams.get("ruleId"));
   const [mismatchOnly, setMismatchOnly] = useState(true);
@@ -108,6 +127,16 @@ export default function DqaDashboard() {
     view: "table" | "add" | "edit" | "edit-ai";
     editRuleId: string | null;
   }>({ view: "table", editRuleId: null });
+
+  const syncDateParams = (nextFrom: string, nextTo: string) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (nextFrom) url.searchParams.set("dateFrom", nextFrom);
+    else url.searchParams.delete("dateFrom");
+    if (nextTo) url.searchParams.set("dateTo", nextTo);
+    else url.searchParams.delete("dateTo");
+    window.history.replaceState({}, "", url);
+  };
 
   const openRule = (ruleId: string | null) => {
     setDrillRuleId(ruleId);
@@ -144,6 +173,24 @@ export default function DqaDashboard() {
     }
   };
 
+  const setDateFromWithUrl = (next: string) => {
+    setDateFrom(next);
+    syncDateParams(next, dateTo);
+  };
+
+  const setDateToWithUrl = (next: string) => {
+    setDateTo(next);
+    syncDateParams(dateFrom, next);
+  };
+
+  const clearDateRange = () => {
+    setDateFrom("");
+    setDateTo("");
+    syncDateParams("", "");
+  };
+
+  const hasDateFilter = Boolean(dateFrom || dateTo);
+
   const openFormRules = (
     nextProjectId: string,
     opts?: { editRuleId?: string; add?: boolean },
@@ -172,23 +219,31 @@ export default function DqaDashboard() {
     : allProjects;
 
   const studyScopedId = projectId ? undefined : activeStudyId || undefined;
+  const dateRangeParams = {
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  };
   const summaryParams = {
     projectId: projectId || undefined,
     studyId: studyScopedId,
+    ...dateRangeParams,
   };
   const flagsParams = {
     projectId: projectId || undefined,
     studyId: studyScopedId,
     severity: severity || undefined,
+    ...dateRangeParams,
   };
   const drillFlagsParams = {
     projectId: projectId || undefined,
     studyId: studyScopedId,
     ruleId: drillRuleId || undefined,
+    ...dateRangeParams,
   };
   const enumeratorParams = {
     projectId: projectId || undefined,
     studyId: studyScopedId,
+    ...dateRangeParams,
   };
 
   const viewsQuery = useGetTriangulationViews(
@@ -206,12 +261,18 @@ export default function DqaDashboard() {
     }
   }, [viewsQuery.data, triViewId]);
 
-  const summaryQuery = useGetDqaSummary(summaryParams);
-  const flagsQuery = useGetDqaFlags(flagsParams);
-  const drillFlagsQuery = useGetDqaFlags(drillFlagsParams, {
-    query: { enabled: Boolean(drillRuleId) } as never,
+  const summaryQuery = useGetDqaSummary(summaryParams, {
+    query: { enabled: Boolean(projectId || studyScopedId) } as never,
   });
-  const enumeratorsQuery = useGetDqaEnumerators(enumeratorParams);
+  const flagsQuery = useGetDqaFlags(flagsParams, {
+    query: { enabled: Boolean(projectId || studyScopedId) } as never,
+  });
+  const drillFlagsQuery = useGetDqaFlags(drillFlagsParams, {
+    query: { enabled: Boolean(drillRuleId) && Boolean(projectId || studyScopedId) } as never,
+  });
+  const enumeratorsQuery = useGetDqaEnumerators(enumeratorParams, {
+    query: { enabled: Boolean(projectId || studyScopedId) } as never,
+  });
   const triangulationQuery = useGetTriangulationView(
     triViewId,
     activeStudyId ? { studyId: activeStudyId } : undefined,
@@ -263,6 +324,21 @@ export default function DqaDashboard() {
     return mismatchOnly ? rows.filter((r) => r.mismatch) : rows;
   }, [triangulationQuery.data?.rows, mismatchOnly]);
 
+  const enumeratorTotals = useMemo(() => {
+    const rows = enumeratorsQuery.data ?? [];
+    const submissions = rows.reduce((sum, row) => sum + row.submissions, 0);
+    const flagged = rows.reduce((sum, row) => sum + row.flagged, 0);
+    const redFlags = rows.reduce((sum, row) => sum + row.redFlags, 0);
+    const amberFlags = rows.reduce((sum, row) => sum + (row.amberFlags ?? 0), 0);
+    return {
+      submissions,
+      flagged,
+      flaggedPct: submissions ? Math.round((flagged / submissions) * 1000) / 10 : 0,
+      redFlags,
+      amberFlags,
+    };
+  }, [enumeratorsQuery.data]);
+
   const drillRule: DrillRule | null = useMemo(() => {
     if (!drillRuleId) return null;
     const known = summary?.byRule.find((rule) => rule.ruleId === drillRuleId);
@@ -282,24 +358,73 @@ export default function DqaDashboard() {
         title="Data Quality"
         description={
           activeStudy
-            ? `${activeStudy.name}${activeStudy.dayNumber != null ? ` · Day ${activeStudy.dayNumber}` : ""} — per-form flags, enumerator monitors, triangulation`
+            ? `${activeStudy.name}${activeStudy.dayNumber != null ? ` · Day ${activeStudy.dayNumber}` : ""}`
             : "Per-form DQA flags, enumerator monitors, and UDISE triangulation"
         }
         action={
-          <Button
-            size="sm"
-            onClick={() =>
-              recompute.mutate({
-                params: projectId ? { projectId } : undefined,
-              })
-            }
-            disabled={recompute.isPending || !activeStudyId}
-            className="bg-primary text-primary-foreground"
-            aria-label="Recompute DQA"
-          >
-            <RefreshCw className={`w-4 h-4 sm:mr-2 ${recompute.isPending ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Recompute DQA</span>
-          </Button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1 rounded-lg border border-border/80 bg-muted/30 p-1 shadow-sm">
+              <CalendarRange className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <label className="flex items-center gap-1.5 pl-0.5">
+                <span className="sr-only">Submitted from date</span>
+                <input
+                  type="date"
+                  className="h-7 w-[8.25rem] rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring/40 [color-scheme:light]"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => setDateFromWithUrl(e.target.value)}
+                  aria-label="Submitted from date"
+                />
+              </label>
+              <span className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                to
+              </span>
+              <label className="flex items-center">
+                <span className="sr-only">Submitted to date</span>
+                <input
+                  type="date"
+                  className="h-7 w-[8.25rem] rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring/40 [color-scheme:light]"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => setDateToWithUrl(e.target.value)}
+                  aria-label="Submitted to date"
+                />
+              </label>
+              {hasDateFilter ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={clearDateRange}
+                  aria-label="Clear date range"
+                  title="All dates"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <span className="w-1.5" aria-hidden />
+              )}
+            </div>
+            <Button
+              size="sm"
+              onClick={() =>
+                recompute.mutate({
+                  params: projectId
+                    ? { projectId }
+                    : activeStudyId
+                      ? { studyId: activeStudyId }
+                      : undefined,
+                })
+              }
+              disabled={recompute.isPending || !activeStudyId}
+              className="bg-primary text-primary-foreground"
+              aria-label="Recompute DQA"
+            >
+              <RefreshCw className={`w-4 h-4 sm:mr-2 ${recompute.isPending ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Recompute DQA</span>
+            </Button>
+          </div>
         }
       />
 
@@ -467,8 +592,15 @@ export default function DqaDashboard() {
                             </div>
                           )}
                         </td>
-                        <td className="p-3 text-muted-foreground max-w-md truncate" title={flag.message}>
-                          {flag.message}
+                        <td className="p-3 align-top">
+                          <FlagMessage
+                            message={flag.message}
+                            details={
+                              flag.details && typeof flag.details === "object"
+                                ? (flag.details as Record<string, unknown>)
+                                : null
+                            }
+                          />
                         </td>
                       </tr>
                       );
@@ -515,7 +647,14 @@ export default function DqaDashboard() {
                       <span className="font-mono text-xs">{flag.ruleId}</span>
                       <span className="font-medium">{flag.title}</span>
                     </div>
-                    <p className="text-muted-foreground">{flag.message}</p>
+                    <FlagMessage
+                      message={flag.message}
+                      details={
+                        flag.details && typeof flag.details === "object"
+                          ? (flag.details as Record<string, unknown>)
+                          : null
+                      }
+                    />
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
                       <span>{flag.projectName}</span>
                       <span>{flag.enumerator}</span>
@@ -554,9 +693,6 @@ export default function DqaDashboard() {
 
         {tab === "enumerators" && (
           <Card>
-            <CardHeader className="py-4 border-b">
-              <CardTitle className="text-sm">Enumerator performance</CardTitle>
-            </CardHeader>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
                 <thead className="border-b bg-muted/40 text-left">
@@ -583,6 +719,20 @@ export default function DqaDashboard() {
                     </tr>
                   ))}
                 </tbody>
+                {(enumeratorsQuery.data ?? []).length > 0 && (
+                  <tfoot>
+                    <tr className="border-t bg-muted/30 font-medium">
+                      <td className="p-3">
+                        Total ({(enumeratorsQuery.data ?? []).length})
+                      </td>
+                      <td className="p-3 font-mono">{enumeratorTotals.submissions}</td>
+                      <td className="p-3 font-mono">{enumeratorTotals.flaggedPct}%</td>
+                      <td className="p-3 font-mono">{enumeratorTotals.redFlags}</td>
+                      <td className="p-3 font-mono">{enumeratorTotals.amberFlags}</td>
+                      <td className="p-3 font-mono text-muted-foreground">—</td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </Card>

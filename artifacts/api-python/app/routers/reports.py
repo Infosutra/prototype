@@ -86,13 +86,14 @@ def list_reports(
     q: Annotated[ReportsListQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ReportOut]:
+    if not q.study_id:
+        raise HTTPException(status_code=400, detail="studyId is required")
     query = (
         select(Report)
         .options(joinedload(Report.report_projects))
         .order_by(Report.created_at.desc())
     )
-    if q.study_id:
-        query = query.where(Report.study_id == q.study_id)
+    query = query.where(Report.study_id == q.study_id)
     if q.report_type:
         query = query.where(Report.report_type == q.report_type)
     return [_map(row) for row in db.scalars(query).unique().all()]

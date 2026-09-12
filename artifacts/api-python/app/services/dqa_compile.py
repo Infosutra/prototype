@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import logging
-import re
 import uuid
 from typing import Any
 
@@ -24,6 +21,7 @@ from app.integrations.llm import (
     chat_completion_stream,
     llm_compile_config_from_app_settings,
 )
+from app.integrations.llm.json_object import parse_json_object
 from app.schemas.common import to_camel
 from app.services.dqa_compile_audit import CompileSessionRecorder
 from app.services.dqa_compile_prompt import build_compiler_messages, load_compile_prompt
@@ -35,18 +33,14 @@ from app.services.dqa_relationships import (
 )
 from app.services.dqa_rule_packs import get_pack_for_project
 
-logger = logging.getLogger(__name__)
-
 MAX_LLM_ATTEMPTS = 3
 COMPILE_TEMPERATURE = 0.1
 REPAIR_TEMPERATURE = 0.0
-
 
 # Rule/check trees must stay in evaluator snake_case (field_b, start_field, …).
 _CAMELIZE_PRESERVE_VALUE_KEYS = frozenset(
     {"rule", "check", "last_proposal", "existing_rule"}
 )
-
 
 def camelize(obj: Any) -> Any:
     """Recursively convert dict keys to camelCase for JSON responses.
@@ -67,32 +61,15 @@ def camelize(obj: Any) -> Any:
         return out
     return obj
 
-
 class CompileError(Exception):
     def __init__(self, message: str, *, status_code: int = 400, code: str = "compile_error"):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
 
-
 def _parse_compiler_payload(text: str) -> dict[str, Any]:
-    stripped = text.strip()
-    try:
-        data = json.loads(stripped)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r"\{[\s\S]*\}", stripped)
-    if match:
-        try:
-            data = json.loads(match.group(0))
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
-    return {}
-
+    """Best-effort JSON object from model output; logs empty vs malformed distinctly."""
+    return parse_json_object(text, log_label="DQA compiler").data or {}
 
 def _finalize_rule(
     proposal: dict[str, Any],
@@ -110,7 +87,6 @@ def _finalize_rule(
         "check": proposal.get("check"),
     }
 
-
 def _meta_from_recorder(recorder: CompileSessionRecorder, *, prompt_id: str | None) -> dict[str, Any]:
     return {
         "session_id": recorder.session_id,
@@ -123,13 +99,11 @@ def _meta_from_recorder(recorder: CompileSessionRecorder, *, prompt_id: str | No
         "completion_tokens": recorder.completion_tokens,
     }
 
-
 def _field_label(fields: list[dict[str, Any]], name: str) -> str:
     for row in fields:
         if str(row.get("name") or "") == name:
             return str(row.get("label") or name)
     return name
-
 
 def _walk_field_operands(node: Any, out: list[tuple[str, str, str | None]]) -> None:
     """Collect (kind, field_code, relationship_or_none) from a check tree."""
@@ -164,7 +138,6 @@ def _walk_field_operands(node: Any, out: list[tuple[str, str, str | None]]) -> N
             _walk_field_operands(node[nested], out)
     for child in node.get("checks") or []:
         _walk_field_operands(child, out)
-
 
 def build_resolved_fields(
     db: Session,
@@ -247,7 +220,6 @@ def build_resolved_fields(
         )
 
     return rows
-
 
 def compile_dqa_rule(
     db: Session,
@@ -500,7 +472,6 @@ def compile_dqa_rule(
         session=session,
     )
 
-
 def validate_dqa_rule_for_project(
     db: Session,
     project: Project,
@@ -533,7 +504,6 @@ def validate_dqa_rule_for_project(
         body["message"] = "Rule failed validation"
     return body
 
-
 def _invalid_response(
     *,
     message: str,
@@ -552,7 +522,6 @@ def _invalid_response(
         "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
         "session_id": getattr(session, "id", recorder.session_id),
     }
-
 
 def compile_dqa_rule_stream(
     db: Session,

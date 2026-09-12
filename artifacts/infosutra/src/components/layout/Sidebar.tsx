@@ -104,10 +104,13 @@ function NavLinks({
 
 export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
   const [location] = useLocation();
-  const projects = useGetProjects();
   const { studies, activeStudy, activeStudyId, setActiveStudyId } = useStudy();
   const { trigger: syncStudy, isPending: syncPending } = useActiveStudySync();
   const isConnected = activeStudy?.credential?.connected ?? false;
+  const projects = useGetProjects(
+    activeStudyId ? { studyId: activeStudyId } : undefined,
+    { query: { enabled: Boolean(activeStudyId) } as never },
+  );
   const latestSync = (projects.data ?? [])
     .map((project) => project.lastSyncAt)
     .filter((value): value is string => Boolean(value))

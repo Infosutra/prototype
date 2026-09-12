@@ -8,8 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AppSettings, Study
 from app.domain.report_spec.context import ReportExecutionContext
+from app.domain.reporting.date_windows import resolve_query_date_window
+from app.domain.reporting.entity_rows import (
+    build_flag_entity_rows,
+    build_submission_entity_rows,
+)
 
 RangeKey = tuple[str, str]
+EntityKind = str  # "submission" | "flag"
+EntityRowsKey = tuple[RangeKey, EntityKind]
 
 
 def range_key(date_from: str | None, date_to: str | None) -> RangeKey:
@@ -18,18 +25,18 @@ def range_key(date_from: str | None, date_to: str | None) -> RangeKey:
 
 
 class ReportDataContext:
-    """Holds the session plus execution context and memoizes study statistics by range.
+    """Holds the session plus execution context and memoizes study data by range.
 
     Certified tools must call :meth:`stats` (no args) so they always read the
     **default** range — ``context.date_from`` / ``context.date_to`` (often the
-    full bag). They must never be silently repointed at a ``query_aggregate``
-    window.
+    full bag). They must never be silently repointed at a windowed query.
 
-    ``query_aggregate`` (and any future windowed caller) uses
-    :meth:`stats_for` / :meth:`report_inputs` with an explicit resolved range.
-    Identical ``range_key`` values share one memoized load; distinct keys load
-    separately. Spec validation (Stage 2) caps distinct resolved ranges at 2
-    per report — this class does not truncate or merge at execution time.
+    Windowed callers use :meth:`window` to resolve a dateWindow token, then
+    :meth:`entity_rows` / :meth:`report_inputs` / :meth:`stats_for` with that
+    explicit range. Identical ``range_key`` values share one memoized ORM load;
+    ``entity_rows`` additionally memoizes flattened bags per ``(range, kind)``.
+    Spec validation (Stage 2) caps distinct resolved ranges at 2 per report —
+    this class does not truncate or merge at execution time.
     """
 
     def __init__(
@@ -48,6 +55,7 @@ class ReportDataContext:
         self._study: Study | None = None
         self._stats_by_range: dict[RangeKey, dict[str, Any]] = {}
         self._inputs_by_range: dict[RangeKey, dict[str, Any]] = {}
+        self._entity_rows_by_key: dict[EntityRowsKey, list[dict[str, Any]]] = {}
         if stats is not None:
             self._stats_by_range[self.default_range_key()] = stats
 
@@ -129,3 +137,46 @@ class ReportDataContext:
         )
         self._inputs_by_range[key] = loaded
         return loaded
+
+    def window(self, token: str | None) -> tuple[str | None, str | None]:
+        """Resolve a dateWindow token against this execution context."""
+        return resolve_query_date_window(
+            token,
+            execution_date=self.context.execution_date,
+            study_start_date=self.study.start_date,
+            context_date_from=self.context.date_from,
+            context_date_to=self.context.date_to,
+        )
+
+    def entity_rows(
+        self,
+        date_from: str | None,
+        date_to: str | None,
+        kind: EntityKind,
+    ) -> list[dict[str, Any]]:
+        """Memoized flattened submission/flag rows for a resolved inclusive range.
+
+        Shares the ORM load with :meth:`report_inputs` for the same range key.
+        Flattened bags are memoized separately per ``(range_key, kind)``.
+        """
+        kind_norm = str(kind).strip()
+        if kind_norm not in ("submission", "flag"):
+            raise ValueError(f"Unknown entity kind '{kind}'")
+
+        memo_key: EntityRowsKey = (range_key(date_from, date_to), kind_norm)
+        cached = self._entity_rows_by_key.get(memo_key)
+        if cached is not None:
+            return cached
+
+        loaded = self.report_inputs(date_from, date_to)
+        projects = loaded["projects"]
+        all_subs = loaded["all_subs"]
+        all_flags = loaded["all_flags"]
+
+        if kind_norm == "submission":
+            rows = build_submission_entity_rows(projects, all_subs)
+        else:
+            rows = build_flag_entity_rows(projects, all_subs, all_flags)
+
+        self._entity_rows_by_key[memo_key] = rows
+        return rows

@@ -26,6 +26,14 @@ class StudyIdQuery(CamelModel):
     study_id: str | None = None
 
 
+class StudyDateRangeQuery(CamelModel):
+    """Study scope plus optional inclusive submission date window."""
+
+    study_id: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+
+
 class ProjectIdQuery(CamelModel):
     project_id: str | None = None
 
@@ -35,6 +43,13 @@ class StudyProjectQuery(CamelModel):
     project_id: str | None = None
 
 
+class DqaDashboardQuery(StudyProjectQuery):
+    """Study/project scope plus optional submission date window (inclusive)."""
+
+    date_from: str | None = None
+    date_to: str | None = None
+
+
 class DqaFlagsQuery(CamelModel):
     project_id: str | None = None
     study_id: str | None = None
@@ -42,6 +57,8 @@ class DqaFlagsQuery(CamelModel):
     rule_id: str | None = None
     severity: str | None = None
     enumerator: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
     limit: int = Field(default=500, ge=1, le=2000)
 
 

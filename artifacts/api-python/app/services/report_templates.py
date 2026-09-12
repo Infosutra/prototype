@@ -8,11 +8,11 @@ rather than carrying their own structure.
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,7 +37,7 @@ from app.services.report_execution import ExecutedReport, execute_spec
 from app.services.report_storage import docx_path_for, pdf_path_for
 from app.services.report_tools import descriptors_by_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class TemplateError(Exception):
@@ -74,9 +74,9 @@ def load_spec(version: ReportTemplateVersion, *, allow_repair: bool = True) -> R
         raise TemplateError("Stored report specification is not valid.", issues=result.errors)
     repaired, notes = repair_spec(parsed.spec, sources)
     logger.warning(
-        "Repaired stored spec for template version %s: %s",
-        version.id,
-        "; ".join(note.message for note in notes) or "no changes",
+        "repaired_stored_spec",
+        template_version_id=version.id,
+        notes="; ".join(note.message for note in notes) or "no changes",
     )
     if not repaired.sections:
         raise TemplateError(

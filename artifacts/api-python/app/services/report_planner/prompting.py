@@ -234,8 +234,10 @@ def temporal_mismatch_guard(sources: list[DataSourceDescriptor]) -> dict[str, An
             "dateWindowCapable sources with an appropriate dateWindow, or a cumulative "
             "default-bag source that answers the question. Otherwise return "
             "clarification/unsupported naming the temporal mismatch. "
-            "top_failing_rules with scope=today (or omitted scope) is also execution-day "
-            "scoped — use scope=cumulative for study-wide rule rankings. "
+            "top_failing_rules with scope=today (or omitted scope) is execution-day "
+            "scoped even though the tool is dateWindowCapable — use scope=cumulative "
+            "(and dateWindow when the ask is last N days) for study-wide or windowed "
+            "rule rankings; never pass dateWindow with scope=today. "
             "Single named calendar day becomes execution_date; execution-day sources are OK then."
         ),
     }
@@ -324,6 +326,25 @@ def query_aggregate_few_shots() -> list[dict[str, Any]]:
                 ],
             },
             "note": "Never query_aggregate groupBy=ruleId for top/most-common phrasing",
+        },
+        {
+            "request": "Show enumerator performance for the last 14 days",
+            "status": "ok",
+            "binding": {
+                "type": "table",
+                "dataSource": "enumerator_performance_study",
+                "params": {"dateWindow": "last_14_days"},
+                "columns": [
+                    {"field": "enumerator", "label": "Enumerator"},
+                    {"field": "submissions", "label": "Records", "format": "int"},
+                    {"field": "flagRate", "label": "Flag %", "format": "percent"},
+                    {"field": "action", "label": "Action"},
+                ],
+            },
+            "note": (
+                "Use enumerator_performance_study with dateWindow — not "
+                "enumerator_performance_today and not a silent full-study omit"
+            ),
         },
         {
             "request": "Flag rate by tool for amber only",
@@ -455,7 +476,6 @@ def build_plan_request(
     instructions: str,
     sources: list[DataSourceDescriptor],
     report_kind: str,
-    include_schema: bool,
     current_spec: ReportSpec | None = None,
     conversation: list[dict[str, str]] | None = None,
     validation_errors: list[dict[str, str]] | None = None,
@@ -498,8 +518,6 @@ def build_plan_request(
                 '{"field":"value","label":"Flags","format":"int"}]}.'
             )
         payload["retryGuidance"] = guidance
-    if include_schema:
-        payload["specJsonSchema"] = ReportSpec.model_json_schema()
     return f"{SECURITY_NOTE}\n\n{json.dumps(payload, ensure_ascii=False, default=str)}"
 
 

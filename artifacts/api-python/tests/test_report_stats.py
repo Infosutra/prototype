@@ -43,6 +43,7 @@ def test_tr1_summary_from_final_fixture():
 
 
 def test_fallback_headline_and_coverage_from_daily_fixture():
+    """Substring smoke (kept); full strings locked in test_fallback_prose_baseline_byte_identical."""
     stats = _load("sample_daily_stats.json")
     headline = _fallback_headline(stats)
     assert "8 new submission(s)" in headline
@@ -52,6 +53,52 @@ def test_fallback_headline_and_coverage_from_daily_fixture():
     coverage = _fallback_coverage(stats)
     assert "T1 45/100" in coverage
     assert "Coverage —" in coverage
+
+
+# Locked BEFORE Phase 3 fallback migration — prove byte-identical prose, not "looks similar".
+EXPECTED_FALLBACK_HEADLINE = (
+    "Day 12: 8 new submission(s), 2 RED to back-check tomorrow. "
+    "AMBER is led by R2 (Skip residue, 3 today)."
+)
+EXPECTED_FALLBACK_COVERAGE = (
+    "Coverage — T1 45/100 (45.0%); T2 75/80 (93.8%). "
+    "T1 lags at 45.0% of plan and needs attention. "
+    "Cumulative flag rate moved from 10.0% (D1) to 15.0% (D12). "
+    "Action for tomorrow: complete the 2 RED back-check(s) and verify leading "
+    "AMBER patterns before the next sync."
+)
+
+
+def test_fallback_prose_baseline_byte_identical():
+    """Safety net for Phase 3: exact fallback prose from sample_daily_stats.json."""
+    stats = _load("sample_daily_stats.json")
+    assert _fallback_headline(stats) == EXPECTED_FALLBACK_HEADLINE
+    assert _fallback_coverage(stats) == EXPECTED_FALLBACK_COVERAGE
+
+
+def test_fallback_prose_from_tool_shaped_data_matches_stats_path():
+    """NEW path (tool outputs → adapter) must be byte-identical to OLD stats path."""
+    from app.domain.reporting.narratives import fallback_stats_from_resolved_data
+
+    stats = _load("sample_daily_stats.json")
+    tool_data = {
+        "study_metadata": {"dayNumber": stats["dayNumber"]},
+        "study_totals": {
+            "newToday": stats["totals"]["newToday"],
+            "redToday": stats["totals"]["redToday"],
+            "cumulative": stats["totals"]["cumulative"],
+            "amberToday": stats["totals"]["amberToday"],
+            "redOpen": stats["totals"]["redOpen"],
+            "amberOpen": stats["totals"]["amberOpen"],
+        },
+        "tool_coverage": stats["tools"],
+        "top_failing_rules": stats["topRulesToday"],
+        "flag_rate_trend": stats["flagRateByDay"],
+    }
+    view = fallback_stats_from_resolved_data(tool_data)
+    assert view is not None
+    assert _fallback_headline(view) == _fallback_headline(stats) == EXPECTED_FALLBACK_HEADLINE
+    assert _fallback_coverage(view) == _fallback_coverage(stats) == EXPECTED_FALLBACK_COVERAGE
 
 
 def test_enrich_final_checklist_appends_triangulation():

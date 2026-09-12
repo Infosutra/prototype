@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import html
-import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Project, Submission
+from app.db.models import Project, Study, Submission
 from app.domain.reporting.helpers import day_bounds
 from app.integrations.smtp import SmtpError, send_email
 from app.services.form_labels import extract_enumerator_name
@@ -20,7 +20,7 @@ from app.services.settings import (
     smtp_config_from_row,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 CONSENT_FIELDS = ("CONSENT", "K_CONSENT", "P_CONSENT")
 
@@ -49,6 +49,8 @@ class DailyReport:
     projects: list[ProjectSection]
     grand_total: int
     invalid_total: int
+    study_id: str | None = None
+    study_name: str | None = None
 
 
 def parse_send_time(value: str) -> tuple[int, int] | None:
@@ -102,8 +104,9 @@ def collect_invalid_reasons(submission: Submission, enumerator: str | None) -> l
 
     # Prefer persisted DQA RED flags when available.
     try:
-        from app.db.models import DqaFlag
         from sqlalchemy.orm import object_session
+
+        from app.db.models import DqaFlag
 
         session = object_session(submission)
         if session is not None:
@@ -116,7 +119,7 @@ def collect_invalid_reasons(submission: Submission, enumerator: str | None) -> l
             for flag in flags:
                 reasons.append(f"{flag.rule_id}: {flag.message}")
     except Exception:
-        logger.exception("Failed loading DQA flags for submission %s", submission.id)
+        logger.exception("dqa_flags_load_failed", submission_id=submission.id)
 
     data = submission.data if isinstance(submission.data, dict) else {}
     if submission.status == "flagged" and not any(r.startswith("T") for r in reasons):
@@ -133,14 +136,39 @@ def collect_invalid_reasons(submission: Submission, enumerator: str | None) -> l
     return reasons
 
 
-def build_daily_report(db: Session, report_date: str, tz_name: str, organization_name: str) -> DailyReport:
+def build_daily_report(
+    db: Session,
+    report_date: str,
+    tz_name: str,
+    organization_name: str,
+    *,
+    study_id: str,
+) -> DailyReport:
+    study = db.get(Study, study_id)
+    if study is None:
+        raise ValueError(f"Study not found: {study_id}")
     start, end = day_bounds(report_date, tz_name)
-    projects = db.scalars(select(Project).order_by(Project.name)).all()
-    todays = db.scalars(
-        select(Submission).where(
-            and_(Submission.submitted_at >= start, Submission.submitted_at <= end)
+    projects = list(
+        db.scalars(
+            select(Project).where(Project.study_id == study_id).order_by(Project.name)
+        ).all()
+    )
+    project_ids = [p.id for p in projects]
+    todays = (
+        list(
+            db.scalars(
+                select(Submission).where(
+                    and_(
+                        Submission.submitted_at >= start,
+                        Submission.submitted_at <= end,
+                        Submission.project_id.in_(project_ids),
+                    )
+                )
+            ).all()
         )
-    ).all()
+        if project_ids
+        else []
+    )
     by_project: dict[str, list[Submission]] = {}
     for row in todays:
         by_project.setdefault(row.project_id, []).append(row)
@@ -184,13 +212,16 @@ def build_daily_report(db: Session, report_date: str, tz_name: str, organization
         projects=sections,
         grand_total=sum(s.total_submissions_today for s in sections),
         invalid_total=sum(len(s.invalid_submissions) for s in sections),
+        study_id=study_id,
+        study_name=study.name,
     )
 
 
 def format_email(report: DailyReport) -> tuple[str, str, str]:
-    subject = f"Infosutra daily report — {report.report_date}"
+    study_bit = f" — {report.study_name}" if report.study_name else ""
+    subject = f"Infosutra daily report{study_bit} — {report.report_date}"
     text_parts = [
-        f"{report.organization_name} — Daily submissions report",
+        f"{report.organization_name}{study_bit} — Daily submissions report",
         f"Date: {report.report_date} ({report.timezone})",
         f"Total Submissions today: {report.grand_total}",
         f"Invalid submissions: {report.invalid_total}",
@@ -245,9 +276,10 @@ def format_email(report: DailyReport) -> tuple[str, str, str]:
             """
         )
 
+    title = f"{html.escape(report.organization_name)}{html.escape(study_bit)} — Daily report"
     html_body = f"""
     <div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#111;line-height:1.45;">
-      <h1 style="margin:0 0 8px;font-size:22px;">{html.escape(report.organization_name)} — Daily report</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;">{title}</h1>
       <p style="margin:0 0 4px;"><strong>Date:</strong> {html.escape(report.report_date)} ({html.escape(report.timezone)})</p>
       <p style="margin:0 0 20px;"><strong>Total Submissions today:</strong> {report.grand_total} &nbsp;|&nbsp; <strong>Invalid:</strong> {report.invalid_total}</p>
       {''.join(html_sections)}
@@ -257,7 +289,10 @@ def format_email(report: DailyReport) -> tuple[str, str, str]:
     return subject, "\n".join(text_parts), html_body
 
 
-def send_daily_report_now(db: Session) -> tuple[DailyReport, list[str]]:
+def _deliver_daily_report(db: Session, *, study_id: str) -> tuple[DailyReport, list[str]]:
+    """Build and email a study-scoped daily digest. Does not update last-sent."""
+    if not study_id:
+        raise ValueError("study_id is required")
     settings = get_or_create_settings(db)
     recipients = [r.strip() for r in (settings.daily_report_recipients or []) if str(r).strip()]
     if not recipients:
@@ -273,6 +308,7 @@ def send_daily_report_now(db: Session) -> tuple[DailyReport, list[str]]:
         report_date,
         tz_name,
         settings.organization_name or "Infosutra",
+        study_id=study_id,
     )
     subject, text, html_body = format_email(report)
     send_email(
@@ -282,7 +318,13 @@ def send_daily_report_now(db: Session) -> tuple[DailyReport, list[str]]:
         text=text,
         html=html_body,
     )
-    settings.daily_report_last_sent_on = report_date
+    return report, recipients
+
+
+def send_daily_report_now(db: Session, *, study_id: str) -> tuple[DailyReport, list[str]]:
+    report, recipients = _deliver_daily_report(db, study_id=study_id)
+    settings = get_or_create_settings(db)
+    settings.daily_report_last_sent_on = report.report_date
     db.commit()
     return report, recipients
 
@@ -296,7 +338,7 @@ def maybe_send_scheduled_report(db: Session) -> None:
         return
     parsed = parse_send_time(settings.daily_report_time or "21:00")
     if not parsed:
-        logger.warning("Invalid daily report send time: %s", settings.daily_report_time)
+        logger.warning("invalid_daily_report_send_time", send_time=settings.daily_report_time)
         return
     hour, minute = parsed
     tz_name = settings.daily_report_timezone or "Asia/Kolkata"
@@ -306,10 +348,22 @@ def maybe_send_scheduled_report(db: Session) -> None:
     date_key = now_local.date().isoformat()
     if settings.daily_report_last_sent_on == date_key:
         return
-    try:
-        send_daily_report_now(db)
-        logger.info("Scheduled daily report sent for %s", date_key)
-    except (ValueError, SmtpError) as exc:
-        logger.warning("Scheduled daily report skipped/failed: %s", exc)
-    except Exception:
-        logger.exception("Scheduled daily report failed")
+    studies = list(db.scalars(select(Study).order_by(Study.name)).all())
+    if not studies:
+        return
+    sent_any = False
+    for study in studies:
+        try:
+            _deliver_daily_report(db, study_id=study.id)
+            sent_any = True
+            logger.info("scheduled_daily_report_sent", study_id=study.id, date=date_key)
+        except (ValueError, SmtpError) as exc:
+            logger.warning(
+                "scheduled_daily_report_skipped", study_id=study.id, error=str(exc)
+            )
+        except Exception:
+            logger.exception("scheduled_daily_report_failed", study_id=study.id)
+    if sent_any:
+        settings = get_or_create_settings(db)
+        settings.daily_report_last_sent_on = date_key
+        db.commit()

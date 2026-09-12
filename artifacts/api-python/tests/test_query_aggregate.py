@@ -244,6 +244,22 @@ def test_resolve_date_window_tokens() -> None:
         execution_date=EXECUTION_DATE,
         study_start_date=STUDY_START,
     ) == ("2026-03-01", "2026-03-15")
+    # Adhoc date_from/date_to clamps named windows (pre-filter semantics).
+    assert resolve_query_date_window(
+        "study_to_date",
+        execution_date=EXECUTION_DATE,
+        study_start_date=STUDY_START,
+        context_date_from="2026-03-10",
+        context_date_to="2026-03-12",
+    ) == ("2026-03-10", "2026-03-12")
+    # execution_date outside the adhoc window → empty intersection (from > to).
+    assert resolve_query_date_window(
+        "execution_date",
+        execution_date=EXECUTION_DATE,
+        study_start_date=STUDY_START,
+        context_date_from="2026-03-10",
+        context_date_to="2026-03-12",
+    ) == ("2026-03-15", "2026-03-12")
 
 
 def test_example_flag_counts_by_enumerator(db: Session) -> None:

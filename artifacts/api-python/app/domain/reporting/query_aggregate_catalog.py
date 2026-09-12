@@ -69,8 +69,19 @@ def semantic_date_range_token(date_window: Any) -> str:
     """Map omit / dateWindow param to a validation-time range identity.
 
     Distinct tokens imply distinct resolved loads. Omitted window shares the
-    certified-tool default bag (execution context ``date_from``/``date_to``).
+    query_aggregate default bag (execution context ``date_from``/``date_to``).
     """
     if date_window is None or (isinstance(date_window, str) and not date_window.strip()):
         return DEFAULT_RANGE_TOKEN
+    return str(date_window).strip()
+
+
+def certified_cumulative_date_range_token(date_window: Any) -> str:
+    """Range identity for cumulative certified tools that accept dateWindow.
+
+    Omitted ``dateWindow`` resolves at runtime to ``study_to_date`` (Phase 2
+    default) — not the query_aggregate context-bag default.
+    """
+    if date_window is None or (isinstance(date_window, str) and not date_window.strip()):
+        return "study_to_date"
     return str(date_window).strip()

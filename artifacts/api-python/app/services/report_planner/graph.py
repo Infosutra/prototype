@@ -7,12 +7,10 @@ against that catalog before it can be stored or executed.
 
 from __future__ import annotations
 
-import json
-import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, TypedDict
 
+import structlog
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -33,6 +31,7 @@ from app.integrations.llm import (
     llm_report_planner_config_from_app_settings,
     to_lc_messages,
 )
+from app.integrations.llm.json_object import JsonObjectParse, parse_json_object
 from app.services.report_planner_prompts import (
     PATCH_OUTPUT_CONTRACT,
     PLANNER_OUTPUT_CONTRACT,
@@ -46,7 +45,7 @@ from app.services.report_planner.prompting import (
 )
 from app.services.report_tools import all_descriptors, descriptors_by_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 #: Matches the DQA compiler's repair budget.
 MAX_LLM_ATTEMPTS = 3
@@ -122,21 +121,9 @@ def _structured_key(config: LlmConfig) -> str:
     return f"{config.base_url}|{config.model}"
 
 
-def _parse_json_object(text: str) -> dict[str, Any]:
-    stripped = (text or "").strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", stripped).strip()
-    try:
-        data = json.loads(stripped)
-    except json.JSONDecodeError:
-        match = re.search(r"\{[\s\S]*\}", stripped)
-        if not match:
-            return {}
-        try:
-            data = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return {}
-    return data if isinstance(data, dict) else {}
+def _parse_json_object(text: str) -> JsonObjectParse:
+    """Planner-facing wrapper around the shared LLM JSON-object parser."""
+    return parse_json_object(text, log_label="Planner")
 
 
 def _record_raw(telemetry: PlanTelemetry, raw: Any, config: LlmConfig) -> None:
@@ -153,6 +140,10 @@ def _record_raw(telemetry: PlanTelemetry, raw: Any, config: LlmConfig) -> None:
 
 class _ModelCaller:
     """Invokes the model with structured output, falling back to JSON-in-prompt.
+
+    Uses ``method="json_mode"`` so providers enforce a JSON object without requiring
+    OpenAI-strict json_schema (ReportSpec's free-form ``params`` dict is incompatible
+    with that mode and previously caused a silent 400 → free-form fallback).
 
     Capability is discovered by attempting a structured call once per endpoint and
     model; a provider that rejects the request is remembered so later calls skip it.
@@ -171,24 +162,25 @@ class _ModelCaller:
     def invoke(
         self,
         reply_model: type[BaseModel],
-        build_messages: Callable[[bool], list[dict[str, str]]],
+        build_messages: Callable[[], list[dict[str, str]]],
     ) -> tuple[BaseModel | None, str | None, dict[str, Any] | None]:
         """Return (parsed reply, error message, raw payload if parsing failed)."""
         key = _structured_key(self.config)
         if _STRUCTURED_SUPPORT.get(key, True):
-            messages = build_messages(False)
+            messages = build_messages()
             try:
                 model = chat_model(self.config, self.params).with_structured_output(
-                    reply_model, include_raw=True
+                    reply_model, include_raw=True, method="json_mode"
                 )
                 output = model.invoke(to_lc_messages(messages))
             except LlmError:
                 raise
             except Exception as exc:  # noqa: BLE001 — provider rejected structured output
-                logger.info(
-                    "Structured output unavailable for %s (%s); using JSON-in-prompt.",
-                    self.config.model,
-                    exc,
+                logger.warning(
+                    "structured_output_unavailable",
+                    model=self.config.model,
+                    error=str(exc),
+                    fallback="json_in_prompt",
                 )
                 _STRUCTURED_SUPPORT[key] = False
             else:
@@ -206,11 +198,16 @@ class _ModelCaller:
                 from app.integrations.llm import message_text
 
                 text, _ = message_text(raw) if raw is not None else ("", 0)
-                return None, str(parsing_error or "Model output did not match the schema"), (
-                    _parse_json_object(text) or None
+                salvage = _parse_json_object(text)
+                return (
+                    None,
+                    str(parsing_error or "Model output did not match the schema"),
+                    salvage.data,
                 )
 
-        messages = build_messages(True)
+        # Fallback never dumps ReportSpec.model_json_schema into the prompt —
+        # json_mode + catalog/examples are enough; the dump bloated failures.
+        messages = build_messages()
         result = chat_completion_detailed(
             self.config,
             messages,
@@ -225,13 +222,13 @@ class _ModelCaller:
             completion_tokens=result.usage.completion_tokens,
             latency_ms=result.latency_ms,
         )
-        payload = _parse_json_object(result.text)
-        if not payload:
-            return None, "Model did not return a JSON object", None
+        parsed_json = _parse_json_object(result.text)
+        if parsed_json.data is None:
+            return None, parsed_json.error or "Model did not return a JSON object", None
         try:
-            return reply_model.model_validate(payload), None, None
+            return reply_model.model_validate(parsed_json.data), None, None
         except Exception as exc:  # noqa: BLE001 — surfaced to the repair loop
-            return None, str(exc), payload
+            return None, str(exc), parsed_json.data
 
 
 # --- Graph ------------------------------------------------------------------
@@ -250,6 +247,26 @@ def _issues(payload: Any) -> list[SpecIssue]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, SpecIssue)]
     return []
+
+
+def _candidate_spec_payload(payload: dict[str, Any] | None) -> Any | None:
+    """Pull a ReportSpec-shaped object out of a failed PlannerReply parse.
+
+    Models often return the bare spec (``specVersion`` / ``sections``) instead of
+    ``{"status":"ok","spec":...}``. Accept both so salvage can feed validation.
+    """
+    if not isinstance(payload, dict):
+        return None
+    nested = payload.get("spec")
+    if isinstance(nested, dict) and (
+        "sections" in nested or "specVersion" in nested or "spec_version" in nested
+    ):
+        return nested
+    if "sections" in payload and (
+        "specVersion" in payload or "spec_version" in payload or "title" in payload
+    ):
+        return payload
+    return None
 
 
 def _stream_progress(phase: str, message: str, **extra: Any) -> None:
@@ -286,8 +303,8 @@ def build_graph(
         conversation: list[dict[str, str]] | None,
         errors: list[SpecIssue] | None,
         contract: str,
-    ) -> Callable[[bool], list[dict[str, str]]]:
-        def build(include_schema: bool) -> list[dict[str, str]]:
+    ) -> Callable[[], list[dict[str, str]]]:
+        def build() -> list[dict[str, str]]:
             return [
                 {"role": "system", "content": f"{system_prompt}\n\n{contract}"},
                 {
@@ -296,7 +313,6 @@ def build_graph(
                         instructions=instructions,
                         sources=sources,
                         report_kind=report_kind,
-                        include_schema=include_schema,
                         current_spec=current_spec,
                         conversation=conversation,
                         validation_errors=[i.model_dump(by_alias=True) for i in (errors or [])],
@@ -311,9 +327,9 @@ def build_graph(
     ) -> PlannerState:
         if reply is None:
             # Try to salvage a spec from an off-schema reply so repair has something
-            # concrete to fix.
-            candidate_payload = (payload or {}).get("spec") if payload else None
-            if candidate_payload:
+            # concrete to fix (including bare ReportSpec JSON without status/spec wrap).
+            candidate_payload = _candidate_spec_payload(payload)
+            if candidate_payload is not None:
                 parsed = parse_spec(candidate_payload)
                 if parsed.spec is not None:
                     return {"candidate": parsed.spec, "status": "ok", "errors": []}
@@ -372,7 +388,7 @@ def build_graph(
         )
         reply, error, _payload = caller.invoke(
             IntentReply,
-            lambda _include_schema: [
+            lambda: [
                 {
                     "role": "system",
                     "content": (
@@ -391,7 +407,7 @@ def build_graph(
             ],
         )
         if reply is None:
-            logger.info("Intent classification failed (%s); treating turn as a patch.", error)
+            logger.info("intent_classification_failed", error=error, treating_as="patch")
             return {"intent": "patch", "attempts": 0}
         intent = str(getattr(reply, "intent", "patch") or "patch").strip().lower()
         if intent == "question":
@@ -559,10 +575,10 @@ def _run(
             }
         )
     except LlmError as exc:
-        logger.warning("Report planning failed: %s", exc)
+        logger.warning("report_planning_failed", error=str(exc))
         return PlanResult(status="error", reason=str(exc), telemetry=telemetry)
     except Exception as exc:  # noqa: BLE001 — planner must not surface tracebacks
-        logger.exception("Report planning failed")
+        logger.exception("report_planning_failed")
         return PlanResult(status="error", reason=str(exc), telemetry=telemetry)
 
     return _finalize_plan_state(final, telemetry, instructions=instructions)
@@ -791,13 +807,13 @@ def plan_spec_stream(
         result = _finalize_plan_state(final, telemetry, instructions=instructions.strip())
         yield {"event": "result", "result": result}
     except LlmError as exc:
-        logger.warning("Report planning failed: %s", exc)
+        logger.warning("report_planning_failed", error=str(exc))
         yield {
             "event": "result",
             "result": PlanResult(status="error", reason=str(exc), telemetry=telemetry),
         }
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Report planning failed")
+        logger.exception("report_planning_failed")
         yield {
             "event": "error",
             "message": str(exc),

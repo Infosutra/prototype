@@ -245,6 +245,8 @@ export interface DataSourceDescriptor {
   params?: DataSourceParam[];
   businessDefinition?: string;
   benchmarkFields?: string[];
+  supportsDateWindow?: boolean;
+  executionDayScoped?: boolean;
 }
 
 export type DqaCompileInputExistingRule = { [key: string]: unknown } | null;
@@ -1315,6 +1317,18 @@ export interface AppSchemasDqaEnumeratorStat {
   medianDurationMinutes?: number | null;
 }
 
+export type GetDashboardSummaryParams = {
+studyId?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
+};
+
+export type GetDashboardActivityParams = {
+studyId?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
+};
+
 export type GetProjectsParams = {
 studyId?: string | null;
 };
@@ -1359,6 +1373,8 @@ studyId?: string | null;
 export type GetSubmissionTrendsParams = {
 period?: string;
 studyId?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
 };
 
 export type GetInsightsParams = {
@@ -1397,13 +1413,25 @@ export type ListReportConversationsParams = {
 studyId?: string | null;
 };
 
+export type SendDailyReportParams = {
+studyId?: string | null;
+};
+
+export type SendDqaDailyReportParams = {
+studyId?: string | null;
+};
+
 export type GetDqaSummaryParams = {
 studyId?: string | null;
 projectId?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
 };
 
 export type GetDqaByProjectParams = {
 studyId?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
 };
 
 export type GetDqaFlagsParams = {
@@ -1413,6 +1441,8 @@ submissionId?: string | null;
 ruleId?: string | null;
 severity?: string | null;
 enumerator?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
 /**
  * @minimum 1
  * @maximum 2000
@@ -1423,9 +1453,12 @@ limit?: number;
 export type GetDqaEnumeratorsParams = {
 studyId?: string | null;
 projectId?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
 };
 
 export type RecomputeDqaParams = {
+studyId?: string | null;
 projectId?: string | null;
 };
 

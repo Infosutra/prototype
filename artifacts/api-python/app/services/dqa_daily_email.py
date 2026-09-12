@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import html
 import json
-import logging
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Report, ReportSchedule, ReportTemplate, Study
+from app.domain.reporting.helpers import today_in_tz
 from app.integrations.smtp import SmtpError, send_email
 from app.services.daily_report import parse_send_time
 from app.services.dqa_daily_report import generate_daily_dqa_report
@@ -26,7 +27,7 @@ from app.services.settings import (
     smtp_config_from_row,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def _daily_schedule_for_study(db: Session, study_id: str) -> ReportSchedule | None:
@@ -89,6 +90,20 @@ def send_dqa_daily_now(
     study_id: str | None = None,
     report_date: str | None = None,
 ) -> tuple[Report, list[str]]:
+    """Generate and email today's Daily report.
+
+    When ``report_date`` is omitted, resolve the business day in the study
+    timezone and pass it explicitly (same as the scheduler's ``date_key`` path)
+    rather than relying on ``build_context``'s omit-default.
+    """
+    if not study_id:
+        raise ValueError("study_id is required")
+    if report_date is None:
+        study = db.get(Study, study_id)
+        if study is None:
+            raise ValueError(f"Study not found: {study_id}")
+        tz_name = study.timezone or "Asia/Kolkata"
+        report_date = today_in_tz(tz_name)
     report = generate_daily_dqa_report(
         db, study_id=study_id, report_date=report_date, run_ai=True
     )
@@ -137,12 +152,12 @@ def maybe_send_scheduled_dqa_daily(db: Session) -> bool:
             schedule.last_sent_on = date_key
             db.commit()
             logger.info(
-                "Scheduled report sent for study %s on %s (template=%s)",
-                schedule.study_id,
-                date_key,
-                schedule.template_id,
+                "scheduled_report_sent",
+                study_id=schedule.study_id,
+                date=date_key,
+                template_id=schedule.template_id,
             )
             sent_any = True
         except Exception:
-            logger.exception("Scheduled report failed for study %s", schedule.study_id)
+            logger.exception("scheduled_report_failed", study_id=schedule.study_id)
     return sent_any

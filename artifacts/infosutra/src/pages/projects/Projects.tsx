@@ -23,13 +23,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type Scope = "study" | "unassigned" | "all";
+type Scope = "study" | "unassigned";
 
 /** Forms (Kobo instruments) belonging to the active study workspace. */
 export default function FormsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const { activeStudy, activeStudyId } = useStudy();
-  const [scope, setScope] = useState<Scope>(activeStudyId ? "study" : "all");
+  const [scope, setScope] = useState<Scope>(activeStudyId ? "study" : "unassigned");
   const queryClient = useQueryClient();
   const projectsQuery = useGetProjects();
   const syncProjects = useSyncProjects({
@@ -47,18 +47,14 @@ export default function FormsPage() {
   const studyCount = activeStudyId
     ? allForms.filter((p) => p.studyId === activeStudyId).length
     : 0;
-  const workspaceForms = useMemo(() => {
-    if (!activeStudyId) return allForms.filter((p) => !p.studyId);
-    return allForms.filter((p) => !p.studyId || p.studyId === activeStudyId);
-  }, [allForms, activeStudyId]);
 
   const scopedForms = useMemo(() => {
     if (scope === "unassigned") return allForms.filter((p) => !p.studyId);
     if (scope === "study" && activeStudyId) {
       return allForms.filter((p) => p.studyId === activeStudyId);
     }
-    return workspaceForms;
-  }, [allForms, scope, activeStudyId, workspaceForms]);
+    return [];
+  }, [allForms, scope, activeStudyId]);
 
   const filteredForms = scopedForms.filter(
     (p) =>
@@ -147,13 +143,6 @@ export default function FormsPage() {
             >
               Unassigned ({unassignedCount})
             </Button>
-            <Button
-              size="sm"
-              variant={scope === "all" ? "default" : "outline"}
-              onClick={() => setScope("all")}
-            >
-              All synced ({workspaceForms.length})
-            </Button>
           </div>
         </div>
 
@@ -205,16 +194,12 @@ export default function FormsPage() {
             <h3 className="font-semibold">
               {scope === "unassigned"
                 ? "No unassigned forms"
-                : scope === "study"
-                  ? "No forms in this study yet"
-                  : "No Kobo forms synced yet"}
+                : "No forms in this study yet"}
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
               {scope === "study"
                 ? "Sync from Kobo, then assign forms to this study on the Studies page."
-                : scope === "unassigned"
-                  ? "All synced forms are already in a study, or nothing has been synced yet."
-                  : "Configure your Kobo API token in Settings, then sync accessible forms."}
+                : "All synced forms are already in a study, or nothing has been synced yet."}
             </p>
             <div className="mt-4 flex justify-center gap-2">
               <Link href="/studies">

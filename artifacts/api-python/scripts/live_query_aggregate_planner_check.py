@@ -39,6 +39,20 @@ REAL_DB = Path("/home/sarath/work/Infosutra/Data-Insights-Hub/data/infosutra.sql
 
 CASES = [
     (
+        "enumerator_perf_last_14",
+        "Show enumerator performance for the last 14 days",
+        {
+            "prefer": "enumerator_performance_study",
+            "require_source_date_window": {
+                "enumerator_performance_study": "last_14_days",
+            },
+            "avoid": {
+                "enumerator_performance_today",
+                "enumerator_submission_quality",
+            },
+        },
+    ),
+    (
         "flag_by_enumerator",
         "Show flag counts grouped by enumerator instead of by tool",
         {
@@ -218,6 +232,18 @@ def _assess(case_id: str, expect: dict, sources: list[dict]) -> list[str]:
         }
         if expect["require_date_window"] not in windows:
             findings.append(f"missing dateWindow={expect['require_date_window']}; saw {windows}")
+    if expect.get("require_source_date_window"):
+        for source_id, want in expect["require_source_date_window"].items():
+            matched = [
+                (s.get("params") or {}).get("dateWindow")
+                for s in sources
+                if s.get("dataSource") == source_id
+            ]
+            if want not in matched:
+                findings.append(
+                    f"expected {source_id} dateWindow={want}; saw {matched} "
+                    f"(sources={sorted(ids)})"
+                )
     if expect.get("require_windows"):
         windows = {
             (s.get("params") or {}).get("dateWindow")

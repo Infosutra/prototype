@@ -59,6 +59,8 @@ import type {
   GetAnalyticsOverviewParams,
   GetAudioRecordingParams,
   GetAudioRecordingsParams,
+  GetDashboardActivityParams,
+  GetDashboardSummaryParams,
   GetDqaByProjectParams,
   GetDqaEnumeratorsParams,
   GetDqaFlagsParams,
@@ -111,6 +113,8 @@ import type {
   RulePackUpdate,
   RulePackVersionOut,
   SaveConversationAsTemplateInput,
+  SendDailyReportParams,
+  SendDqaDailyReportParams,
   SetDqaRuleLifecycle200,
   SettingsOut,
   SettingsUpdate,
@@ -247,20 +251,27 @@ export function useHealthz<TData = Awaited<ReturnType<typeof healthz>>, TError =
 
 
 
-export const getGetDashboardSummaryUrl = () => {
+export const getGetDashboardSummaryUrl = (params?: GetDashboardSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/dashboard/summary`
+  return stringifiedParams.length > 0 ? `/api/dashboard/summary?${stringifiedParams}` : `/api/dashboard/summary`
 }
 
 /**
  * @summary Dashboard Summary
  */
-export const getDashboardSummary = async ( options?: RequestInit): Promise<DashboardSummary> => {
+export const getDashboardSummary = async (params?: GetDashboardSummaryParams, options?: RequestInit): Promise<DashboardSummary> => {
 
-  return customFetch<DashboardSummary>(getGetDashboardSummaryUrl(),
+  return customFetch<DashboardSummary>(getGetDashboardSummaryUrl(params),
   {
     ...options,
     method: 'GET'
@@ -273,23 +284,23 @@ export const getDashboardSummary = async ( options?: RequestInit): Promise<Dashb
 
 
 
-export const getGetDashboardSummaryQueryKey = () => {
+export const getGetDashboardSummaryQueryKey = (params?: GetDashboardSummaryParams,) => {
     return [
-    `/api/dashboard/summary`
+    `/api/dashboard/summary`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetDashboardSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetDashboardSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardSummary>>, TError = ErrorType<HTTPValidationError>>(params?: GetDashboardSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetDashboardSummaryQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardSummaryQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardSummary>>> = ({ signal }) => getDashboardSummary({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardSummary>>> = ({ signal }) => getDashboardSummary(params, { signal, ...requestOptions });
 
 
 
@@ -299,19 +310,19 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetDashboardSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardSummary>>>
-export type GetDashboardSummaryQueryError = ErrorType<unknown>
+export type GetDashboardSummaryQueryError = ErrorType<HTTPValidationError>
 
 
 /**
  * @summary Dashboard Summary
  */
 
-export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDashboardSummary>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDashboardSummary>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetDashboardSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetDashboardSummaryQueryOptions(options)
+  const queryOptions = getGetDashboardSummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -324,20 +335,27 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
 
 
 
-export const getGetDashboardActivityUrl = () => {
+export const getGetDashboardActivityUrl = (params?: GetDashboardActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/dashboard/activity`
+  return stringifiedParams.length > 0 ? `/api/dashboard/activity?${stringifiedParams}` : `/api/dashboard/activity`
 }
 
 /**
  * @summary Dashboard Activity
  */
-export const getDashboardActivity = async ( options?: RequestInit): Promise<ActivityItem[]> => {
+export const getDashboardActivity = async (params?: GetDashboardActivityParams, options?: RequestInit): Promise<ActivityItem[]> => {
 
-  return customFetch<ActivityItem[]>(getGetDashboardActivityUrl(),
+  return customFetch<ActivityItem[]>(getGetDashboardActivityUrl(params),
   {
     ...options,
     method: 'GET'
@@ -350,23 +368,23 @@ export const getDashboardActivity = async ( options?: RequestInit): Promise<Acti
 
 
 
-export const getGetDashboardActivityQueryKey = () => {
+export const getGetDashboardActivityQueryKey = (params?: GetDashboardActivityParams,) => {
     return [
-    `/api/dashboard/activity`
+    `/api/dashboard/activity`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetDashboardActivityQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardActivity>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetDashboardActivityQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardActivity>>, TError = ErrorType<HTTPValidationError>>(params?: GetDashboardActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetDashboardActivityQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardActivityQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardActivity>>> = ({ signal }) => getDashboardActivity({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardActivity>>> = ({ signal }) => getDashboardActivity(params, { signal, ...requestOptions });
 
 
 
@@ -376,19 +394,19 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetDashboardActivityQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardActivity>>>
-export type GetDashboardActivityQueryError = ErrorType<unknown>
+export type GetDashboardActivityQueryError = ErrorType<HTTPValidationError>
 
 
 /**
  * @summary Dashboard Activity
  */
 
-export function useGetDashboardActivity<TData = Awaited<ReturnType<typeof getDashboardActivity>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetDashboardActivity<TData = Awaited<ReturnType<typeof getDashboardActivity>>, TError = ErrorType<HTTPValidationError>>(
+ params?: GetDashboardActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetDashboardActivityQueryOptions(options)
+  const queryOptions = getGetDashboardActivityQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -5735,20 +5753,27 @@ export const useTestSmtpConnection = <TError = ErrorType<unknown>,
       return useMutation(getTestSmtpConnectionMutationOptions(options));
     }
 
-export const getSendDailyReportUrl = () => {
+export const getSendDailyReportUrl = (params?: SendDailyReportParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/settings/send-daily-report`
+  return stringifiedParams.length > 0 ? `/api/settings/send-daily-report?${stringifiedParams}` : `/api/settings/send-daily-report`
 }
 
 /**
  * @summary Send Daily Report
  */
-export const sendDailyReport = async ( options?: RequestInit): Promise<ConnectionTestResult> => {
+export const sendDailyReport = async (params?: SendDailyReportParams, options?: RequestInit): Promise<ConnectionTestResult> => {
 
-  return customFetch<ConnectionTestResult>(getSendDailyReportUrl(),
+  return customFetch<ConnectionTestResult>(getSendDailyReportUrl(params),
   {
     ...options,
     method: 'POST'
@@ -5760,9 +5785,9 @@ export const sendDailyReport = async ( options?: RequestInit): Promise<Connectio
 
 
 
-export const getSendDailyReportMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,void, TContext> => {
+export const getSendDailyReportMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,{params?: SendDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,{params?: SendDailyReportParams}, TContext> => {
 
 const mutationKey = ['sendDailyReport'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -5774,10 +5799,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDailyReport>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDailyReport>>, {params?: SendDailyReportParams}> = (props) => {
+          const {params} = props ?? {};
 
-
-          return  sendDailyReport(requestOptions)
+          return  sendDailyReport(params,requestOptions)
         }
 
 
@@ -5789,37 +5814,44 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SendDailyReportMutationResult = NonNullable<Awaited<ReturnType<typeof sendDailyReport>>>
 
-    export type SendDailyReportMutationError = ErrorType<void>
+    export type SendDailyReportMutationError = ErrorType<void | HTTPValidationError>
 
     /**
  * @summary Send Daily Report
  */
-export const useSendDailyReport = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSendDailyReport = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,{params?: SendDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof sendDailyReport>>,
         TError,
-        void,
+        {params?: SendDailyReportParams},
         TContext
       > => {
       return useMutation(getSendDailyReportMutationOptions(options));
     }
 
-export const getSendDqaDailyReportUrl = () => {
+export const getSendDqaDailyReportUrl = (params?: SendDqaDailyReportParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/settings/send-dqa-daily-report`
+  return stringifiedParams.length > 0 ? `/api/settings/send-dqa-daily-report?${stringifiedParams}` : `/api/settings/send-dqa-daily-report`
 }
 
 /**
  * Generate and email today's DQA Daily (separate from submission digest).
  * @summary Send Dqa Daily Report
  */
-export const sendDqaDailyReport = async ( options?: RequestInit): Promise<ConnectionTestResult> => {
+export const sendDqaDailyReport = async (params?: SendDqaDailyReportParams, options?: RequestInit): Promise<ConnectionTestResult> => {
 
-  return customFetch<ConnectionTestResult>(getSendDqaDailyReportUrl(),
+  return customFetch<ConnectionTestResult>(getSendDqaDailyReportUrl(params),
   {
     ...options,
     method: 'POST'
@@ -5831,9 +5863,9 @@ export const sendDqaDailyReport = async ( options?: RequestInit): Promise<Connec
 
 
 
-export const getSendDqaDailyReportMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,void, TContext> => {
+export const getSendDqaDailyReportMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,{params?: SendDqaDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,{params?: SendDqaDailyReportParams}, TContext> => {
 
 const mutationKey = ['sendDqaDailyReport'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -5845,10 +5877,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDqaDailyReport>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDqaDailyReport>>, {params?: SendDqaDailyReportParams}> = (props) => {
+          const {params} = props ?? {};
 
-
-          return  sendDqaDailyReport(requestOptions)
+          return  sendDqaDailyReport(params,requestOptions)
         }
 
 
@@ -5860,17 +5892,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SendDqaDailyReportMutationResult = NonNullable<Awaited<ReturnType<typeof sendDqaDailyReport>>>
 
-    export type SendDqaDailyReportMutationError = ErrorType<void>
+    export type SendDqaDailyReportMutationError = ErrorType<void | HTTPValidationError>
 
     /**
  * @summary Send Dqa Daily Report
  */
-export const useSendDqaDailyReport = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSendDqaDailyReport = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,{params?: SendDqaDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof sendDqaDailyReport>>,
         TError,
-        void,
+        {params?: SendDqaDailyReportParams},
         TContext
       > => {
       return useMutation(getSendDqaDailyReportMutationOptions(options));

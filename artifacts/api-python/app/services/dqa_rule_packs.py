@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 import yaml
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Project, RulePack, RulePackVersion
 from app.domain.dqa.rule_audit import stamp_rules_for_save
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 SEED_DIR = __import__("pathlib").Path(__file__).resolve().parent.parent / "rule_packs"
 MAX_RULES_PER_PACK = 256
@@ -44,7 +44,7 @@ def load_seed_packs() -> list[dict[str, Any]]:
         try:
             payload = yaml.safe_load(path.read_text(encoding="utf-8"))
         except Exception:
-            logger.exception("Failed reading seed pack %s", path)
+            logger.exception("seed_pack_read_failed", path=str(path))
             continue
         if isinstance(payload, dict):
             packs.append(payload)
@@ -169,10 +169,10 @@ def save_pack(
     db.commit()
     db.refresh(row)
     logger.info(
-        "Saved rule pack project_id=%s version=%s source=%s rules=%s",
-        project_id,
-        next_version,
-        source,
-        len(stamped_rules),
+        "rule_pack_saved",
+        project_id=project_id,
+        version=next_version,
+        source=source,
+        rules=len(stamped_rules),
     )
     return row.pack

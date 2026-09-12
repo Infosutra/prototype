@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -19,7 +20,6 @@ from app.services.report_tools import (
     call_tool,
     descriptors_by_id,
 )
-from tests.test_report_stats import _load
 
 STUDY_ID = "study-fixture"
 REPORT_DATE = "2026-03-15"
@@ -71,12 +71,195 @@ def _context(**overrides) -> ReportExecutionContext:
     return ReportExecutionContext(**payload)
 
 
-def _data_context(db: Session) -> ReportDataContext:
-    """Context wired to the shared fixture statistics."""
+def _seed_projection(db: Session, study: Study) -> None:
+    """Compact live seed for Phase 2 substrate-backed tools.
+
+    Today (2026-03-15) has two enumerators with deliberately different
+    individual flag rates / medians so group benchmarks cannot equal either.
+    """
+    db.add(
+        StudyTool(
+            id="t1", study_id=study.id, code="T1", label="Facility", target_count=100
+        )
+    )
+    db.add(
+        StudyTool(
+            id="t2", study_id=study.id, code="T2", label="Teachers", target_count=80
+        )
+    )
+    db.add(
+        Project(
+            id="p1",
+            name="Facility",
+            study_id=study.id,
+            study_tool_id="t1",
+            uid="a1",
+            last_sync_at=datetime(2026, 3, 15, 10, 0, 0),
+            created_at=datetime(2026, 3, 4),
+            updated_at=datetime(2026, 3, 4),
+        )
+    )
+    db.add(
+        Project(
+            id="p2",
+            name="Teachers",
+            study_id=study.id,
+            study_tool_id="t2",
+            uid="a2",
+            last_sync_at=datetime(2026, 3, 15, 10, 0, 0),
+            created_at=datetime(2026, 3, 4),
+            updated_at=datetime(2026, 3, 4),
+        )
+    )
+    db.flush()
+
+    def add_sub(
+        sid: str,
+        project_id: str,
+        enumerator: str,
+        submitted_at: datetime,
+        *,
+        minutes: float | None = 40.0,
+        udise: str | None = None,
+    ) -> None:
+        data: dict = {}
+        if minutes is not None:
+            data["start"] = submitted_at.isoformat()
+            data["end"] = (submitted_at + timedelta(minutes=minutes)).isoformat()
+        if udise is not None:
+            data["udise"] = udise
+        db.add(
+            Submission(
+                id=sid,
+                project_id=project_id,
+                kobo_id=sid,
+                form_id="f1",
+                form_name="Facility" if project_id == "p1" else "Teachers",
+                enumerator=enumerator,
+                submitted_at=submitted_at,
+                status="complete",
+                data=data,
+                created_at=submitted_at,
+            )
+        )
+
+    today = datetime(2026, 3, 15, 6, 0, 0)
+    prior = datetime(2026, 3, 10, 8, 0, 0)
+
+    # Ada today on T1: 6 subs; durations → median 22; 2 red + 3 amber flags
+    # → individual flagRate = 5/6 ≈ 83.3 (flag-count formula).
+    add_sub("s-ada-1", "p1", "Ada", today, minutes=20.0, udise="12345678")
+    add_sub("s-ada-2", "p1", "Ada", today + timedelta(minutes=1), minutes=22.0)
+    add_sub("s-ada-3", "p1", "Ada", today + timedelta(minutes=2), minutes=24.0)  # clean
+    db.add(
+        DqaFlag(
+            id="f-ada-red",
+            submission_id="s-ada-1",
+            project_id="p1",
+            rule_id="R1",
+            severity="red",
+            title="Missing GPS",
+            message="GPS required",
+            evaluated_at=today,
+        )
+    )
+    db.add(
+        DqaFlag(
+            id="f-ada-amber",
+            submission_id="s-ada-2",
+            project_id="p1",
+            rule_id="R2",
+            severity="amber",
+            title="Skip residue",
+            message="Skip path incomplete",
+            evaluated_at=today,
+        )
+    )
+    add_sub(
+        "s-ada-4", "p1", "Ada", today + timedelta(minutes=3), minutes=22.0, udise="12345678"
+    )
+    db.add(
+        DqaFlag(
+            id="f-ada-red-2",
+            submission_id="s-ada-4",
+            project_id="p1",
+            rule_id="R1",
+            severity="red",
+            title="Missing GPS",
+            message="GPS required",
+            evaluated_at=today,
+        )
+    )
+    for i in range(2):
+        sid = f"s-ada-r2-{i}"
+        add_sub(sid, "p1", "Ada", today + timedelta(minutes=10 + i), minutes=22.0)
+        db.add(
+            DqaFlag(
+                id=f"f-ada-r2-{i}",
+                submission_id=sid,
+                project_id="p1",
+                rule_id="R2",
+                severity="amber",
+                title="Skip residue",
+                message="Skip path incomplete",
+                evaluated_at=today,
+            )
+        )
+
+    # Bo today: 2 clean T1 subs at 40 min → flagRate 0, median 40.
+    # With Ada, groupFlagRate = 5 flagged / 8 today = 62.5 (≠ Ada 83.3, ≠ Bo 0).
+    # groupMedianMinutes = mean(22, 40) = 31.0 (≠ either individual).
+    add_sub("s-bo-1", "p1", "Bo", today + timedelta(hours=1), minutes=40.0)
+    add_sub("s-bo-2", "p1", "Bo", today + timedelta(hours=1, minutes=1), minutes=40.0)
+
+    # Prior cumulative volume: T1 and T2 (all flagged) on Mar 10 (= study D7).
+    for i in range(5):
+        add_sub(
+            f"s-prior-t1-{i}", "p1", "Prior", prior + timedelta(minutes=i), minutes=30.0
+        )
+        db.add(
+            DqaFlag(
+                id=f"f-prior-r1-{i}",
+                submission_id=f"s-prior-t1-{i}",
+                project_id="p1",
+                rule_id="R1",
+                severity="red" if i < 3 else "amber",
+                title="Missing GPS",
+                message="prior",
+                evaluated_at=prior + timedelta(minutes=i),
+            )
+        )
+    for i in range(12):
+        add_sub(
+            f"s-prior-t2-{i}",
+            "p2",
+            "PriorT2",
+            prior + timedelta(hours=1, minutes=i),
+            minutes=30.0,
+        )
+        db.add(
+            DqaFlag(
+                id=f"f-prior-r2-{i}",
+                submission_id=f"s-prior-t2-{i}",
+                project_id="p2",
+                rule_id="R2",
+                severity="amber",
+                title="Skip residue",
+                message="prior",
+                evaluated_at=prior + timedelta(hours=1, minutes=i),
+            )
+        )
+
+    db.commit()
+
+
+def _data_context(db: Session) -> tuple[ReportDataContext, Study]:
     study = _study(db)
-    return ReportDataContext(
-        db, _context(), settings=db.get(AppSettings, "settings"), stats=_load("sample_daily_stats.json")
-    ), study
+    _seed_projection(db, study)
+    return (
+        ReportDataContext(db, _context(), settings=db.get(AppSettings, "settings")),
+        study,
+    )
 
 
 # --- Registry ---------------------------------------------------------------
@@ -124,21 +307,22 @@ def test_declared_fields_match_returned_keys(db: Session) -> None:
             assert not unexpected, f"{descriptor.id} returned undeclared keys {unexpected}"
 
 
-# --- Projections ------------------------------------------------------------
+# --- Projections (live substrate) -------------------------------------------
 
 
 def test_study_totals_derives_clean_and_flagged_counts(db: Session) -> None:
     context, _study = _data_context(db)
     totals = call_tool(context, "study_totals")
-    # Fixture: 8 today, 2+3 flagged submissions today across T1/T2
+    # Today: Ada 6 + Bo 2 = 8; 5 flagged (Ada), 3 clean.
     assert totals["newToday"] == 8
     assert totals["flaggedToday"] == 5
     assert totals["cleanToday"] == 3
     assert totals["flaggedPctToday"] == 62.5
-    assert totals["cumulative"] == 120
-    assert totals["flaggedCumulative"] == 18
-    assert totals["cleanCumulative"] == 102
-    assert totals["flaggedPctCumulative"] == 15.0
+    # Cumulative: 8 today + 5 prior T1 + 12 prior T2 = 25; flagged 5+5+12 = 22.
+    assert totals["cumulative"] == 25
+    assert totals["flaggedCumulative"] == 22
+    assert totals["cleanCumulative"] == 3
+    assert totals["flaggedPctCumulative"] == 88.0
 
 
 def test_tool_coverage_carries_the_configured_target(db: Session) -> None:
@@ -146,35 +330,51 @@ def test_tool_coverage_carries_the_configured_target(db: Session) -> None:
     rows = call_tool(context, "tool_coverage")
     by_code = {row["toolCode"]: row for row in rows}
     assert by_code["T1"]["target"] == 100
-    assert by_code["T1"]["cumulative"] == 45
-    assert by_code["T1"]["coveragePct"] == 45.0
-    assert by_code["T2"]["remaining"] == 5
+    assert by_code["T1"]["cumulative"] == 13  # 8 today + 5 prior
+    assert by_code["T1"]["coveragePct"] == 13.0
+    assert by_code["T2"]["target"] == 80
+    assert by_code["T2"]["cumulative"] == 12
+    assert by_code["T2"]["remaining"] == 68
     assert "target" in descriptors_by_id()["tool_coverage"].benchmark_fields
 
 
 def test_enumerator_performance_includes_group_benchmarks(db: Session) -> None:
     context, _study = _data_context(db)
     rows = call_tool(context, "enumerator_performance_today")
-    assert rows[0]["enumerator"] == "Ada"
-    assert rows[0]["tools"] == "T1"
-    assert rows[0]["flagRate"] == 66.7
-    # Benchmarks are computed, never invented: study-wide values for the same day.
-    assert rows[0]["groupFlagRate"] == 62.5
-    assert rows[0]["groupMedianMinutes"] == 22.0
+    assert len(rows) == 2
+    assert rows[0]["enumerator"] == "Ada"  # RED sorts first
+    ada = rows[0]
+    bo = next(r for r in rows if r["enumerator"] == "Bo")
+
+    assert ada["tools"] == "T1"
+    assert ada["flagRate"] == 83.3  # (2 red + 3 amber) / 6
+    assert ada["medianMinutes"] == 22.0
+    assert bo["flagRate"] == 0.0
+    assert bo["medianMinutes"] == 40.0
+
+    # Group benchmarks are study-wide today — not either individual's numbers.
+    assert ada["groupFlagRate"] == 62.5  # 5 flagged / 8 today
+    assert bo["groupFlagRate"] == 62.5
+    assert ada["groupMedianMinutes"] == 31.0  # mean(22, 40)
+    assert bo["groupMedianMinutes"] == 31.0
+    assert ada["groupFlagRate"] != ada["flagRate"]
+    assert bo["groupFlagRate"] != bo["flagRate"]
+    assert ada["groupMedianMinutes"] != ada["medianMinutes"]
+    assert bo["groupMedianMinutes"] != bo["medianMinutes"]
 
 
 def test_enumerator_submission_quality_splits_clean_and_flagged(db: Session) -> None:
     context, _study = _data_context(db)
     rows = call_tool(context, "enumerator_submission_quality")
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["submissionsToday"] == 3
-    assert row["redSubmissions"] == 1
-    assert row["amberSubmissions"] == 1
-    assert row["flaggedSubmissions"] == 2
-    assert row["cleanSubmissions"] == 1
-    assert "Missing GPS" in row["issues"]
-    assert "Skip residue" in row["issues"]
+    assert len(rows) == 2
+    ada = next(r for r in rows if r["enumerator"] == "Ada")
+    assert ada["submissionsToday"] == 6
+    assert ada["redSubmissions"] == 2
+    assert ada["amberSubmissions"] == 3
+    assert ada["flaggedSubmissions"] == 5
+    assert ada["cleanSubmissions"] == 1
+    assert "Missing GPS" in ada["issues"]
+    assert "Skip residue" in ada["issues"]
 
 
 def test_top_failing_rules_scope_param_selects_the_window(db: Session) -> None:
@@ -182,7 +382,10 @@ def test_top_failing_rules_scope_param_selects_the_window(db: Session) -> None:
     today = call_tool(context, "top_failing_rules", {"scope": "today"})
     cumulative = call_tool(context, "top_failing_rules", {"scope": "cumulative"})
     assert {row["ruleId"]: row["count"] for row in today} == {"R1": 2, "R2": 3}
-    assert {row["ruleId"]: row["count"] for row in cumulative} == {"R2": 14, "R1": 5}
+    assert {row["ruleId"]: row["count"] for row in cumulative} == {
+        "R2": 3 + 12,
+        "R1": 2 + 5,
+    }
 
 
 def test_scope_defaults_to_today(db: Session) -> None:
@@ -197,14 +400,28 @@ def test_red_priority_items_include_a_worked_example(db: Session) -> None:
     rows = call_tool(context, "red_priority_items")
     assert rows[0]["ruleId"] == "R1"
     assert rows[0]["count"] == 2
-    assert rows[0]["example"] == "Ada · UDISE 12345678"
+    assert rows[0]["exampleEnumerator"] == "Ada"
+    assert "UDISE 12345678" in rows[0]["example"]
 
 
 def test_flag_rate_trend_is_cumulative_by_day(db: Session) -> None:
     context, _study = _data_context(db)
     rows = call_tool(context, "flag_rate_trend")
-    assert [row["dayLabel"] for row in rows] == ["D1", "D12"]
-    assert [row["flaggedPct"] for row in rows] == [10.0, 15.0]
+    by_day = {row["dayLabel"]: row for row in rows}
+    assert rows[0]["dayLabel"] == "D1"
+    assert rows[-1]["dayLabel"] == "D12"
+    assert len(rows) == 12  # Mar 4 → Mar 15 inclusive
+
+    # Exact cumulative flaggedPct at two points (proves computation, not just shape).
+    # D1 (Mar 4): empty bag → 0.0
+    assert by_day["D1"]["flaggedPct"] == 0.0
+    assert by_day["D1"]["submissions"] == 0
+    # D7 (Mar 10): 17 prior (all flagged) → 100.0
+    assert by_day["D7"]["flaggedPct"] == 100.0
+    assert by_day["D7"]["submissions"] == 17
+    # D12 (Mar 15): 25 total, 22 flagged → 88.0
+    assert by_day["D12"]["flaggedPct"] == 88.0
+    assert by_day["D12"]["submissions"] == 25
 
 
 def test_signoff_checklist_resolves_the_owner(db: Session) -> None:
@@ -295,23 +512,23 @@ def test_coverage_math_uses_the_study_tool_target(db: Session) -> None:
     assert rows[0]["coveragePct"] == 30.0
 
 
-def test_statistics_are_computed_once_per_execution(db: Session) -> None:
+def test_distinct_windows_share_one_orm_load_each(db: Session) -> None:
+    """Phase 2 tools use windowed report_inputs — at most two ranges, each loaded once."""
     study = _study(db)
     _seed_submissions(db, study)
     context = ReportDataContext(db, _context(), settings=db.get(AppSettings, "settings"))
-    calls = {"n": 0}
-    real = context.stats
 
-    def counted():
-        key = context.default_range_key()
-        if key not in context._stats_by_range:
-            calls["n"] += 1
-        return real()
-
-    context.stats = counted  # type: ignore[method-assign]
-    for source in ("study_totals", "tool_coverage", "flag_rate_trend", "signoff_checklist"):
-        call_tool(context, source)
-    assert calls["n"] == 1
+    with patch(
+        "app.repositories.reporting.load_study_report_inputs",
+        wraps=__import__(
+            "app.repositories.reporting", fromlist=["load_study_report_inputs"]
+        ).load_study_report_inputs,
+    ) as spy:
+        for source in ("study_totals", "tool_coverage", "flag_rate_trend", "signoff_checklist"):
+            call_tool(context, source)
+        # execution_date + study_to_date only
+        assert spy.call_count == 2
+        assert len(context._inputs_by_range) == 2
 
 
 def test_missing_study_is_reported_clearly(db: Session) -> None:

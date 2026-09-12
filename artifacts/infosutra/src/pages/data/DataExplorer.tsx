@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, ChevronDown, ChevronRight, FileJson } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, FileJson, CalendarRange, X } from "lucide-react";
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
 
@@ -25,6 +25,8 @@ export default function DataExplorer() {
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
 
   const projectsQuery = useGetProjects(
@@ -38,6 +40,8 @@ export default function DataExplorer() {
       studyId: activeStudyId ?? undefined,
       projectId: projectFilter !== "all" ? projectFilter : undefined,
       status: statusFilter !== "all" ? statusFilter : undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
       page,
       limit: PAGE_SIZE,
     },
@@ -47,6 +51,7 @@ export default function DataExplorer() {
   const rows = submissionsQuery.data?.data ?? [];
   const total = submissionsQuery.data?.total ?? 0;
   const totalPages = submissionsQuery.data?.totalPages ?? 0;
+  const hasDateFilter = Boolean(dateFrom || dateTo);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -127,6 +132,60 @@ export default function DataExplorer() {
                 <SelectItem value="flagged">Flagged</SelectItem>
               </SelectContent>
             </Select>
+
+            <div className="flex items-center gap-1 rounded-lg border border-border/80 bg-muted/30 p-1 shadow-sm">
+              <CalendarRange className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <label className="flex items-center pl-0.5">
+                <span className="sr-only">Submitted from date</span>
+                <input
+                  type="date"
+                  className="h-7 w-[8.25rem] rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring/40 [color-scheme:light]"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => {
+                    setDateFrom(e.target.value);
+                    setPage(1);
+                  }}
+                  aria-label="Submitted from date"
+                />
+              </label>
+              <span className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                to
+              </span>
+              <label className="flex items-center">
+                <span className="sr-only">Submitted to date</span>
+                <input
+                  type="date"
+                  className="h-7 w-[8.25rem] rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring/40 [color-scheme:light]"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => {
+                    setDateTo(e.target.value);
+                    setPage(1);
+                  }}
+                  aria-label="Submitted to date"
+                />
+              </label>
+              {hasDateFilter ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setDateFrom("");
+                    setDateTo("");
+                    setPage(1);
+                  }}
+                  aria-label="Clear date range"
+                  title="All dates"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <span className="w-1.5" aria-hidden />
+              )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto">

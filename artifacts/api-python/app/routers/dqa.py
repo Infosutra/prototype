@@ -8,10 +8,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Project
+from app.db.models import Project, Study
 from app.db.session import get_db
 from app.repositories import dqa as dqa_repo
-from app.schemas.common import DqaFlagsQuery, ProjectIdQuery, StudyIdQuery, StudyProjectQuery
+from app.schemas.common import DqaDashboardQuery, DqaFlagsQuery, StudyDateRangeQuery, StudyIdQuery, StudyProjectQuery
 from app.schemas.dqa import (
     DqaCompileSessionOut,
     DqaCompileInput,
@@ -125,13 +125,25 @@ def _flag_out(
     )
 
 
+def _require_project_or_study(project_id: str | None, study_id: str | None) -> None:
+    if not project_id and not study_id:
+        raise HTTPException(
+            status_code=400, detail="studyId or projectId is required"
+        )
+
+
 @router.get("/summary", response_model=DqaSummary, operation_id="getDqaSummary")
 def dqa_summary(
-    q: Annotated[StudyProjectQuery, Query()],
+    q: Annotated[DqaDashboardQuery, Query()],
     db: Session = Depends(get_db),
 ) -> DqaSummary:
+    _require_project_or_study(q.project_id, q.study_id)
     loaded = dqa_repo.load_submissions_and_flags(
-        db, project_id=q.project_id, study_id=q.study_id
+        db,
+        project_id=q.project_id,
+        study_id=q.study_id,
+        date_from=q.date_from,
+        date_to=q.date_to,
     )
     if loaded is None:
         return DqaSummary(
@@ -158,11 +170,16 @@ def dqa_summary(
 
 @router.get("/by-project", response_model=list[ProjectDqaStat], operation_id="getDqaByProject")
 def dqa_by_project(
-    q: Annotated[StudyIdQuery, Query()],
+    q: Annotated[StudyDateRangeQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ProjectDqaStat]:
     """Per-project DQA metrics aligned with the Data Quality dashboard."""
-    projects, submissions, flags = dqa_repo.load_projects_with_dqa(db, study_id=q.study_id)
+    projects, submissions, flags = dqa_repo.load_projects_with_dqa(
+        db,
+        study_id=q.study_id,
+        date_from=q.date_from,
+        date_to=q.date_to,
+    )
     rows = dqa_repo.aggregate_by_project(projects, submissions, flags)
     return [ProjectDqaStat(**r) for r in rows]
 
@@ -172,6 +189,8 @@ def list_flags(
     params: Annotated[DqaFlagsQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[DqaFlagOut]:
+    if not params.submission_id:
+        _require_project_or_study(params.project_id, params.study_id)
     flags = dqa_repo.load_flags_filtered(
         db,
         project_id=params.project_id,
@@ -179,6 +198,8 @@ def list_flags(
         submission_id=params.submission_id,
         rule_id=params.rule_id,
         severity=params.severity,
+        date_from=params.date_from,
+        date_to=params.date_to,
         limit=params.limit,
     )
     if flags is None:
@@ -234,11 +255,16 @@ def list_flags(
 
 @router.get("/enumerators", response_model=list[EnumeratorStat], operation_id="getDqaEnumerators")
 def enumerator_stats(
-    q: Annotated[StudyProjectQuery, Query()],
+    q: Annotated[DqaDashboardQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[EnumeratorStat]:
+    _require_project_or_study(q.project_id, q.study_id)
     loaded = dqa_repo.load_submissions_and_flags(
-        db, project_id=q.project_id, study_id=q.study_id
+        db,
+        project_id=q.project_id,
+        study_id=q.study_id,
+        date_from=q.date_from,
+        date_to=q.date_to,
     )
     if loaded is None:
         return []
@@ -249,7 +275,7 @@ def enumerator_stats(
 
 @router.post("/recompute", response_model=DqaRecomputeResult, operation_id="recomputeDqa")
 def recompute(
-    q: Annotated[ProjectIdQuery, Query()],
+    q: Annotated[StudyProjectQuery, Query()],
     db: Session = Depends(get_db),
 ) -> DqaRecomputeResult:
     project_id = q.project_id
@@ -259,8 +285,18 @@ def recompute(
         stats = dqa_engine.evaluate_project_cascade(db, project_id)
         return DqaRecomputeResult(project_id=project_id, **stats)
 
+    if not q.study_id:
+        raise HTTPException(
+            status_code=400, detail="studyId or projectId is required"
+        )
+    if not db.get(Study, q.study_id):
+        raise HTTPException(status_code=404, detail="Study not found")
+    projects = db.scalars(
+        select(Project).where(Project.study_id == q.study_id)
+    ).all()
+
     totals = {"submissions": 0, "flagged_submissions": 0, "flags": 0}
-    for project in db.scalars(select(Project)).all():
+    for project in projects:
         stats = dqa_engine.evaluate_project(db, project.id)
         for key in totals:
             totals[key] += stats[key]

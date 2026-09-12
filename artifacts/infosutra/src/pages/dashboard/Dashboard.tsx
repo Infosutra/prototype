@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboardActivity,
@@ -8,8 +8,9 @@ import {
 } from "@workspace/api-client-react";
 import { Header } from "@/components/layout/Header";
 import { Layout } from "@/components/layout/Layout";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Database, Users, Activity, FolderGit2, AlertCircle, ShieldCheck } from "lucide-react";
+import { Database, Users, Activity, FolderGit2, AlertCircle, ShieldCheck, CalendarRange, X } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -20,6 +21,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useStudy } from "@/components/study/StudyProvider";
+import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
 
 function formatRelativeTime(value: string): string {
   const date = new Date(value);
@@ -41,15 +43,61 @@ function formatTrendLabel(date: string): string {
 }
 
 export default function Dashboard() {
+  const initialParams =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+  const [dateFrom, setDateFrom] = useState(initialParams.get("dateFrom") || "");
+  const [dateTo, setDateTo] = useState(initialParams.get("dateTo") || "");
+
+  const syncDateParams = (nextFrom: string, nextTo: string) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (nextFrom) url.searchParams.set("dateFrom", nextFrom);
+    else url.searchParams.delete("dateFrom");
+    if (nextTo) url.searchParams.set("dateTo", nextTo);
+    else url.searchParams.delete("dateTo");
+    window.history.replaceState({}, "", url);
+  };
+
+  const setDateFromWithUrl = (next: string) => {
+    setDateFrom(next);
+    syncDateParams(next, dateTo);
+  };
+
+  const setDateToWithUrl = (next: string) => {
+    setDateTo(next);
+    syncDateParams(dateFrom, next);
+  };
+
+  const clearDateRange = () => {
+    setDateFrom("");
+    setDateTo("");
+    syncDateParams("", "");
+  };
+
   const { activeStudy, activeStudyId } = useStudy();
-  const summaryQuery = useGetDashboardSummary();
-  const activityQuery = useGetDashboardActivity();
+  const dateRangeParams = {
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  };
+  const studyParams = activeStudyId
+    ? { studyId: activeStudyId, ...dateRangeParams }
+    : undefined;
+  const enabled = { query: { enabled: Boolean(activeStudyId) } as never };
+  const hasDateFilter = Boolean(dateFrom || dateTo);
+
+  const summaryQuery = useGetDashboardSummary(studyParams, enabled);
+  const activityQuery = useGetDashboardActivity(studyParams, enabled);
   const trendsQuery = useGetSubmissionTrends(
-    activeStudyId ? { period: "30d", studyId: activeStudyId } : { period: "30d" },
+    {
+      period: "30d",
+      studyId: activeStudyId ?? undefined,
+      ...dateRangeParams,
+    },
+    enabled,
   );
-  const dqaByProjectQuery = useGetDqaByProject(
-    activeStudyId ? { studyId: activeStudyId } : undefined,
-  );
+  const dqaByProjectQuery = useGetDqaByProject(studyParams, enabled);
 
   const summary = summaryQuery.data;
   const activityFeed = activityQuery.data ?? [];
@@ -57,10 +105,7 @@ export default function Dashboard() {
     date: formatTrendLabel(point.date),
     submissions: point.submissions,
   }));
-  const studyProjectIds = new Set((activeStudy?.projects ?? []).map((p) => p.id));
-  const topProjects = (summary?.topProjects ?? []).filter(
-    (p) => !activeStudyId || studyProjectIds.has(p.id),
-  );
+  const topProjects = summary?.topProjects ?? [];
   const projectDqa = dqaByProjectQuery.data ?? [];
   const isLoading =
     summaryQuery.isLoading || activityQuery.isLoading || trendsQuery.isLoading;
@@ -94,12 +139,63 @@ export default function Dashboard() {
               }${
                 summary?.lastSyncAt ? ` · Last sync ${formatRelativeTime(summary.lastSyncAt)}` : ""
               }`
-            : summary?.lastSyncAt
-              ? `Last sync ${formatRelativeTime(summary.lastSyncAt)}`
-              : "Overview of field data operations"
+            : "Select a study to view field operations"
         }
-        action={<span className="text-xs text-muted-foreground font-mono">LIVE</span>}
+        action={
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1 rounded-lg border border-border/80 bg-muted/30 p-1 shadow-sm">
+              <CalendarRange className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <label className="flex items-center gap-1.5 pl-0.5">
+                <span className="sr-only">Submitted from date</span>
+                <input
+                  type="date"
+                  className="h-7 w-[8.25rem] rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring/40 [color-scheme:light]"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => setDateFromWithUrl(e.target.value)}
+                  aria-label="Submitted from date"
+                />
+              </label>
+              <span className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                to
+              </span>
+              <label className="flex items-center">
+                <span className="sr-only">Submitted to date</span>
+                <input
+                  type="date"
+                  className="h-7 w-[8.25rem] rounded-md border-0 bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring/40 [color-scheme:light]"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => setDateToWithUrl(e.target.value)}
+                  aria-label="Submitted to date"
+                />
+              </label>
+              {hasDateFilter ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={clearDateRange}
+                  aria-label="Clear date range"
+                  title="All dates"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <span className="w-1.5" aria-hidden />
+              )}
+            </div>
+            <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-emerald-700 dark:text-emerald-400">
+              LIVE
+            </span>
+          </div>
+        }
       />
+      <RequireActiveStudy
+        title="Select a study for the dashboard"
+        description="Dashboard metrics, activity, and data quality summaries run inside a study workspace."
+      >
       <div className="flex-1 overflow-auto p-4 md:p-6">
         {error && (
           <Card className="mb-6 border-destructive/40">
@@ -118,11 +214,7 @@ export default function Dashboard() {
                 <h3 className="text-3xl font-bold data-hero">
                   {isLoading
                     ? "—"
-                    : (
-                        activeStudy?.submissionCount ??
-                        summary?.totalSubmissions ??
-                        0
-                      ).toLocaleString()}
+                    : (summary?.totalSubmissions ?? 0).toLocaleString()}
                 </h3>
               </div>
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
@@ -133,7 +225,9 @@ export default function Dashboard() {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">This Month</p>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  {hasDateFilter ? "This month (in range)" : "This Month"}
+                </p>
                 <h3 className="text-3xl font-bold data-hero">
                   {isLoading ? "—" : (summary?.submissionsThisMonth ?? 0).toLocaleString()}
                 </h3>
@@ -146,13 +240,9 @@ export default function Dashboard() {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">
-                  {activeStudy ? "Study Forms" : "Synced Forms"}
-                </p>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Study Forms</p>
                 <h3 className="text-3xl font-bold data-hero">
-                  {isLoading
-                    ? "—"
-                    : activeStudy?.projectCount ?? summary?.totalProjects ?? 0}
+                  {isLoading ? "—" : summary?.totalProjects ?? 0}
                 </h3>
               </div>
               <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent">
@@ -254,12 +344,20 @@ export default function Dashboard() {
 
         <Card className="mb-6">
           <CardHeader className="py-4 border-b">
-            <CardTitle className="text-sm font-semibold">Submission Volume Trend (30d)</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              {hasDateFilter
+                ? "Submission Volume Trend (selected range)"
+                : "Submission Volume Trend (30d)"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-4 h-[300px]">
             {trendData.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                {isLoading ? "Loading trend…" : "No submissions in the last 30 days"}
+                {isLoading
+                  ? "Loading trend…"
+                  : hasDateFilter
+                    ? "No submissions in the selected range"
+                    : "No submissions in the last 30 days"}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -366,13 +464,9 @@ export default function Dashboard() {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground">{activity.message}</p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                        {activity.projectName && (
-                          <span className="truncate">{activity.projectName}</span>
-                        )}
-                        {activity.projectName && <span>•</span>}
-                        <span className="shrink-0">{formatRelativeTime(activity.timestamp)}</span>
-                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatRelativeTime(activity.timestamp)}
+                      </p>
                     </div>
                   </div>
                 ))
@@ -381,6 +475,7 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+      </RequireActiveStudy>
     </Layout>
   );
 }

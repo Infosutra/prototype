@@ -143,6 +143,38 @@ def test_equals_field_vs_field():
     assert ok is True
 
 
+def test_consistency_uses_equals_not_not_equals():
+    """Checks return passes=True when valid; flag when False.
+
+    Matching fields must use equals (pass). not_equals with equal values fails
+    and would false-positive a consistency rule.
+    """
+    pack = {}
+    data = {"A10": "24", "D4": "24"}
+    ok_equals, _ = eval_check(
+        {"op": "equals", "field": "A10", "field_b": "D4"},
+        data=data,
+        pack=pack,
+    )
+    assert ok_equals is True
+
+    ok_mismatch, _ = eval_check(
+        {"op": "equals", "field": "A10", "field_b": "D4"},
+        data={"A10": "24", "D4": "10"},
+        pack=pack,
+    )
+    assert ok_mismatch is False
+
+    # Inverted operator: equal values fail the check → false positive flag
+    ok_inverted, details = eval_check(
+        {"op": "not_equals", "field": "A10", "field_b": "D4"},
+        data=data,
+        pack=pack,
+    )
+    assert ok_inverted is False
+    assert details["value"] == details["expected"] == "24"
+
+
 def test_duration_min_and_max_band():
     pack = {}
     check = {

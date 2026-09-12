@@ -37,7 +37,7 @@ export function Header({ title, description, action }: HeaderProps) {
         </div>
       </div>
       {action && (
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end max-w-[50%] sm:max-w-none">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end max-w-[65%] sm:max-w-none">
           {action}
         </div>
       )}

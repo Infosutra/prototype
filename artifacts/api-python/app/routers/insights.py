@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any
@@ -13,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Insight, Project, Submission
 from app.db.session import get_db
 from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_settings
+from app.integrations.llm.json_object import parse_json_object
 from app.schemas.common import OkResponse, StudyProjectQuery
 from app.schemas.misc import InsightGenerateInput, InsightInput, InsightOut
 from app.services.settings import get_or_create_settings
@@ -37,23 +37,8 @@ def _map(row: Insight) -> InsightOut:
 
 
 def _parse_insight_payload(text: str) -> dict[str, Any]:
-    """Best-effort JSON extraction from model output."""
-    stripped = text.strip()
-    try:
-        data = json.loads(stripped)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r"\{[\s\S]*\}", stripped)
-    if match:
-        try:
-            data = json.loads(match.group(0))
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
-    return {}
+    """Best-effort JSON object from model output; logs empty vs malformed distinctly."""
+    return parse_json_object(text, log_label="AI insights").data or {}
 
 
 @router.get("", response_model=list[InsightOut], operation_id="getInsights")
@@ -61,6 +46,10 @@ def list_insights(
     q: Annotated[StudyProjectQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[InsightOut]:
+    if not q.project_id and not q.study_id:
+        raise HTTPException(
+            status_code=400, detail="studyId or projectId is required"
+        )
     query = select(Insight).order_by(Insight.created_at.desc())
     if q.project_id:
         query = query.where(Insight.project_id == q.project_id)

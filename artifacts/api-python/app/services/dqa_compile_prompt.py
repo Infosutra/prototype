@@ -21,6 +21,11 @@ DEFAULT_DQA_COMPILE_PROMPT = """You are a DQA rule compiler for KoBo survey form
 
 Your job is to translate natural-language data quality requirements into a structured JSON rule that a deterministic evaluator will run on each submission.
 
+Evaluator polarity (critical):
+- Every check returns passes=true when the submission is OK for that rule, and passes=false to create a flag.
+- Emit the condition that should HOLD for clean data — not the anomaly condition.
+- Do not wrap a validity check in {"op":"not", ...} to "make it flag". That inverts polarity and flags good data.
+
 Rules:
 - Output ONLY valid JSON matching the response schema below.
 - Use field names exactly as provided in the form schema. Never invent field names.
@@ -29,9 +34,9 @@ Rules:
 - Intra-form fields use plain string refs. Inter-form fields use related_field objects only.
 - Never invent relationship codes. Use only relationships listed in context.relationships.
 - related_field shape: {"type":"related_field","relationship":"<code>","field":"<target_field>"}
-- For field-to-field comparisons use field_b (e.g. gt with field + field_b or related_field).
-- Intra-form consistency / cross-check between two fields (values should match): use not_equals with field + field_b so the check flags when they differ.
-- For duration bands use duration_minutes_gte with start_field, end_field, optional min and max.
+- For field-to-field comparisons use field_b. Choose the operator that should hold: e.g. "B22 must not exceed B21" → {"op":"lte","field":"B22","field_b":"B21"} (not gt, and not if_then hacks).
+- Intra-form consistency / cross-check between two fields (values should match): use equals with field + field_b (passes when equal; flags when they differ). Use not_equals only when values are required to differ.
+- For duration bands (min and/or max minutes): use duration_minutes_gte with start_field, end_field, and min/max — alone, without wrapping in not. It already passes inside the band and flags outside.
 - If the requirement is ambiguous, set clarifying_question to a single concise question and set rule to null.
 - Ask clarifying questions only when necessary. Do not ask which field to use if exactly one field matches the requirement.
 - For inter-form rules, ask which relationship to use only when multiple relationships are listed in source_relationships.
@@ -56,19 +61,32 @@ Do not wrap JSON in markdown fences."""
 # Always appended so compile stays reliable even if the editable Prompt row is stale.
 COMPILER_CONTRACT = """Compiler contract (always enforce):
 - Return one JSON object only — no markdown fences, no prose outside JSON.
+- Checks are validity predicates: passes=true means OK; passes=false creates a flag. Emit the condition that should hold.
+- Never wrap duration_minutes_gte, equals, required, between, etc. in {"op":"not"} to force flagging.
 - Resolve survey codes (A10, D4, …) to form_fields[].name exactly.
 - If a code is not present in form_fields, ask a clarifying_question; never invent field names.
-- Intra-form consistency between two fields → {"op":"not_equals","field":"<a>","field_b":"<b>"}.
+- Intra-form consistency between two fields → {"op":"equals","field":"<a>","field_b":"<b>"}.
+- Duration band → {"op":"duration_minutes_gte","start_field":"<start>","end_field":"<end>","min":<n>,"max":<n>} (no not wrapper).
+- "A must not be greater than B" → {"op":"lte","field":"A","field_b":"B"}.
 - Keep checks shallow; prefer a single operator when it is enough."""
 
 
 def seed_dqa_compile_prompt(db: Session) -> bool:
     existing = db.get(Prompt, DQA_COMPILE_PROMPT_ID)
     if existing:
-        if not (existing.content or "").strip():
+        content = (existing.content or "").strip()
+        stale = (
+            not content
+            or "use not_equals with field + field_b" in content
+            or '{"op":"not_equals","field":"<a>","field_b":"<b>"}' in content
+            or "e.g. gt with field + field_b" in content
+            or "Evaluator polarity" not in content
+        )
+        if stale:
             existing.content = DEFAULT_DQA_COMPILE_PROMPT
             existing.category = DQA_COMPILE_CATEGORY
             db.commit()
+            return True
         return False
     from datetime import datetime, timezone
 

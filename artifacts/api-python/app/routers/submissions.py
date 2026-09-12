@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import DqaFlag, Project, Submission
 from app.db.session import get_db
+from app.repositories.dqa import parse_submitted_at_bound
 from app.schemas.common import SubmissionsListQuery
 from app.schemas.submissions import FormResponse, SubmissionOut, SubmissionsPage
 from app.services.form_labels import build_form_responses
@@ -105,6 +106,10 @@ def list_submissions(
 ) -> SubmissionsPage:
     project_id = params.project_id
     study_id = params.study_id
+    if not project_id and not study_id:
+        raise HTTPException(
+            status_code=400, detail="studyId or projectId is required"
+        )
     status = params.status
     date_from = params.date_from
     date_to = params.date_to
@@ -119,16 +124,12 @@ def list_submissions(
         )
     if status and status != "all":
         conditions.append(Submission.status == status)
-    if date_from:
-        conditions.append(
-            Submission.submitted_at
-            >= datetime.fromisoformat(date_from.replace("Z", "+00:00")).replace(tzinfo=None)
-        )
-    if date_to:
-        conditions.append(
-            Submission.submitted_at
-            <= datetime.fromisoformat(date_to.replace("Z", "+00:00")).replace(tzinfo=None)
-        )
+    start = parse_submitted_at_bound(date_from, end=False)
+    finish = parse_submitted_at_bound(date_to, end=True)
+    if start is not None:
+        conditions.append(Submission.submitted_at >= start)
+    if finish is not None:
+        conditions.append(Submission.submitted_at <= finish)
     dqa_filter = _dqa_condition(params.dqa, project_id=project_id, study_id=study_id)
     if dqa_filter is not None:
         conditions.append(dqa_filter)

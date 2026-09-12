@@ -6,11 +6,11 @@ produces a daily report today and a close-out report over the full study window.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.db.models import AppSettings, Study
@@ -34,7 +34,7 @@ from app.services.report_tools import ReportDataContext, ReportToolError, call_t
 from app.services.settings import get_or_create_settings
 from app.services.studies import study_day_number
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 _KIND_LABEL: dict[str, str] = {
     "daily": "Daily",
@@ -115,10 +115,10 @@ def resolve_data(
         try:
             data[key] = call_tool(data_context, source_id, params)
         except ReportToolError as exc:
-            logger.warning("Report data source '%s' unavailable: %s", source_id, exc)
+            logger.warning("report_data_source_unavailable", source_id=source_id, error=str(exc))
             errors[key] = str(exc)
         except Exception:
-            logger.exception("Report data source '%s' failed", source_id)
+            logger.exception("report_data_source_failed", source_id=source_id)
             errors[key] = f"'{source_id}' data is not available for this reporting period."
     return data, errors
 
@@ -170,6 +170,21 @@ def _meta(
     }
 
 
+def _spec_needs_stats_collapse(spec: ReportSpec, context: ReportExecutionContext) -> bool:
+    """Whether execute_spec must materialize ctx.stats() (full collapse / final overlay).
+
+    Common adhoc/daily reports use Phase 2 tools + tool-data fallbacks and do not
+    need the eager collapse. Final reports and specs that include triangulation_summary
+    still require it.
+    """
+    if context.report_kind == "final":
+        return True
+    for _key, source_id, _params in required_data_keys(spec):
+        if source_id == "triangulation_summary":
+            return True
+    return False
+
+
 def execute_spec(
     db: Session,
     spec: ReportSpec,
@@ -188,11 +203,12 @@ def execute_spec(
 
     data, errors = resolve_data(data_context, spec)
 
-    stats: dict[str, Any] | None = None
-    try:
-        stats = data_context.stats()
-    except Exception:
-        logger.exception("Could not compute study statistics for narrative fallbacks")
+    stats_for_narratives: dict[str, Any] | None = stats
+    if stats_for_narratives is None and _spec_needs_stats_collapse(spec, context):
+        try:
+            stats_for_narratives = data_context.stats()
+        except Exception:
+            logger.exception("study_statistics_compute_failed")
 
     narratives = generate_narratives(
         db,
@@ -202,7 +218,7 @@ def execute_spec(
         context_summary=context.model_dump(by_alias=True),
         system_prompt=analyst_prompt,
         style_guidance=style_guidance,
-        stats=stats,
+        stats=stats_for_narratives,
         run_ai=run_ai,
     )
 
