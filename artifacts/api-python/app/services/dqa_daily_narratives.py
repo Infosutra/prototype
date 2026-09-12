@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
+
+import structlog
 
 from app.db.models import AppSettings
 from app.domain.reporting.narratives import _fallback_coverage, _fallback_headline
 from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
+
 
 def generate_ai_narratives(
     stats: dict[str, Any],
@@ -82,7 +84,7 @@ def generate_ai_narratives(
         coverage = parts[1] if len(parts) > 1 else _fallback_coverage(stats)
         return {"aiHeadline": headline, "aiCoverageNote": coverage, "aiSource": llm.provider}
     except LlmError:
-        logger.exception("OpenRouter narrative failed; using fallback")
+        logger.exception("daily_narrative_failed")
         return {
             "aiHeadline": _fallback_headline(stats),
             "aiCoverageNote": _fallback_coverage(stats),

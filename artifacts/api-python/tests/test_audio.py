@@ -324,7 +324,6 @@ def test_process_provider_failure_is_logged(
     mock_get_provider,
     db: Session,
     tmp_path,
-    caplog,
     monkeypatch,
 ):
     monkeypatch.setattr("app.services.audio_storage.audio_dir", lambda: tmp_path)
@@ -369,7 +368,9 @@ def test_process_provider_failure_is_logged(
 
     mock_get_provider.return_value = FakeSarvam()
 
-    with caplog.at_level("ERROR"):
+    from structlog.testing import capture_logs
+
+    with capture_logs() as captured:
         process_recording_transcription("rec-4")
 
     updated = db.get(AudioRecording, "rec-4")
@@ -378,9 +379,10 @@ def test_process_provider_failure_is_logged(
     assert updated.transcription_error == "Sarvam transcription failed"
 
     assert any(
-        "recording_id=rec-4" in record.message
-        and "provider=sarvam" in record.message
-        and "job_id=job-xyz" in record.message
-        and "provider_reported_failure" in record.message
-        for record in caplog.records
+        entry.get("event") == "transcription_failed"
+        and entry.get("recording_id") == "rec-4"
+        and entry.get("provider") == "sarvam"
+        and entry.get("job_id") == "job-xyz"
+        and entry.get("reason") == "provider_reported_failure"
+        for entry in captured
     )

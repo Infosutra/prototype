@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from logging.config import fileConfig
 from pathlib import Path
 
@@ -14,7 +15,9 @@ from app.db import models  # noqa: F401 — register all models on metadata
 
 config = context.config
 
-if config.config_file_name is not None:
+# Only apply alembic.ini logging when the process has no handlers yet
+# (CLI `alembic ...`). When the API already configured structlog, leave it alone.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

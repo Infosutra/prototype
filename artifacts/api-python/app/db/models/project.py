@@ -36,6 +36,7 @@ class Project(Base):
     form_definition: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     last_submission_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_full_reconcile_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deployed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     kobo_date_modified: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     sync_watermark: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

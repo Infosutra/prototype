@@ -8,12 +8,12 @@ Never contacts KoboToolbox. Refuses to run unless:
 
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 from pathlib import Path
 from typing import Any
 
+import structlog
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -22,7 +22,7 @@ from app.db.models import AppSettings  # noqa: F401 — register models
 from app.db import models as _models  # noqa: F401
 from app.services.studies import seed_default_study
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 # local_reset.py → services → app → api-python → artifacts → repo root
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -101,7 +101,7 @@ def reset_local_database(*, database_path: str | None = None) -> dict[str, Any]:
             try:
                 snapshot = _snapshot_settings(db)
             except Exception:
-                logger.exception("Could not snapshot settings; continuing with empty settings")
+                logger.exception("settings_snapshot_failed")
                 snapshot = None
         engine.dispose()
 
@@ -109,7 +109,7 @@ def reset_local_database(*, database_path: str | None = None) -> dict[str, Any]:
         for sibling in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
             if sibling.is_file():
                 sibling.unlink()
-                logger.info("Removed %s", sibling)
+                logger.info("removed_db_file", path=str(sibling))
 
     path.parent.mkdir(parents=True, exist_ok=True)
     from alembic import command
@@ -167,7 +167,9 @@ def reset_local_database(*, database_path: str | None = None) -> dict[str, Any]:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    from app.core.logging import setup_logging
+
+    setup_logging()
     result = reset_local_database()
     print("Local DB reset complete (Kobo was NOT contacted):")
     for key, value in result.items():

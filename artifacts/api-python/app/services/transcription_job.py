@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime, timezone
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,7 @@ from app.services.transcript_export import clear_transcript_exports
 from app.services.transcript_storage import clear_transcripts, save_transcripts
 from app.services.transcription_cost import estimate_amount
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def _log_transcription_failure(
@@ -30,16 +30,16 @@ def _log_transcription_failure(
     provider: str | None = None,
     job_id: str | None = None,
     error: str | None = None,
-    level: int = logging.ERROR,
+    warning: bool = False,
 ) -> None:
-    logger.log(
-        level,
-        "Transcription failed recording_id=%s provider=%s job_id=%s reason=%s error=%s",
-        recording_id,
-        provider or "-",
-        job_id or "-",
-        reason,
-        (error or "-")[:500],
+    log = logger.warning if warning else logger.error
+    log(
+        "transcription_failed",
+        recording_id=recording_id,
+        provider=provider,
+        job_id=job_id,
+        reason=reason,
+        error=error[:500] if error else None,
     )
 
 
@@ -106,7 +106,7 @@ def process_recording_transcription(recording_id: str) -> None:
             _log_transcription_failure(
                 recording_id=recording_id,
                 reason="disabled_in_settings",
-                level=logging.WARNING,
+                warning=True,
             )
             recording.transcription_status = "failed"
             recording.transcription_error = "Transcription is disabled in settings"
@@ -207,10 +207,11 @@ def process_recording_transcription(recording_id: str) -> None:
         except Exception:
             pass
         logger.exception(
-            "Transcription failed recording_id=%s provider=%s job_id=%s reason=unexpected_exception",
-            recording_id,
-            provider_name or "-",
-            job_id or "-",
+            "transcription_failed",
+            recording_id=recording_id,
+            provider=provider_name or "-",
+            job_id=job_id or "-",
+            reason="unexpected_exception",
         )
         try:
             recording = db.get(AudioRecording, recording_id)
@@ -220,8 +221,8 @@ def process_recording_transcription(recording_id: str) -> None:
                 db.commit()
         except Exception:
             logger.exception(
-                "Failed to persist transcription error recording_id=%s",
-                recording_id,
+                "transcription_error_persist_failed",
+                recording_id=recording_id,
             )
     finally:
         db.close()

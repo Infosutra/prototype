@@ -7,8 +7,6 @@ also the worked example a planner is shown when composing new reports.
 
 from __future__ import annotations
 
-import logging
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -29,8 +27,6 @@ from app.domain.report_spec.spec import (
     TextComponent,
 )
 from app.services.report_templates import add_version, create_template
-
-logger = logging.getLogger(__name__)
 
 DAILY_TEMPLATE_ID = "seed-dqa-daily-template"
 FINAL_TEMPLATE_ID = "seed-dqa-final-template"
@@ -61,7 +57,6 @@ Section 1.5 — Submission quality by enumerator: forms submitted, clean forms, 
 exact DQA issues raised.
 
 Close with the read-only sign-off checklist of open RED and AMBER items."""
-
 
 def build_daily_dqa_spec() -> ReportSpec:
     """The Daily DQA report expressed as a specification."""
@@ -321,7 +316,6 @@ def build_daily_dqa_spec() -> ReportSpec:
         ],
     )
 
-
 FINAL_TEMPLATE_PROMPT = """Create the final close-out data quality report for the study.
 
 Title: Final DQA Report.
@@ -345,7 +339,6 @@ Section 2.6 — Triangulation across tools: study-defined views with mismatch co
 concordance.
 
 Close with the sign-off checklist of remaining open items."""
-
 
 def build_final_dqa_spec() -> ReportSpec:
     """The Final DQA report expressed as a specification."""
@@ -550,7 +543,6 @@ def build_final_dqa_spec() -> ReportSpec:
         ],
     )
 
-
 SEED_TEMPLATES: tuple[tuple[str, str, str, str, str], ...] = (
     (
         DAILY_TEMPLATE_ID,
@@ -574,7 +566,6 @@ _SPEC_BUILDERS = {
     DAILY_TEMPLATE_ID: build_daily_dqa_spec,
     FINAL_TEMPLATE_ID: build_final_dqa_spec,
 }
-
 
 def seed_report_templates(db: Session) -> int:
     """Insert or refresh seeded system templates.

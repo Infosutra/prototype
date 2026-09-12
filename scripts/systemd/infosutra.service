@@ -18,7 +18,7 @@ TimeoutStopSec=30
 NoNewPrivileges=true
 PrivateTmp=true
 
-# Logs: journalctl -u infosutra -f
+# Logs: structured JSON on stdout → journalctl -u infosutra -f
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=infosutra

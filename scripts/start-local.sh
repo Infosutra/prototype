@@ -116,18 +116,21 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Starting API (FastAPI) at http://127.0.0.1:${API_PORT}"
-setsid env \
+# Job control so each bg job gets its own process group for Ctrl+C cleanup.
+set -m
+env \
+  PYTHONUNBUFFERED=1 \
   PORT="$API_PORT" \
   DATABASE_PATH="$DATABASE_PATH" \
   SECRET_KEY="$SECRET_KEY" \
   KOBO_CREDENTIALS_ENCRYPTION_KEY="$KOBO_CREDENTIALS_ENCRYPTION_KEY" \
   SERVE_FRONTEND=0 \
   uv run --directory "$ROOT_DIR/artifacts/api-python" \
-    uvicorn app.main:app --host 0.0.0.0 --port "$API_PORT" &
+    python -u -m app.main &
 API_PID=$!
 
 echo "Starting dashboard at http://127.0.0.1:${WEB_PORT}"
-setsid env PORT="$WEB_PORT" BASE_PATH="/" API_URL="http://127.0.0.1:${API_PORT}" \
+env PORT="$WEB_PORT" BASE_PATH="/" API_URL="http://127.0.0.1:${API_PORT}" \
   corepack pnpm --filter @workspace/infosutra dev &
 WEB_PID=$!
 

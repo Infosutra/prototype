@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import select
@@ -37,7 +37,7 @@ from app.services.report_runs import record_run
 from app.services.report_tools import all_descriptors
 from app.services.settings import get_or_create_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 catalog_router = APIRouter(prefix="/report-spec", tags=["report-spec"])
 router = APIRouter(prefix="/report-templates", tags=["report-templates"])
@@ -355,7 +355,7 @@ def create_template_stream(
                 + "\n\n"
             )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Template create stream failed")
+            logger.exception("template_create_stream_failed")
             yield (
                 "event: error\ndata: "
                 + json.dumps({"message": str(exc), "code": "stream_error"})

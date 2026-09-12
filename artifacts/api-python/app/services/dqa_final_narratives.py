@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
+
+import structlog
 
 from app.domain.reporting import final_stats as _final_stats
 
@@ -13,7 +14,7 @@ pass_rate = _final_stats._pass_rate
 section_prose = _final_stats._section_prose
 tr1_summary = _final_stats._tr1_summary
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def _build_final_narratives(
@@ -104,7 +105,7 @@ def _build_final_narratives(
             "aiSource": llm.provider,
         }
     except LlmError:
-        logger.exception("Final DQA AI narrative failed; using exhaustive fallback")
+        logger.exception("final_narrative_failed")
         return {
             "aiHeadline": fallback_exec,
             "aiCoverageNote": prose["coverage"],

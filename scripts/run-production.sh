@@ -36,4 +36,6 @@ cd "$API_DIR"
 # Ensure deps are present (cheap if already synced)
 uv sync --frozen 2>/dev/null || uv sync
 
-exec uv run uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
+export PYTHONUNBUFFERED=1
+# Must use app.main:run so structured logging is configured before uvicorn starts.
+exec uv run python -u -m app.main

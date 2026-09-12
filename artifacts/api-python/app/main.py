@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import structlog
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -35,11 +36,15 @@ from app.services.daily_report import maybe_send_scheduled_report
 from app.services.dqa_daily_email import maybe_send_scheduled_dqa_daily
 from app.services.transcription_job import drain_pending_transcriptions
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 # artifacts/api-python/app/main.py → repo root is parents[3]
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _FRONTEND_DIST = _REPO_ROOT / "artifacts" / "infosutra" / "dist" / "public"
+
+
+def _serve_frontend_enabled() -> bool:
+    return os.environ.get("SERVE_FRONTEND", "").strip().lower() in {"1", "true", "yes"}
 
 
 async def _scheduler_loop(stop_event: asyncio.Event) -> None:
@@ -53,7 +58,7 @@ async def _scheduler_loop(stop_event: asyncio.Event) -> None:
                 db.close()
             drain_pending_transcriptions()
         except Exception:
-            logger.exception("Daily report scheduler tick failed")
+            logger.exception("scheduler_tick_failed")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=30)
         except TimeoutError:
@@ -62,7 +67,6 @@ async def _scheduler_loop(stop_event: asyncio.Event) -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    setup_logging()
     init_db()
     db = SessionLocal()
     try:
@@ -71,46 +75,54 @@ async def lifespan(_app: FastAPI):
         from app.services import studies as studies_service
 
         if clear_undecryptable_secrets(db):
-            logger.warning(
-                "Cleared stored credentials that could not be decrypted with the "
-                "current encryption key. Re-enter them in study Kobo settings.",
-            )
+            logger.warning("cleared_undecryptable_secrets")
         study = studies_service.seed_default_study(db)
-        logger.info("Study ready: %s (%s)", study.name, study.id)
+        logger.info("study_ready", study_id=study.id, study_name=study.name)
         seeded = dqa_engine.seed_rule_packs(db, overwrite=False)
         if seeded:
-            logger.info("Seeded %s DQA rule pack(s)", seeded)
+            logger.info("seeded_dqa_rule_packs", count=seeded)
         from app.services.dqa_compile_prompt import seed_dqa_compile_prompt
         from app.services.dqa_report_prompts import seed_dqa_report_prompts
 
         if seed_dqa_compile_prompt(db):
-            logger.info("Seeded DQA compile prompt template")
+            logger.info("seeded_dqa_compile_prompt")
         report_prompts = seed_dqa_report_prompts(db)
         if report_prompts:
-            logger.info("Seeded %s DQA report prompt template(s)", report_prompts)
+            logger.info("seeded_dqa_report_prompts", count=report_prompts)
         from app.services.report_planner_prompts import seed_report_ai_prompts
         from app.services.report_seed_templates import seed_report_templates
 
         ai_prompts = seed_report_ai_prompts(db)
         if ai_prompts:
-            logger.info("Seeded %s report AI prompt template(s)", ai_prompts)
+            logger.info("seeded_report_ai_prompts", count=ai_prompts)
         templates = seed_report_templates(db)
         if templates:
-            logger.info("Seeded/updated %s system report template(s)", templates)
+            logger.info("seeded_report_templates", count=templates)
         assigned = studies_service.apply_all_study_form_maps(db)
         if assigned:
-            logger.info("Assigned %s project(s) to studies from seed tool links", assigned)
+            logger.info("assigned_study_form_maps", count=assigned)
     finally:
         db.close()
+
+    if _serve_frontend_enabled():
+        if _FRONTEND_DIST.is_dir() and (_FRONTEND_DIST / "index.html").is_file():
+            logger.info("serving_frontend", path=str(_FRONTEND_DIST))
+        else:
+            logger.warning(
+                "frontend_build_missing",
+                path=str(_FRONTEND_DIST),
+                hint="Run scripts/build-frontend.sh",
+            )
+
     stop_event = asyncio.Event()
     task = asyncio.create_task(_scheduler_loop(stop_event))
-    logger.info("Infosutra API started")
+    logger.info("api_started")
     try:
         yield
     finally:
         stop_event.set()
         await task
-        logger.info("Infosutra API stopped")
+        logger.info("api_stopped")
 
 
 def create_app() -> FastAPI:
@@ -131,8 +143,13 @@ def create_app() -> FastAPI:
     )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(_request: Request, exc: Exception):
-        logger.exception("Unhandled error: %s", exc)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        logger.exception(
+            "unhandled_error",
+            error=str(exc),
+            path=str(request.url.path),
+            method=request.method,
+        )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
     prefix = "/api"
@@ -155,13 +172,8 @@ def create_app() -> FastAPI:
     app.include_router(usage.router, prefix=prefix)
 
     # Production UI only (Pi/systemd). Local start-local uses Vite on :5173.
-    serve_frontend = os.environ.get("SERVE_FRONTEND", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
     if (
-        serve_frontend
+        _serve_frontend_enabled()
         and _FRONTEND_DIST.is_dir()
         and (_FRONTEND_DIST / "index.html").is_file()
     ):
@@ -187,14 +199,6 @@ def create_app() -> FastAPI:
                 return FileResponse(candidate)
             return FileResponse(_FRONTEND_DIST / "index.html")
 
-        logger.info("Serving frontend from %s", _FRONTEND_DIST)
-    elif serve_frontend:
-        logger.warning(
-            "SERVE_FRONTEND is set but build not found at %s — API only. "
-            "Run scripts/build-frontend.sh.",
-            _FRONTEND_DIST,
-        )
-
     return app
 
 
@@ -202,12 +206,17 @@ app = create_app()
 
 
 def run() -> None:
-    import uvicorn
-
+    setup_logging()
     settings = get_settings()
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=settings.port,
         reload=False,
+        access_log=True,
+        log_config=None,
     )
+
+
+if __name__ == "__main__":
+    run()

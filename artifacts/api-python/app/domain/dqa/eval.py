@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any
+
+import structlog
 
 from app.domain.dqa.context import EvaluationContext, RelatedResolution
 from app.domain.dqa.refs import (
@@ -27,7 +28,7 @@ from app.domain.dqa.values import (
     get_value,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 def eval_check(
     check: dict[str, Any] | None,
@@ -364,5 +365,5 @@ def eval_check(
             return False, details
         return True, details
 
-    logger.warning("Unknown DQA operator: %s", op)
+    logger.warning("unknown_dqa_operator", operator=op)
     return True, enrich_details_with_related(details, ctx)

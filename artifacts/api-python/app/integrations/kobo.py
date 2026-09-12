@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urljoin
 
+import structlog
 import httpx
+
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class KoboApiError(Exception):
@@ -163,7 +166,13 @@ class KoboClient:
         """
         try:
             rows = self._paginate_asset_data(asset_uid, params={"fields": '["_id"]'})
-        except KoboApiError:
+        except KoboApiError as exc:
+            logger.warning(
+                "kobo_id_fields_query_failed",
+                asset_uid=asset_uid,
+                error=str(exc),
+                fallback="full_payloads",
+            )
             rows = self._paginate_asset_data(asset_uid)
         ids: set[str] = set()
         for row in rows:

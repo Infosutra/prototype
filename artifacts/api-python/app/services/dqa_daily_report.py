@@ -7,8 +7,6 @@ persists the result. The request/response contract is unchanged.
 
 from __future__ import annotations
 
-import logging
-
 from sqlalchemy.orm import Session
 
 from app.db.models import Report, Study
@@ -24,10 +22,7 @@ from app.services.report_templates import (
 )
 from app.services.settings import get_or_create_settings
 
-logger = logging.getLogger(__name__)
-
 __all__ = ["build_daily_dqa_stats", "generate_daily_dqa_report"]
-
 
 def _daily_template(db: Session, study: Study):
     template = resolve_template(db, study, "daily")
@@ -40,7 +35,6 @@ def _daily_template(db: Session, study: Study):
     if template is None:
         raise TemplateError("No Daily report template is available for this study.")
     return template
-
 
 def generate_daily_dqa_report(
     db: Session,

@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.db.models import ReportRun
 from app.services.usage_ledger import record_usage_event
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def _now() -> datetime:
@@ -93,5 +93,5 @@ def record_run(
         if commit:
             db.commit()
     except Exception:
-        logger.exception("Failed to record report run (mode=%s)", mode)
+        logger.exception("report_run_record_failed", mode=mode)
     return run

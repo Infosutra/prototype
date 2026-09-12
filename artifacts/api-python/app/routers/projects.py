@@ -13,6 +13,7 @@ from app.schemas.projects import ProjectOut, ProjectUpdate, SyncResult
 from app.schemas.submissions import SubmissionGrid
 from app.services import studies as studies_service
 from app.services.form_labels import get_form_translations, resolve_label_language
+from app.integrations.kobo import KoboApiError
 from app.services.kobo_sync import sync_all_projects, sync_project
 from app.services.projects import project_to_dict
 from app.services.submission_grid import DEFAULT_LIMIT, MAX_LIMIT, build_submission_grid
@@ -49,6 +50,8 @@ def sync_projects(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KoboApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return SyncResult.model_validate(result)
 
 
@@ -164,4 +167,6 @@ def sync_one_project(project_id: str, db: Session = Depends(get_db)) -> SyncResu
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KoboApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return SyncResult.model_validate(result)
