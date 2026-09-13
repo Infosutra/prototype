@@ -29,6 +29,8 @@ node_modules
 /coverage
 /data/*.sqlite*
 /data/reports/
+/data/audio/
+/data/jobs/
 .env
 .env.local
 /libpeerconnection.log
@@ -42,6 +44,7 @@ testem.log
 Thumbs.db
 
 # Local tooling / secrets / Python venv
+.agents/
 .cache/
 .local/
 artifacts/api-python/.venv/
@@ -49,3 +52,4 @@ artifacts/api-python/.venv/
 *.py[cod]
 *.log
 artifacts/api-python/data/
+artifacts/api-python/scripts/_live_*.json
