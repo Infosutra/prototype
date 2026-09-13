@@ -47,6 +47,8 @@ class GridColumn(CamelModel):
     filled: int = 0
     flagged: int = 0
     extra: bool = False
+    group: str | None = None
+    group_label: str | None = None
 
 
 class GridFlagRef(CamelModel):

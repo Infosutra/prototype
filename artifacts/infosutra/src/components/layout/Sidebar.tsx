@@ -2,7 +2,6 @@ import { Link, useLocation } from "wouter";
 import {
   BarChart3,
   Database,
-  FolderGit2,
   Settings,
   BrainCircuit,
   FileText,
@@ -27,11 +26,8 @@ const globalNavigation = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-const SYNC_ON_CLICK = new Set(["/", "/forms"]);
-
 const studyNavigation = [
   { name: "Dashboard", href: "/", icon: Activity },
-  { name: "Forms", href: "/forms", icon: FolderGit2 },
   { name: "Data Quality", href: "/dqa", icon: ShieldAlert },
   { name: "Data Explorer", href: "/data", icon: Database },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -105,7 +101,7 @@ function NavLinks({
 export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
   const [location] = useLocation();
   const { studies, activeStudy, activeStudyId, setActiveStudyId } = useStudy();
-  const { trigger: syncStudy, isPending: syncPending } = useActiveStudySync();
+  const { isPending: syncPending } = useActiveStudySync();
   const isConnected = activeStudy?.credential?.connected ?? false;
   const projects = useGetProjects(
     activeStudyId ? { studyId: activeStudyId } : undefined,
@@ -169,9 +165,6 @@ export function SidebarNav({ onNavigate, className }: SidebarNavProps) {
             items={studyNavigation}
             location={location}
             onNavigate={onNavigate}
-            onItemClick={(item) => {
-              if (SYNC_ON_CLICK.has(item.href)) syncStudy();
-            }}
           />
         </nav>
       </div>

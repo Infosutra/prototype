@@ -1,16 +1,27 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboardActivity,
   useGetDashboardSummary,
   useGetDqaByProject,
+  useGetProjects,
   useGetSubmissionTrends,
 } from "@workspace/api-client-react";
 import { Header } from "@/components/layout/Header";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Database, Users, Activity, FolderGit2, AlertCircle, ShieldCheck, CalendarRange, X } from "lucide-react";
+import {
+  Database,
+  Users,
+  Activity,
+  FolderGit2,
+  AlertCircle,
+  ShieldCheck,
+  CalendarRange,
+  X,
+  RefreshCw,
+} from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -22,6 +33,10 @@ import {
 } from "recharts";
 import { useStudy } from "@/components/study/StudyProvider";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
+import {
+  useRunStudySync,
+  useSyncProjectsPending,
+} from "@/components/study/useActiveStudySync";
 
 function formatRelativeTime(value: string): string {
   const date = new Date(value);
@@ -40,6 +55,12 @@ function formatTrendLabel(date: string): string {
   const parsed = new Date(`${date}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function withStudy(path: string, studyId: string | null) {
+  if (!studyId) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}study=${encodeURIComponent(studyId)}`;
 }
 
 export default function Dashboard() {
@@ -98,6 +119,9 @@ export default function Dashboard() {
     enabled,
   );
   const dqaByProjectQuery = useGetDqaByProject(studyParams, enabled);
+  const projectsQuery = useGetProjects(undefined, enabled);
+  const syncPending = useSyncProjectsPending();
+  const { run: runSync, error: syncError, data: syncData } = useRunStudySync();
 
   const summary = summaryQuery.data;
   const activityFeed = activityQuery.data ?? [];
@@ -107,13 +131,22 @@ export default function Dashboard() {
   }));
   const topProjects = summary?.topProjects ?? [];
   const projectDqa = dqaByProjectQuery.data ?? [];
+  const toolCodeById = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const p of projectsQuery.data ?? []) {
+      map.set(p.id, p.toolCode ?? null);
+    }
+    return map;
+  }, [projectsQuery.data]);
+  const unassignedCount = (projectsQuery.data ?? []).filter((p) => !p.studyId).length;
   const isLoading =
     summaryQuery.isLoading || activityQuery.isLoading || trendsQuery.isLoading;
   const error =
     summaryQuery.error?.message ||
     activityQuery.error?.message ||
     trendsQuery.error?.message ||
-    dqaByProjectQuery.error?.message;
+    dqaByProjectQuery.error?.message ||
+    syncError?.message;
 
   const dqaTotals = projectDqa.reduce(
     (acc, row) => {
@@ -127,6 +160,11 @@ export default function Dashboard() {
     },
     { total: 0, clean: 0, amber: 0, red: 0, amberFlags: 0, redFlags: 0 },
   );
+
+  const onSync = () => {
+    if (!activeStudyId || syncPending) return;
+    void runSync(activeStudyId);
+  };
 
   return (
     <Layout>
@@ -186,6 +224,16 @@ export default function Dashboard() {
                 <span className="w-1.5" aria-hidden />
               )}
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={syncPending || !activeStudyId}
+              onClick={onSync}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncPending ? "animate-spin" : ""}`} />
+              Sync from Kobo
+            </Button>
             <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-emerald-700 dark:text-emerald-400">
               LIVE
             </span>
@@ -204,6 +252,32 @@ export default function Dashboard() {
               {error}
             </CardContent>
           </Card>
+        )}
+
+        {syncData && (
+          <div
+            className={`mb-6 rounded-md border p-4 text-sm ${
+              syncData.success
+                ? "border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300"
+                : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
+            }`}
+          >
+            Synced {syncData.projectsSynced} form(s) and fetched{" "}
+            {syncData.submissionsFetched} submissions ({syncData.newSubmissions}{" "}
+            new).
+            {syncData.errors.length > 0 &&
+              ` ${syncData.errors.length} form(s) failed.`}
+            {unassignedCount > 0 && (
+              <span>
+                {" "}
+                {unassignedCount} unassigned —{" "}
+                <Link href="/studies" className="underline font-medium">
+                  assign to your study
+                </Link>
+                .
+              </span>
+            )}
+          </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -277,7 +351,10 @@ export default function Dashboard() {
                 (one form can have several flags).
               </p>
             </div>
-            <Link href="/dqa" className="text-xs text-primary hover:underline shrink-0">
+            <Link
+              href={withStudy("/dqa", activeStudyId)}
+              className="text-xs text-primary hover:underline shrink-0"
+            >
               Open Data Quality
             </Link>
           </CardHeader>
@@ -286,7 +363,8 @@ export default function Dashboard() {
               <p className="p-4 text-sm text-muted-foreground">Loading DQA metrics…</p>
             ) : projectDqa.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">
-                No forms yet. Sync from Forms, assign them to a study, then recompute DQA.
+                No forms yet. Sync from Kobo, then assign them to a study on Studies, then
+                recompute DQA.
               </p>
             ) : (
               <table className="w-full min-w-[720px] text-sm">
@@ -303,15 +381,31 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {projectDqa.map((row) => (
+                  {projectDqa.map((row) => {
+                    const toolCode = toolCodeById.get(row.projectId);
+                    return (
                     <tr key={row.projectId} className="hover:bg-muted/40">
                       <td className="p-3">
-                        <Link
-                          href={`/dqa?projectId=${encodeURIComponent(row.projectId)}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {row.projectName}
-                        </Link>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={
+                              toolCode
+                                ? "inline-flex shrink-0 min-w-[2.25rem] items-center justify-center rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary"
+                                : "inline-flex shrink-0 min-w-[2.25rem] items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                            }
+                          >
+                            {toolCode || "—"}
+                          </span>
+                          <Link
+                            href={withStudy(
+                              `/data?projectId=${encodeURIComponent(row.projectId)}`,
+                              activeStudyId,
+                            )}
+                            className="font-medium text-primary hover:underline truncate"
+                          >
+                            {row.projectName}
+                          </Link>
+                        </div>
                       </td>
                       <td className="p-3 font-mono">{row.totalSubmissions}</td>
                       <td className="p-3 font-mono text-emerald-700">{row.cleanSubmissions}</td>
@@ -321,7 +415,8 @@ export default function Dashboard() {
                       <td className="p-3 font-mono">{row.amberFlags}</td>
                       <td className="p-3 font-mono">{row.redFlags}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   <tr className="bg-muted/30 font-medium">
                     <td className="p-3">All projects</td>
                     <td className="p-3 font-mono">{dqaTotals.total}</td>
@@ -408,20 +503,25 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
+            <CardHeader className="py-4 border-b">
               <CardTitle className="text-sm font-semibold">Top Forms by Volume</CardTitle>
-              <Link href="/forms" className="text-xs text-primary hover:underline">
-                View all
-              </Link>
             </CardHeader>
             <div className="divide-y border-t-0">
               {topProjects.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">
-                  {isLoading ? "Loading…" : "No forms yet. Sync from Forms, then assign to a study."}
+                  {isLoading
+                    ? "Loading…"
+                    : "No forms yet. Sync from Kobo, then assign them to a study on Studies."}
                 </p>
               ) : (
                 topProjects.map((project, i) => (
-                  <Link key={project.id} href={`/forms/${project.id}`}>
+                  <Link
+                    key={project.id}
+                    href={withStudy(
+                      `/data?projectId=${encodeURIComponent(project.id)}`,
+                      activeStudyId,
+                    )}
+                  >
                     <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3 min-w-0">
                         <span className="text-xs font-mono text-muted-foreground">

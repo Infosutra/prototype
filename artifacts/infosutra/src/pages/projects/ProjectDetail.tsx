@@ -6,7 +6,6 @@ import {
   getGetSubmissionsQueryKey,
   useGetProject,
   useGetSubmissions,
-  useSyncProject,
   useUpdateProject,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
@@ -23,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, Eye, Table, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useFormRouteId } from "@/lib/use-form-route-id";
+import { useRunProjectSync } from "@/components/study/useActiveStudySync";
 
 const PAGE_SIZE = 25;
 
@@ -80,14 +80,7 @@ export default function ProjectDetail() {
     limit: PAGE_SIZE,
     dqa: dqaFilter === "all" ? undefined : dqaFilter,
   });
-  const syncProject = useSyncProject({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-        queryClient.invalidateQueries({ queryKey: getGetSubmissionsQueryKey() });
-      },
-    },
-  });
+  const syncProject = useRunProjectSync();
   const updateProject = useUpdateProject({
     mutation: {
       onSuccess: () => {
@@ -103,6 +96,13 @@ export default function ProjectDetail() {
   const totalPages = Math.max(result?.totalPages ?? 1, 1);
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(page * PAGE_SIZE, total);
+
+  const onSync = () => {
+    void syncProject.run(projectId, projectQuery.data?.studyId).then(() => {
+      void queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      void queryClient.invalidateQueries({ queryKey: getGetSubmissionsQueryKey() });
+    });
+  };
 
   if (projectQuery.isLoading) {
     return <Layout><div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Loading project…</div></Layout>;
@@ -132,7 +132,7 @@ export default function ProjectDetail() {
             <Button size="sm" variant="outline" asChild>
               <Link href={`/dqa?projectId=${projectId}&tab=rules`}>DQA rules</Link>
             </Button>
-            <Button size="sm" disabled={syncProject.isPending} onClick={() => syncProject.mutate({ projectId })} className="bg-primary text-primary-foreground">
+            <Button size="sm" disabled={syncProject.isPending} onClick={onSync} className="bg-primary text-primary-foreground">
               <RefreshCw className={`w-4 h-4 mr-2 ${syncProject.isPending ? "animate-spin" : ""}`} />
               {syncProject.isPending ? "Syncing…" : "Sync Data"}
             </Button>
@@ -245,9 +245,9 @@ export default function ProjectDetail() {
                   ))}
                 </SelectContent>
               </Select>
-              <Link href={`/forms/${projectId}/submissions`}>
+              <Link href={`/data?projectId=${encodeURIComponent(projectId)}`}>
                 <Button variant="ghost" size="sm" className="h-8 text-xs">
-                  All data as table <Table className="w-4 h-4 ml-2" />
+                  Open in Data Explorer <Table className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
             </div>

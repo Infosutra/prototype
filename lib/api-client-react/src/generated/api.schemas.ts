@@ -643,6 +643,8 @@ export interface GridColumn {
   filled?: number;
   flagged?: number;
   extra?: boolean;
+  group?: string | null;
+  groupLabel?: string | null;
 }
 
 export type GridRowCells = {[key: string]: GridCell};

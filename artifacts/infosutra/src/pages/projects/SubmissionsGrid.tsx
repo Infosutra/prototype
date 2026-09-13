@@ -8,39 +8,74 @@ import {
   type GridRow,
   type SubmissionGrid,
 } from "@workspace/api-client-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Download, Eye, ShieldAlert } from "lucide-react";
-
-const SEVERITY_FILTERS = [
-  { id: "", label: "All forms" },
-  { id: "flagged", label: "Flagged only" },
-  { id: "red", label: "RED only" },
-  { id: "amber", label: "AMBER only" },
-  { id: "clean", label: "Clean only" },
-] as const;
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
+import { ChevronLeft, ChevronRight, Download, Eye } from "lucide-react";
 
 const PAGE_SIZES = [25, 50, 100, 200];
+
+const INSTRUMENT_CODES = new Set([
+  "today",
+  "deviceid",
+  "username",
+  "start",
+  "end",
+  "audit",
+  "phonenumber",
+  "simserial",
+  "subscriberid",
+  "imei",
+]);
+
+const INSTRUMENT_TYPES = new Set([
+  "today",
+  "deviceid",
+  "username",
+  "start",
+  "end",
+  "audit",
+  "phonenumber",
+  "simserial",
+  "subscriberid",
+  "imei",
+]);
+
+const PIN_DISTRICT_CODES = ["district", "District"];
+const CENTRE_CODES = ["centre_code", "center_code", "centre", "center"];
+
+type SeverityFilter = "" | "flagged" | "red" | "amber" | "clean";
+type ColumnMode = "review" | "all";
+type SectionId = "flagged" | string;
 
 type CellDetail = {
   row: GridRow;
   columnLabel: string;
   columnCode: string;
+  columnKey: string | null;
   value: string;
   flags: GridFlagRef[];
+  formLevel?: boolean;
 };
 
-function severityCellClass(severity?: string | null): string {
-  if (severity === "red") {
-    return "bg-red-100 text-red-900 dark:bg-red-950/60 dark:text-red-200";
-  }
-  if (severity === "amber") {
-    return "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200";
-  }
-  return "";
+function isInstrumentColumn(column: GridColumn): boolean {
+  const code = (column.code || column.key || "").toLowerCase();
+  const type = (column.type || "").toLowerCase();
+  if (INSTRUMENT_CODES.has(code) || INSTRUMENT_TYPES.has(type)) return true;
+  if (column.extra && (column.flagged ?? 0) === 0) return true;
+  return false;
+}
+
+function findColumnByCodes(columns: GridColumn[], codes: string[]): GridColumn | undefined {
+  const lower = codes.map((c) => c.toLowerCase());
+  return columns.find((column) => lower.includes((column.code || column.key).toLowerCase()));
+}
+
+function cellValue(row: GridRow, column?: GridColumn): string {
+  if (!column) return "";
+  return row.cells?.[column.key]?.value ?? "";
 }
 
 function formatDateTime(value?: string): string {
@@ -53,6 +88,20 @@ function formatDateTime(value?: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatCellDisplay(value: string): string {
+  if (!value) return "";
+  // ISO datetime with offset
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return formatDateTime(value);
+  }
+  // Time with fractional seconds / offset e.g. 08:30:00.000+05:30
+  const timeMatch = value.match(/^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:[+-]\d{2}:\d{2}|Z)?$/);
+  if (timeMatch) {
+    return `${timeMatch[1].padStart(2, "0")}:${timeMatch[2]}`;
+  }
+  return value;
 }
 
 function csvEscape(value: string): string {
@@ -97,39 +146,83 @@ function downloadCsv(fileName: string, columns: GridColumn[], rows: GridRow[]) {
   URL.revokeObjectURL(url);
 }
 
+function SeverityPip({ severity }: { severity?: string | null }) {
+  return (
+    <span
+      className={cn(
+        "mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full",
+        severity === "red" && "bg-red-500",
+        severity === "amber" && "bg-amber-500",
+        severity !== "red" && severity !== "amber" && "bg-muted-foreground/30",
+      )}
+      aria-hidden
+    />
+  );
+}
+
+function severityBarClass(severity?: string | null): string {
+  if (severity === "red") return "border-l-[3px] border-l-red-500 bg-red-50 dark:bg-red-950/40";
+  if (severity === "amber") {
+    return "border-l-[3px] border-l-amber-500 bg-amber-50 dark:bg-amber-950/40";
+  }
+  return "border-l-[3px] border-l-transparent";
+}
+
 function FlagList({ projectId, flags }: { projectId: string; flags: GridFlagRef[] }) {
   return (
     <ul className="space-y-3">
       {flags.map((flag) => (
-        <li key={`${flag.id}-${flag.ruleId}`} className="rounded-md border p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={flag.severity === "red" ? "destructive" : "secondary"}>
-              {flag.severity.toUpperCase()}
-            </Badge>
-            <span className="font-mono text-xs text-muted-foreground">{flag.ruleId}</span>
-            <span className="text-sm font-medium">{flag.title}</span>
+        <li key={`${flag.id}-${flag.ruleId}`} className="space-y-1">
+          <div className="flex items-start gap-2">
+            <SeverityPip severity={flag.severity} />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold leading-snug">{flag.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{flag.message}</p>
+              <Link
+                href={`/dqa?projectId=${encodeURIComponent(projectId)}&ruleId=${encodeURIComponent(flag.ruleId)}`}
+                className="mt-2 inline-block text-xs text-primary underline"
+              >
+                All forms flagged by {flag.ruleId} →
+              </Link>
+            </div>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">{flag.message}</p>
-          <Link
-            href={`/dqa?projectId=${encodeURIComponent(projectId)}&ruleId=${encodeURIComponent(flag.ruleId)}`}
-            className="mt-2 inline-block text-xs text-primary underline"
-          >
-            All forms flagged by {flag.ruleId} →
-          </Link>
         </li>
       ))}
     </ul>
   );
 }
 
+function relatedAnswers(
+  row: GridRow,
+  columns: GridColumn[],
+  flags: GridFlagRef[],
+  excludeKey?: string | null,
+): { code: string; label: string; value: string }[] {
+  const ruleIds = new Set(flags.map((flag) => flag.ruleId));
+  if (ruleIds.size === 0) return [];
+  const found: { code: string; label: string; value: string }[] = [];
+  for (const column of columns) {
+    if (excludeKey && column.key === excludeKey) continue;
+    const cell = row.cells?.[column.key];
+    const shares = (cell?.flags ?? []).some((flag) => ruleIds.has(flag.ruleId));
+    if (!shares) continue;
+    found.push({
+      code: column.code,
+      label: column.label,
+      value: formatCellDisplay(cell?.value ?? "") || "Blank",
+    });
+  }
+  return found;
+}
+
 export function SubmissionsGrid({ projectId }: { projectId: string }) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
-  const [severity, setSeverity] = useState("");
+  const [severity, setSeverity] = useState<SeverityFilter>("flagged");
   const [enumeratorInput, setEnumeratorInput] = useState("");
   const [enumerator, setEnumerator] = useState("");
-  const [hideEmptyColumns, setHideEmptyColumns] = useState(true);
-  const [flaggedColumnsOnly, setFlaggedColumnsOnly] = useState(false);
+  const [columnMode, setColumnMode] = useState<ColumnMode>("review");
+  const [section, setSection] = useState<SectionId>("flagged");
   const [detail, setDetail] = useState<CellDetail | null>(null);
 
   useEffect(() => {
@@ -158,58 +251,405 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
   );
 
   const grid = gridQuery.data;
-
-  const columns = useMemo(() => {
-    const all = grid?.columns ?? [];
-    if (flaggedColumnsOnly) return all.filter((column) => (column.flagged ?? 0) > 0);
-    if (hideEmptyColumns) {
-      return all.filter((column) => (column.filled ?? 0) > 0 || (column.flagged ?? 0) > 0);
-    }
-    return all;
-  }, [grid?.columns, flaggedColumnsOnly, hideEmptyColumns]);
-
+  const allColumns = grid?.columns ?? [];
   const rows = grid?.rows ?? [];
-  const hiddenColumns = (grid?.columns.length ?? 0) - columns.length;
-  const amberRows = rows.filter((row) => row.severity === "amber").length;
-  const redRows = rows.filter((row) => row.severity === "red").length;
+
+  const districtColumn = useMemo(
+    () => findColumnByCodes(allColumns, PIN_DISTRICT_CODES),
+    [allColumns],
+  );
+  const centreColumn = useMemo(
+    () => findColumnByCodes(allColumns, CENTRE_CODES),
+    [allColumns],
+  );
+
+  const groups = useMemo(() => {
+    const map = new Map<string, { id: string; label: string }>();
+    for (const column of allColumns) {
+      if (!column.group || isInstrumentColumn(column)) continue;
+      const label = (column.groupLabel || column.group).trim();
+      // Skip anonymous / technical nested group ids from XLSForm.
+      if (/^group-\d+$/i.test(label)) continue;
+      if (/^[A-Za-z0-9_]+group$/i.test(label)) continue;
+      if (/^[A-Za-z]\d{0,3}$/.test(label)) continue;
+      if (!map.has(column.group)) {
+        map.set(column.group, {
+          id: column.group,
+          label,
+        });
+      }
+    }
+    return [...map.values()];
+  }, [allColumns]);
+
+  const questionColumns = useMemo(() => {
+    const excludeKeys = new Set(
+      [districtColumn?.key, centreColumn?.key].filter(Boolean) as string[],
+    );
+
+    let base = allColumns.filter((column) => !excludeKeys.has(column.key));
+
+    if (columnMode === "review") {
+      base = base.filter((column) => !isInstrumentColumn(column));
+      if (section === "flagged") {
+        base = base.filter((column) => (column.flagged ?? 0) > 0);
+      } else {
+        base = base.filter((column) => column.group === section);
+      }
+    } else {
+      base = base.filter(
+        (column) => (column.filled ?? 0) > 0 || (column.flagged ?? 0) > 0,
+      );
+    }
+
+    return base;
+  }, [allColumns, columnMode, section, districtColumn, centreColumn]);
+
+  const qualityLabel = (id: SeverityFilter, label: string) => {
+    if (!grid) return label;
+    if (id === severity || (id === "" && severity === "")) {
+      return `${label} · ${grid.total.toLocaleString()}`;
+    }
+    return label;
+  };
 
   const openCell = (row: GridRow, column: GridColumn, cell: GridCell) => {
     setDetail({
       row,
       columnLabel: column.label,
       columnCode: column.code,
+      columnKey: column.key,
       value: cell.value ?? "",
       flags: cell.flags ?? [],
     });
   };
 
+  const openFormLevel = (row: GridRow) => {
+    setDetail({
+      row,
+      columnLabel: "Form-level checks",
+      columnCode: row.koboId || row.displayId,
+      columnKey: null,
+      value: "",
+      flags: row.rowFlags ?? [],
+      formLevel: true,
+    });
+  };
+
+  const reviewEmpty =
+    columnMode === "review" &&
+    section === "flagged" &&
+    questionColumns.length === 0 &&
+    !gridQuery.isLoading;
+
+  const related = detail
+    ? relatedAnswers(detail.row, allColumns, detail.flags, detail.columnKey)
+    : [];
+
   return (
-    <div className="space-y-4">
-      <Card className="p-3">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+      <div className="shrink-0 space-y-2 border-b px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="field-control h-9 px-2 text-sm"
-            value={severity}
-            onChange={(event) => {
-              setSeverity(event.target.value);
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={severity || "all"}
+            onValueChange={(next) => {
+              if (!next) return;
+              const mapped: SeverityFilter =
+                next === "all" ? "" : (next as SeverityFilter);
+              setSeverity(mapped);
               setPage(1);
             }}
+            className="justify-start flex-wrap"
           >
-            {SEVERITY_FILTERS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <ToggleGroupItem value="all" className="text-xs px-2.5 h-8">
+              {qualityLabel("", "All")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="flagged" className="text-xs px-2.5 h-8">
+              {qualityLabel("flagged", "Flagged")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="red" className="text-xs px-2.5 h-8">
+              {qualityLabel("red", "Red")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="amber" className="text-xs px-2.5 h-8">
+              {qualityLabel("amber", "Amber")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="clean" className="text-xs px-2.5 h-8">
+              {qualityLabel("clean", "Clean")}
+            </ToggleGroupItem>
+          </ToggleGroup>
+
           <Input
             value={enumeratorInput}
             onChange={(event) => setEnumeratorInput(event.target.value)}
-            placeholder="Filter by enumerator"
-            className="h-9 w-full sm:w-52"
+            placeholder="Enumerator…"
+            className="h-8 w-full sm:w-44"
           />
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={columnMode}
+              onValueChange={(next) => {
+                if (next === "review" || next === "all") setColumnMode(next);
+              }}
+              className="justify-start"
+            >
+              <ToggleGroupItem value="review" className="text-xs px-2.5 h-8">
+                Review
+              </ToggleGroupItem>
+              <ToggleGroupItem value="all" className="text-xs px-2.5 h-8">
+                All questions
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              title="Download the rows on this page as CSV"
+              disabled={rows.length === 0}
+              onClick={() =>
+                downloadCsv(
+                  `${grid?.projectName ?? "submissions"}-page${page}.csv`,
+                  questionColumns,
+                  rows,
+                )
+              }
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Section
+          </span>
+          <button
+            type="button"
+            className={cn(
+              "rounded-md px-2 py-1 text-xs transition-colors",
+              section === "flagged" && columnMode === "review"
+                ? "bg-muted font-medium text-foreground"
+                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            )}
+            onClick={() => {
+              setSection("flagged");
+              setColumnMode("review");
+            }}
+          >
+            Flagged questions
+          </button>
+          {groups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              className={cn(
+                "rounded-md px-2 py-1 text-xs transition-colors",
+                section === group.id && columnMode === "review"
+                  ? "bg-muted font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+              onClick={() => {
+                setSection(group.id);
+                setColumnMode("review");
+              }}
+            >
+              {group.label}
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground">
+            {columnMode === "review"
+              ? `${questionColumns.length} questions in review · instrument fields hidden`
+              : `Showing all questions · ${questionColumns.length} columns`}
+          </span>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr>
+              <th className="sticky left-0 top-0 z-30 min-w-[200px] border-b border-r bg-muted px-3 py-2 text-left align-top">
+                <span className="block text-xs font-semibold">Form</span>
+                <span className="block text-[10px] font-normal text-muted-foreground">
+                  Enumerator · centre · time
+                </span>
+              </th>
+              {districtColumn && (
+                <th className="sticky top-0 z-20 min-w-[96px] border-b bg-muted px-3 py-2 text-left align-top">
+                  <span className="block text-xs font-semibold">District</span>
+                </th>
+              )}
+              <th className="sticky top-0 z-20 min-w-[72px] border-b bg-muted px-3 py-2 text-left align-top">
+                <span className="block text-xs font-semibold">Flags</span>
+              </th>
+              {questionColumns.map((column) => (
+                <th
+                  key={column.key}
+                  className="sticky top-0 z-20 min-w-[140px] max-w-[220px] border-b bg-muted px-3 py-2 text-left align-top"
+                  title={`${column.code} — ${column.label}`}
+                >
+                  <span className="block text-xs font-semibold">{column.code}</span>
+                  <span className="block truncate text-[10px] font-normal normal-case text-muted-foreground">
+                    {column.label}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const centre = cellValue(row, centreColumn);
+              const district = cellValue(row, districtColumn);
+              const flagBits: string[] = [];
+              if ((row.redFlags ?? 0) > 0) flagBits.push(`${row.redFlags} red`);
+              if ((row.amberFlags ?? 0) > 0) flagBits.push(`${row.amberFlags} amber`);
+              const titleParts = [
+                row.koboId || row.displayId,
+                formatDateTime(row.submittedAt),
+                flagBits.join(" · ") || "Clean",
+              ];
+              return (
+                <tr key={row.submissionId} className="hover:bg-muted/20">
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-10 border-b border-r bg-card px-3 py-2 text-left align-middle font-normal"
+                    title={titleParts.join(" · ")}
+                  >
+                    <div className="flex gap-2">
+                      <SeverityPip severity={row.severity} />
+                      <div className="min-w-0">
+                        <Link
+                          href={`/submissions/${encodeURIComponent(row.submissionId)}`}
+                          className="block truncate text-sm font-semibold text-foreground hover:text-primary"
+                        >
+                          {row.enumerator || "Unknown"}
+                        </Link>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[centre || null, formatDateTime(row.submittedAt)]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        {(row.rowFlags?.length ?? 0) > 0 && (
+                          <button
+                            type="button"
+                            className="mt-0.5 text-[10px] text-primary underline"
+                            onClick={() => openFormLevel(row)}
+                          >
+                            {row.rowFlags?.length} form-level
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </th>
+                  {districtColumn && (
+                    <td className="border-b px-3 py-2 align-middle text-sm">
+                      <span className="truncate block max-w-[120px]" title={district}>
+                        {district || "—"}
+                      </span>
+                    </td>
+                  )}
+                  <td className="border-b px-3 py-2 align-middle text-sm text-muted-foreground">
+                    {flagBits.length > 0 ? flagBits.join(" · ") : "—"}
+                  </td>
+                  {questionColumns.map((column) => {
+                    const cell = row.cells?.[column.key];
+                    const raw = cell?.value ?? "";
+                    const display = formatCellDisplay(raw);
+                    const flags = cell?.flags ?? [];
+                    const className = cn(
+                      "border-b px-0 py-0 align-middle",
+                      severityBarClass(cell?.severity),
+                    );
+                    if (flags.length === 0) {
+                      return (
+                        <td key={column.key} className={className}>
+                          <div className="px-3 py-2">
+                            <span
+                              className="line-clamp-2 break-words text-sm"
+                              title={raw || undefined}
+                            >
+                              {display || (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={column.key} className={className}>
+                        <button
+                          type="button"
+                          onClick={() => openCell(row, column, cell!)}
+                          className="w-full px-3 py-2 text-left"
+                          title={flags.map((flag) => flag.title).join(" · ")}
+                        >
+                          <span className="line-clamp-2 break-words text-sm">
+                            {display || (
+                              <span className="text-muted-foreground">Blank</span>
+                            )}
+                          </span>
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={
+                    questionColumns.length + 2 + (districtColumn ? 1 : 0)
+                  }
+                  className="px-4 py-12 text-center text-muted-foreground"
+                >
+                  {gridQuery.isLoading
+                    ? "Loading form data…"
+                    : "No forms match these filters."}
+                </td>
+              </tr>
+            )}
+            {reviewEmpty && rows.length > 0 && (
+              <tr>
+                <td
+                  colSpan={
+                    questionColumns.length + 2 + (districtColumn ? 1 : 0)
+                  }
+                  className="px-4 py-8 text-center text-muted-foreground"
+                >
+                  No flagged questions in this result.{" "}
+                  <button
+                    type="button"
+                    className="text-primary underline"
+                    onClick={() => setColumnMode("all")}
+                  >
+                    Switch to All questions
+                  </button>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-muted-foreground">
+            Page {grid?.page ?? page} of {Math.max(grid?.totalPages ?? 1, 1)}
+            {gridQuery.isFetching ? " · updating…" : ""}
+          </p>
           <select
-            className="field-control h-9 px-2 text-sm"
+            className="field-control h-8 px-2 text-xs"
             value={limit}
+            aria-label="Rows per page"
             onChange={(event) => {
               setLimit(Number(event.target.value));
               setPage(1);
@@ -221,211 +661,33 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={hideEmptyColumns}
-              disabled={flaggedColumnsOnly}
-              onChange={(event) => setHideEmptyColumns(event.target.checked)}
-            />
-            Hide empty questions
-          </label>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={flaggedColumnsOnly}
-              onChange={(event) => setFlaggedColumnsOnly(event.target.checked)}
-            />
-            Flagged questions only
-          </label>
+        </div>
+        <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
-            className="ml-auto"
-            title="Download the rows on this page as CSV"
-            disabled={rows.length === 0}
-            onClick={() =>
-              downloadCsv(`${grid?.projectName ?? "submissions"}-page${page}.csv`, columns, rows)
-            }
+            disabled={page <= 1 || gridQuery.isFetching}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
           >
-            <Download className="mr-2 h-4 w-4" />
-            CSV
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!grid || page >= grid.totalPages || gridQuery.isFetching}
+            onClick={() => setPage((value) => value + 1)}
+          >
+            Next
+            <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span>
-            {(grid?.total ?? 0).toLocaleString()} forms · {columns.length} questions shown
-            {hiddenColumns > 0 ? ` (${hiddenColumns} hidden)` : ""}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-sm bg-amber-100 dark:bg-amber-950/60" />
-            AMBER cell {amberRows > 0 ? `· ${amberRows} rows` : ""}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-sm bg-red-100 dark:bg-red-950/60" />
-            RED cell {redRows > 0 ? `· ${redRows} rows` : ""}
-          </span>
-          <span>Click a coloured cell for the DQA reason.</span>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full border-separate border-spacing-0 text-sm">
-            <thead>
-              <tr>
-                <th className="sticky left-0 top-0 z-30 min-w-[132px] border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground md:min-w-[190px] md:px-3">
-                  Form
-                </th>
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    className="sticky top-0 z-20 min-w-[150px] max-w-[260px] border-b bg-muted px-3 py-2 text-left align-top md:min-w-[180px]"
-                    title={`${column.code} — ${column.label}`}
-                  >
-                    <span className="block font-mono text-[10px] text-muted-foreground">
-                      {column.code}
-                      {(column.flagged ?? 0) > 0 ? ` · ${column.flagged} flagged` : ""}
-                    </span>
-                    <span className="line-clamp-2 text-xs font-medium normal-case text-foreground">
-                      {column.label}
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.submissionId} className="hover:bg-muted/30">
-                  <th
-                    scope="row"
-                    className="sticky left-0 z-10 border-b border-r bg-card px-2 py-2 text-left align-top font-normal md:px-3"
-                  >
-                    <Link
-                      href={`/submissions/${encodeURIComponent(row.submissionId)}`}
-                      className="font-mono text-xs text-primary underline"
-                    >
-                      {row.koboId || row.displayId}
-                    </Link>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                      {row.enumerator || "Unknown"}
-                    </span>
-                    <span className="block text-[10px] text-muted-foreground">
-                      {formatDateTime(row.submittedAt)}
-                    </span>
-                    {(row.redFlags ?? 0) > 0 || (row.amberFlags ?? 0) > 0 ? (
-                      <span className="mt-1 flex flex-wrap items-center gap-1">
-                        {(row.redFlags ?? 0) > 0 && (
-                          <Badge variant="destructive" className="px-1 py-0 text-[10px]">
-                            {row.redFlags} RED
-                          </Badge>
-                        )}
-                        {(row.amberFlags ?? 0) > 0 && (
-                          <Badge variant="secondary" className="px-1 py-0 text-[10px]">
-                            {row.amberFlags} AMBER
-                          </Badge>
-                        )}
-                      </span>
-                    ) : null}
-                    {(row.rowFlags?.length ?? 0) > 0 && (
-                      <button
-                        type="button"
-                        className="mt-1 flex items-center gap-1 text-[10px] text-primary underline"
-                        onClick={() =>
-                          setDetail({
-                            row,
-                            columnLabel: "Form-level checks",
-                            columnCode: row.displayId,
-                            value: "",
-                            flags: row.rowFlags ?? [],
-                          })
-                        }
-                      >
-                        <ShieldAlert className="h-3 w-3" />
-                        {row.rowFlags?.length} form-level
-                      </button>
-                    )}
-                  </th>
-                  {columns.map((column) => {
-                    const cell = row.cells?.[column.key];
-                    const value = cell?.value ?? "";
-                    const flags = cell?.flags ?? [];
-                    const className = `border-b px-3 py-2 align-top ${severityCellClass(cell?.severity)}`;
-                    if (flags.length === 0) {
-                      return (
-                        <td key={column.key} className={className}>
-                          <span
-                            className="line-clamp-3 break-words"
-                            title={value || undefined}
-                          >
-                            {value || <span className="text-muted-foreground">—</span>}
-                          </span>
-                        </td>
-                      );
-                    }
-                    return (
-                      <td key={column.key} className={className}>
-                        <button
-                          type="button"
-                          onClick={() => openCell(row, column, cell!)}
-                          className="w-full text-left"
-                          title={flags.map((flag) => `${flag.ruleId}: ${flag.message}`).join("\n")}
-                        >
-                          <span className="line-clamp-3 break-words underline decoration-dotted">
-                            {value || "(blank)"}
-                          </span>
-                          <span className="mt-1 block font-mono text-[10px] opacity-80">
-                            {flags.map((flag) => flag.ruleId).join(", ")}
-                          </span>
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={columns.length + 1}
-                    className="px-4 py-12 text-center text-muted-foreground"
-                  >
-                    {gridQuery.isLoading ? "Loading form data…" : "No forms match these filters."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3">
-          <p className="text-xs text-muted-foreground">
-            Page {grid?.page ?? page} of {Math.max(grid?.totalPages ?? 1, 1)}
-            {gridQuery.isFetching ? " · updating…" : ""}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1 || gridQuery.isFetching}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!grid || page >= grid.totalPages || gridQuery.isFetching}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Next
-              <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </Card>
+      </div>
 
       {gridQuery.error && (
-        <p className="text-sm text-destructive">{(gridQuery.error as Error).message}</p>
+        <p className="px-3 pb-2 text-sm text-destructive">
+          {(gridQuery.error as Error).message}
+        </p>
       )}
 
       <Sheet open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
@@ -440,10 +702,36 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
           </SheetHeader>
           {detail && (
             <div className="mt-4 space-y-4">
-              {detail.value && (
-                <div className="rounded-md border bg-muted/40 p-3">
+              {!detail.formLevel && (
+                <div
+                  className={cn(
+                    "rounded-md border p-3",
+                    detail.flags[0]?.severity === "red" &&
+                      "border-l-[3px] border-l-red-500 bg-muted/40",
+                    detail.flags[0]?.severity === "amber" &&
+                      "border-l-[3px] border-l-amber-500 bg-muted/40",
+                    !detail.flags[0] && "bg-muted/40",
+                  )}
+                >
                   <p className="text-xs text-muted-foreground">Recorded answer</p>
-                  <p className="mt-1 break-words text-sm font-medium">{detail.value}</p>
+                  <p className="mt-1 break-words text-sm font-medium">
+                    {formatCellDisplay(detail.value) || "Blank"}
+                  </p>
+                </div>
+              )}
+              {related.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Related answers</p>
+                  <ul className="space-y-1.5">
+                    {related.map((item) => (
+                      <li key={item.code} className="text-sm">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {item.code}
+                        </span>{" "}
+                        {item.value}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               <FlagList projectId={projectId} flags={detail.flags} />

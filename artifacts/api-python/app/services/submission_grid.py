@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from math import ceil
 from typing import Any
 
@@ -81,6 +82,8 @@ def _column(
     *,
     code: str | None = None,
     extra: bool = False,
+    group: str | None = None,
+    group_label: str | None = None,
 ) -> dict[str, Any]:
     return {
         "key": key,
@@ -90,7 +93,26 @@ def _column(
         "filled": 0,
         "flagged": 0,
         "extra": extra,
+        "group": group,
+        "group_label": group_label,
     }
+
+
+def _usable_group(
+    stack: list[tuple[str, str | None]],
+) -> tuple[str | None, str | None]:
+    """Pick the deepest survey section with a real label.
+
+    Kobo forms often wrap everything in an unlabeled `group1`; section chips
+    should show Section A / B, not that wrapper.
+    """
+    for group_id, group_label in reversed(stack):
+        if group_label and group_label.strip():
+            return group_id, group_label.strip()
+    for group_id, group_label in reversed(stack):
+        if group_id and not re.match(r"^group-?\d*$", group_id, re.I):
+            return group_id, (group_label or group_id)
+    return (None, None)
 
 
 def _survey_columns(
@@ -102,17 +124,33 @@ def _survey_columns(
         return []
     columns: list[dict[str, Any]] = []
     seen: set[str] = set()
+    group_stack: list[tuple[str, str | None]] = []
     for item in survey:
         if not isinstance(item, dict):
             continue
         name = item.get("name")
         qtype = item.get("type")
-        if not isinstance(name, str) or not isinstance(qtype, str):
+        if not isinstance(qtype, str):
+            continue
+        if qtype == "begin_group":
+            group_id = name if isinstance(name, str) and name else f"group-{len(group_stack)}"
+            raw_label = pick_translated_label(item.get("label"), form_definition, language)
+            group_label = raw_label.strip() if isinstance(raw_label, str) and raw_label.strip() else None
+            group_stack.append((group_id, group_label))
+            continue
+        if qtype == "end_group":
+            if group_stack:
+                group_stack.pop()
+            continue
+        if not isinstance(name, str):
             continue
         if qtype in META_TYPES or name in seen or qtype.startswith(("begin_", "end_")):
             continue
         label = pick_translated_label(item.get("label"), form_definition, language) or name
-        columns.append(_column(name, label, qtype))
+        group_id, group_label = _usable_group(group_stack)
+        columns.append(
+            _column(name, label, qtype, group=group_id, group_label=group_label)
+        )
         seen.add(name)
     return columns
 
