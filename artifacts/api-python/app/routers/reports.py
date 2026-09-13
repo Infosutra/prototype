@@ -1,32 +1,27 @@
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Project, Prompt, Report, ReportProject
+from app.db.models import Project, Prompt, Report, ReportProject, Study
 from app.db.session import get_db
-from app.integrations.smtp import SmtpError
 from app.schemas.common import OkResponse, ReportsListQuery
+from app.schemas.jobs import JobCreated
 from app.schemas.misc import (
-    GenerateDqaDailyInput,
-    GenerateDqaFinalInput,
+    GenerateReportInput,
     ReportInput,
     ReportOut,
     ShareReportInput,
-    ShareResult,
 )
-from app.services import dqa_daily_email as dqa_daily_email
-from app.services import dqa_daily_report as dqa_daily
-from app.services import dqa_final_report as dqa_final
+from app.services.jobs import store as job_store
 from app.services.report_storage import docx_path_for, pdf_path_for
-from sqlalchemy.orm import joinedload
+from app.services.reporting.schedule_email import enqueue_execute
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -52,8 +47,7 @@ def _map(row: Report) -> ReportOut:
         prompt_name=row.prompt_name,
         project_ids=list(row.project_ids or []),
         project_names=list(row.project_names or []),
-        # Omit heavy JSON blob from list/detail by default — clients use preview/download.
-        generated_content=None,
+        result_ref=None,
         download_url=row.download_url,
         page_count=row.page_count,
         file_size_kb=row.file_size_kb,
@@ -99,49 +93,48 @@ def list_reports(
     return [_map(row) for row in db.scalars(query).unique().all()]
 
 
-@router.post("/dqa-daily", response_model=ReportOut, operation_id="createDqaDailyReport")
-def create_dqa_daily(
-    payload: GenerateDqaDailyInput,
+@router.post(
+    "/generate",
+    response_model=JobCreated,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="generateReportFromTemplate",
+)
+def generate_from_template(
+    payload: GenerateReportInput,
     db: Session = Depends(get_db),
-) -> ReportOut:
-    try:
-        report = dqa_daily.generate_daily_dqa_report(
-            db,
-            study_id=payload.study_id,
-            report_date=payload.report_date,
-            run_ai=payload.run_ai,
+) -> JobCreated:
+    """Enqueue execute for a user-saved template. Refuses without templateId."""
+    if not payload.template_id or not str(payload.template_id).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="templateId is required. Create and save a report template first.",
         )
+    if not payload.study_id or db.get(Study, payload.study_id) is None:
+        raise HTTPException(status_code=404, detail="Study not found")
+    try:
         if payload.send_email:
-            dqa_daily_email.send_dqa_daily_email(db, report)
+            recipients = list(payload.recipients or [])
+            if not recipients:
+                raise ValueError(
+                    "recipients are required when sendEmail is true"
+                )
+            job_id = enqueue_execute(
+                db,
+                study_id=payload.study_id,
+                template_id=payload.template_id.strip(),
+                window=payload.window,
+                email_recipients=recipients,
+            )
+        else:
+            job_id = enqueue_execute(
+                db,
+                study_id=payload.study_id,
+                template_id=payload.template_id.strip(),
+                window=payload.window,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except SmtpError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"DQA Daily generation failed: {exc}") from exc
-    return _map(report)
-
-
-@router.post("/dqa-final", response_model=ReportOut, operation_id="createDqaFinalReport")
-def create_dqa_final(
-    payload: GenerateDqaFinalInput,
-    db: Session = Depends(get_db),
-) -> ReportOut:
-    try:
-        report = dqa_final.generate_final_dqa_report(
-            db,
-            study_id=payload.study_id,
-            run_ai=payload.run_ai,
-        )
-        if payload.send_email:
-            dqa_daily_email.send_dqa_daily_email(db, report)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except SmtpError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Final DQA generation failed: {exc}") from exc
-    return _map(report)
+    return JobCreated(job_id=job_id)
 
 
 @router.post("", response_model=ReportOut, operation_id="createReport")
@@ -195,12 +188,15 @@ def preview_report(report_id: str, db: Session = Depends(get_db)) -> HTMLRespons
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
     html_body = "<p>No HTML preview available.</p>"
-    if row.generated_content:
+    if row.result_ref:
         try:
-            payload = json.loads(row.generated_content)
-            html_body = payload.get("html") or html_body
-        except json.JSONDecodeError:
-            html_body = f"<pre>{row.generated_content}</pre>"
+            from app.services.jobs import artifacts as job_artifacts
+
+            payload = job_artifacts.read_job_result(row.result_ref)
+            if isinstance(payload, dict):
+                html_body = payload.get("html") or html_body
+        except Exception:
+            html_body = "<p>Report result could not be loaded.</p>"
     return HTMLResponse(content=html_body)
 
 
@@ -271,76 +267,28 @@ def delete_report(report_id: str, db: Session = Depends(get_db)) -> OkResponse:
     return OkResponse(success=True)
 
 
-@router.post("/{report_id}/generate", response_model=ReportOut, operation_id="generateReport")
-def generate_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
-    row = db.get(Report, report_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Report not found")
-    if (row.report_type or "") == "daily_dqa" or row.study_id:
-        try:
-            fresh = dqa_daily.generate_daily_dqa_report(
-                db,
-                study_id=row.study_id,
-                report_date=row.report_date,
-                run_ai=True,
-            )
-        except Exception as exc:
-            row.status = "failed"
-            db.commit()
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        # Replace draft with generated row metadata on the same id if draft.
-        if row.status == "draft":
-            path_old = pdf_path_for(fresh.id)
-            path_new = pdf_path_for(row.id)
-            if path_old.is_file():
-                path_new.write_bytes(path_old.read_bytes())
-                path_old.unlink(missing_ok=True)
-            docx_old = docx_path_for(fresh.id)
-            docx_new = docx_path_for(row.id)
-            if docx_old.is_file():
-                docx_new.write_bytes(docx_old.read_bytes())
-                docx_old.unlink(missing_ok=True)
-            row.title = fresh.title
-            row.description = fresh.description
-            row.status = "ready"
-            row.report_type = "daily_dqa"
-            row.study_id = fresh.study_id
-            row.report_date = fresh.report_date
-            _attach_projects(db, row, list(fresh.project_ids or []))
-            row.generated_content = fresh.generated_content
-            row.download_url = f"/api/reports/{row.id}/download"
-            row.page_count = fresh.page_count
-            row.file_size_kb = fresh.file_size_kb
-            row.generated_at = fresh.generated_at
-            db.delete(fresh)
-            db.commit()
-            db.refresh(row)
-            return _map(row)
-        return _map(fresh)
-
-    raise HTTPException(
-        status_code=400,
-        detail="Custom reports are generated from a report template. Use /report-templates.",
-    )
-
-
-@router.post("/{report_id}/share", response_model=ShareResult, operation_id="shareReport")
+@router.post(
+    "/{report_id}/share",
+    response_model=JobCreated,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="shareReport",
+)
 def share_report(
     report_id: str,
     payload: ShareReportInput,
     db: Session = Depends(get_db),
-) -> ShareResult:
+) -> JobCreated:
+    """Enqueue email job for an existing report. Does not SMTP in the request."""
     row = db.get(Report, report_id)
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
-    try:
-        _, recipients = dqa_daily_email.send_dqa_daily_email(
-            db, row, recipients=payload.recipients
-        )
-    except SmtpError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ShareResult(
-        success=True,
-        recipients_count=len(recipients),
-        message=f"DQA Daily emailed to {len(recipients)} recipient(s).",
+    recipients = [e.strip() for e in (payload.recipients or []) if e and str(e).strip()]
+    if not recipients:
+        raise HTTPException(status_code=400, detail="recipients are required")
+    job = job_store.enqueue(
+        db,
+        job_type="email",
+        payload={"reportId": report_id, "recipients": recipients},
+        study_id=row.study_id,
     )
+    return JobCreated(job_id=job.id)

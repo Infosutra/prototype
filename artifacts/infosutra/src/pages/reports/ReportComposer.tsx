@@ -1,28 +1,31 @@
-import React, { useEffect, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetReportConversationQueryKey,
   getListReportConversationsQueryKey,
   getListReportTemplatesQueryKey,
-  useAddReportConversationMessage,
   useCreateReportConversation,
+  useDeleteReportConversation,
   useGetReportConversation,
-  useGetReportSpecCatalog,
   useListReportConversations,
-  usePreviewReportConversation,
   useSaveReportConversationAsTemplate,
-  type ExecutedReportOut,
+  useUpdateReportConversation,
   type ReportConversationOut,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
 import { Header } from "@/components/layout/Header";
-import { ComposerHelpSheet } from "@/components/reports/ComposerHelpSheet";
+import {
+  createPlanJob,
+  pollPlanJob,
+  SectionCards,
+  type PlanJudgement,
+  type PlanUnmapped,
+} from "@/components/reports/SectionCards";
 import { RequireActiveStudy } from "@/components/study/RequireActiveStudy";
 import { useStudy } from "@/components/study/StudyProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -33,16 +36,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CircleHelp, MessageSquare, Save, Send } from "lucide-react";
+import { ExternalLink, MessageSquare, Pencil, Plus, Save, Send, Trash2 } from "lucide-react";
 
-function turnStatusMessage(result: {
-  status: string;
-  question?: string | null;
-  reason?: string | null;
-}): string | null {
-  if (result.status === "ok" || result.status === "answer") return null;
-  if (result.status === "clarification") return result.question || null;
-  return result.question || result.reason || result.status;
+function formatUpdatedAt(value: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function ReportComposer() {
@@ -55,10 +60,15 @@ export default function ReportComposer() {
 
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<ExecutedReportOut | null>(null);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [unmapped, setUnmapped] = useState<PlanUnmapped[]>([]);
+  const [judgement, setJudgement] = useState<PlanJudgement | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [saveKind, setSaveKind] = useState("adhoc");
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameTitle, setRenameTitle] = useState("");
+  const planAbortRef = useRef<AbortController | null>(null);
 
   const listQuery = useListReportConversations(
     activeStudyId ? { studyId: activeStudyId } : undefined,
@@ -69,9 +79,6 @@ export default function ReportComposer() {
     query: { enabled: Boolean(conversationId) } as never,
   });
   const conversation = detailQuery.data;
-  const catalogQuery = useGetReportSpecCatalog(undefined, {
-    query: { enabled: helpOpen || Boolean(activeStudyId) } as never,
-  });
 
   const refresh = async (id: string) => {
     await queryClient.invalidateQueries({
@@ -85,8 +92,6 @@ export default function ReportComposer() {
   const createConversation = useCreateReportConversation({
     mutation: {
       onSuccess: async (result) => {
-        setError(turnStatusMessage(result));
-        setDraft("");
         const id = result.conversation.id;
         setLocation(`/report-composer/${id}`);
         await refresh(id);
@@ -95,33 +100,29 @@ export default function ReportComposer() {
     },
   });
 
-  const addMessage = useAddReportConversationMessage({
+  const deleteConversation = useDeleteReportConversation({
     mutation: {
-      onSuccess: async (result) => {
-        setError(turnStatusMessage(result));
-        setDraft("");
-        await refresh(result.conversation.id);
+      onSuccess: async () => {
+        setLocation("/report-composer");
+        await queryClient.invalidateQueries({
+          queryKey: getListReportConversationsQueryKey(
+            activeStudyId ? { studyId: activeStudyId } : undefined,
+          ),
+        });
       },
-      onError: (err) => setError(err.message),
     },
   });
 
-  const previewConversation = usePreviewReportConversation({
+  const updateConversation = useUpdateReportConversation({
     mutation: {
-      onSuccess: async (result) => {
-        setPreview(result);
-        setError(null);
-        if (conversationId) {
-          await queryClient.invalidateQueries({
-            queryKey: getGetReportConversationQueryKey(conversationId),
-          });
-        }
+      onSuccess: async () => {
+        if (conversationId) await refresh(conversationId);
+        setRenameOpen(false);
       },
-      onError: (err) => setError(err.message),
     },
   });
 
-  const saveTemplate = useSaveReportConversationAsTemplate({
+  const saveAsTemplate = useSaveReportConversationAsTemplate({
     mutation: {
       onSuccess: async () => {
         setSaveOpen(false);
@@ -132,223 +133,282 @@ export default function ReportComposer() {
     },
   });
 
-  useEffect(() => {
-    if (!conversationId || !conversation?.spec || !activeStudyId) return;
-    previewConversation.mutate({
-      conversationId,
-      data: { studyId: activeStudyId, runAi: false },
+  const startNew = () => {
+    if (!activeStudyId) return;
+    createConversation.mutate({
+      data: { studyId: activeStudyId, title: "Untitled report", message: "" },
     });
-    // Intentionally only when the working spec identity changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, JSON.stringify(conversation?.spec), activeStudyId]);
-
-  const send = () => {
-    const message = draft.trim();
-    if (!message || !activeStudyId) return;
-    if (!conversationId) {
-      createConversation.mutate({
-        data: { studyId: activeStudyId, title: "Untitled report", message },
-      });
-      return;
-    }
-    addMessage.mutate({ conversationId, data: { message } });
   };
 
-  const busy = createConversation.isPending || addMessage.isPending;
+  const sendTurn = async () => {
+    const text = draft.trim();
+    if (!text || !activeStudyId) return;
+    setError(null);
+    setIsPlanning(true);
+    planAbortRef.current?.abort();
+    const controller = new AbortController();
+    planAbortRef.current = controller;
+
+    try {
+      let id = conversationId;
+      if (!id) {
+        const created = await createConversation.mutateAsync({
+          data: { studyId: activeStudyId, title: "Untitled report", message: "" },
+        });
+        id = created.conversation.id;
+        setLocation(`/report-composer/${id}`);
+      }
+
+      const currentSpec = (conversation?.spec as Record<string, unknown> | null) || null;
+      const jobId = await createPlanJob(activeStudyId, text, currentSpec);
+      const planned = await pollPlanJob(jobId, { signal: controller.signal });
+
+      const resp = await fetch(`/api/report-conversations/${encodeURIComponent(id)}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          spec: planned.spec,
+          unmapped: planned.unmapped,
+          judgement: planned.judgement,
+        }),
+        signal: controller.signal,
+      });
+      if (!resp.ok) {
+        throw new Error((await resp.text()) || `HTTP ${resp.status}`);
+      }
+
+      setUnmapped(planned.unmapped);
+      setJudgement(planned.judgement);
+      setDraft("");
+      await refresh(id);
+    } catch (err) {
+      if ((err as Error).message !== "Planning cancelled") {
+        setError((err as Error).message || "Turn failed");
+      }
+    } finally {
+      setIsPlanning(false);
+    }
+  };
+
+  const selectConversation = (row: ReportConversationOut) => {
+    setLocation(`/report-composer/${row.id}`);
+    setError(null);
+    setUnmapped([]);
+    setJudgement(null);
+  };
+
+  const workingSpec = (conversation?.spec as Record<string, unknown> | null) || null;
+  const previewHref = workingSpec
+    ? `/reports/execute-preview?studyId=${encodeURIComponent(activeStudyId || "")}`
+    : null;
 
   return (
     <Layout>
-      <Header
-        title="Compose a report"
-        description="Describe the report, refine it in conversation, and preview the rendered output against the active study."
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => setHelpOpen(true)}>
-              <CircleHelp className="mr-2 h-4 w-4" />
-              Help
+      <RequireActiveStudy>
+        <Header
+          title="Report composer"
+          description="Each message runs a plan job with the current spec, then shows section cards."
+          action={
+            <Button onClick={startNew} disabled={!activeStudyId}>
+              <Plus className="mr-2 h-4 w-4" />
+              New draft
             </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/report-templates">Templates</Link>
-            </Button>
-            <Button
-              size="sm"
-              disabled={!conversation?.spec}
-              onClick={() => {
-                setSaveName(conversation?.title || "");
-                setSaveOpen(true);
-              }}
-            >
-              <Save className="mr-2 h-4 w-4" />
-              Save as template
-            </Button>
-          </div>
-        }
-      />
-      <div className="flex-1 overflow-auto bg-muted/30 p-4 md:p-6">
-        <RequireActiveStudy
-          title="Select a study to compose a report"
-          description="Conversations are scoped to the active study so preview uses that study's data."
-        >
-          {(error || listQuery.error) && (
-            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              {error || listQuery.error?.message}
-            </div>
-          )}
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.1fr)]">
-            <Card className="h-fit">
-              <CardContent className="p-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mb-2 w-full justify-start"
-                  onClick={() => {
-                    setLocation("/report-composer");
-                    setPreview(null);
-                    setError(null);
-                  }}
-                >
-                  New conversation
-                </Button>
-                <ul className="space-y-1">
-                  {conversations.map((row: ReportConversationOut) => (
-                    <li key={row.id}>
-                      <button
-                        type="button"
-                        className={`w-full rounded-md px-3 py-2 text-left text-sm ${
-                          row.id === conversationId ? "bg-muted font-medium" : "hover:bg-muted/60"
-                        }`}
-                        onClick={() => setLocation(`/report-composer/${row.id}`)}
-                      >
-                        <span className="block truncate">{row.title}</span>
-                        <span className="text-[11px] text-muted-foreground">{row.status}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
+          }
+        />
 
-            <Card className="flex min-h-[520px] flex-col">
-              <CardContent className="flex flex-1 flex-col gap-3 p-4">
-                <div className="flex-1 space-y-3 overflow-auto">
-                  {(conversation?.messages ?? []).length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      Ask for the sections and charts you need, or open Help for visual samples and
-                      example prompts. Unrelated sections stay put when you refine the report.
-                    </p>
-                  )}
-                  {(conversation?.messages ?? []).map((message) => (
-                    <div
-                      key={message.id}
-                      className={`rounded-md px-3 py-2 text-sm ${
-                        message.role === "user" ? "bg-primary/10 ml-8" : "bg-muted mr-8"
-                      }`}
+        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+          <aside className="space-y-2">
+            {conversations.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => selectConversation(row)}
+                className={`w-full rounded-md border px-3 py-2 text-left text-sm ${
+                  row.id === conversationId
+                    ? "border-foreground/30 bg-muted"
+                    : "border-transparent hover:bg-muted/60"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium truncate">{row.title}</span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {formatUpdatedAt(row.updatedAt)}
+                </div>
+              </button>
+            ))}
+            {!conversations.length ? (
+              <p className="text-sm text-muted-foreground">No drafts yet.</p>
+            ) : null}
+          </aside>
+
+          <section className="space-y-4">
+            {conversation ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-lg font-semibold">{conversation.title}</h2>
+                    <Badge variant="outline">{conversation.status}</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRenameTitle(conversation.title);
+                        setRenameOpen(true);
+                      }}
                     >
-                      <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                        {message.role}
-                      </p>
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                      {(message.changes ?? []).length > 0 ? (
-                        <ul className="mt-2 list-disc pl-4 text-xs text-muted-foreground">
-                          {message.changes?.map((change) => (
-                            <li key={change}>{change}</li>
-                          ))}
-                        </ul>
-                      ) : null}
+                      <Pencil className="mr-1 h-3.5 w-3.5" />
+                      Rename
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSaveName(conversation.title);
+                        setSaveOpen(true);
+                      }}
+                      disabled={!workingSpec}
+                    >
+                      <Save className="mr-1 h-3.5 w-3.5" />
+                      Save as template
+                    </Button>
+                    {previewHref ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={previewHref}>
+                          <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                          Preview
+                        </Link>
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        deleteConversation.mutate({ conversationId: conversation.id })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto border-b border-border pb-3">
+                  {(conversation.messages || []).map((message) => (
+                    <div key={message.id} className="text-sm">
+                      <span className="font-medium capitalize text-muted-foreground">
+                        {message.role}:{" "}
+                      </span>
+                      <span>{message.content}</span>
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2">
+
+                {workingSpec ? (
+                  <SectionCards spec={workingSpec} unmapped={unmapped} judgement={judgement} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Send a request to plan the first specification.
+                  </p>
+                )}
+
+                <div className="space-y-2">
                   <Textarea
                     rows={3}
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Add today's enumerator flag rates, worst first."
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                        event.preventDefault();
-                        send();
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="Add a KPI for clean submissions, or a red-flag table…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        void sendTurn();
                       }
                     }}
                   />
-                  <Button disabled={!draft.trim() || busy} onClick={send}>
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="space-y-3 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-medium">Live preview</h3>
-                  <div className="flex items-center gap-2">
-                    {previewConversation.isPending ? (
-                      <span className="text-xs text-muted-foreground">Refreshing…</span>
-                    ) : null}
-                    {preview?.aiSource ? (
-                      <Badge variant="outline" className="text-[10px]">
-                        {preview.aiSource}
-                      </Badge>
-                    ) : null}
+                  <div className="flex gap-2">
+                    <Button onClick={() => void sendTurn()} disabled={isPlanning || !draft.trim()}>
+                      <Send className="mr-2 h-4 w-4" />
+                      {isPlanning ? "Planning…" : "Send"}
+                    </Button>
                   </div>
+                  {error ? (
+                    <p className="text-sm text-destructive whitespace-pre-wrap">{error}</p>
+                  ) : null}
                 </div>
-                {previewConversation.isPending && !preview ? (
-                  <p className="text-sm text-muted-foreground">Generating preview…</p>
-                ) : preview?.html ? (
-                  <iframe
-                    title="Server-rendered preview"
-                    className="h-[min(70vh,720px)] w-full rounded-md border bg-white"
-                    srcDoc={preview.html}
-                  />
-                ) : (
-                  <div className="flex h-48 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <MessageSquare className="h-6 w-6" />
-                    Preview appears once the planner produces a specification.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </RequireActiveStudy>
-      </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Start a new draft or pick one from the list.
+              </p>
+            )}
+          </section>
+        </div>
 
-      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save conversation as template</DialogTitle>
-          </DialogHeader>
-          <div>
-            <Label htmlFor="save-name">Template name</Label>
-            <Input id="save-name" value={saveName} onChange={(event) => setSaveName(event.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!saveName.trim() || !conversationId || saveTemplate.isPending}
-              onClick={() =>
-                saveTemplate.mutate({
-                  conversationId,
-                  data: { name: saveName.trim(), reportKind: "adhoc" },
-                })
-              }
-            >
-              {saveTemplate.isPending ? "Saving…" : "Save template"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save as template</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="save-name">Name</Label>
+                <Input
+                  id="save-name"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="save-kind">Kind</Label>
+                <Input
+                  id="save-kind"
+                  value={saveKind}
+                  onChange={(e) => setSaveKind(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  if (!conversationId || !saveName.trim()) return;
+                  saveAsTemplate.mutate({
+                    conversationId,
+                    data: { name: saveName.trim(), reportKind: saveKind },
+                  });
+                }}
+                disabled={saveAsTemplate.isPending}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      <ComposerHelpSheet
-        open={helpOpen}
-        onOpenChange={setHelpOpen}
-        catalog={catalogQuery.data}
-        loading={catalogQuery.isLoading}
-        error={catalogQuery.error?.message ?? null}
-        onTryPrompt={(prompt) => setDraft(prompt)}
-      />
+        <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename draft</DialogTitle>
+            </DialogHeader>
+            <Input value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} />
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  if (!conversationId || !renameTitle.trim()) return;
+                  updateConversation.mutate({
+                    conversationId,
+                    data: { title: renameTitle.trim() },
+                  });
+                }}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </RequireActiveStudy>
     </Layout>
   );
 }

@@ -42,6 +42,7 @@ def _schedule_out(row: ReportSchedule) -> ReportScheduleOut:
         id=row.id,
         study_id=row.study_id,
         report_type=row.report_type,
+        template_id=row.template_id,
         enabled=bool(row.enabled),
         time=row.time or "21:30",
         timezone=row.timezone or "Asia/Kolkata",
@@ -59,11 +60,27 @@ def _get_or_create_daily_schedule(db: Session, study_id: str) -> ReportSchedule:
     ).first()
     if row:
         return row
+    from app.db.models import ReportTemplate
+
+    template = db.scalars(
+        select(ReportTemplate)
+        .where(
+            ReportTemplate.study_id == study_id,
+            ReportTemplate.status == "active",
+        )
+        .order_by(ReportTemplate.created_at)
+    ).first()
+    if template is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Create a report template before configuring a schedule",
+        )
     study = studies_service.get_study(db, study_id)
     row = ReportSchedule(
         id=str(uuid.uuid4()),
         study_id=study_id,
         report_type="daily_dqa",
+        template_id=template.id,
         enabled=False,
         time="21:30",
         timezone=(study.timezone if study and study.timezone else "Asia/Kolkata"),
@@ -158,6 +175,26 @@ def update_study_schedule(
         row.timezone = payload.timezone.strip() or row.timezone
     if payload.recipients is not None:
         row.recipients = [e.strip() for e in payload.recipients if e and e.strip()]
+    if payload.template_id is not None:
+        tid = payload.template_id.strip()
+        if not tid:
+            raise HTTPException(
+                status_code=400,
+                detail="templateId is required for schedules",
+            )
+        from app.db.models import ReportTemplate
+
+        template = db.get(ReportTemplate, tid)
+        if template is None or (
+            template.study_id and template.study_id != study_id
+        ):
+            raise HTTPException(status_code=400, detail="Invalid templateId for study")
+        row.template_id = tid
+    if not row.template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="templateId is required. Create and save a report template first.",
+        )
     db.commit()
     db.refresh(row)
     return _schedule_out(row)

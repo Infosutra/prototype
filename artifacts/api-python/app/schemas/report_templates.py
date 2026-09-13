@@ -4,16 +4,27 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.domain.report_spec.catalog import ComponentDescriptor, DataSourceDescriptor
 from app.schemas.common import CamelModel
-from app.schemas.misc import ReportOut
+
+
+class SpecCatalogComponentOut(CamelModel):
+    type: str
+    description: str = ""
+
+
+class SpecCatalogSourceOut(CamelModel):
+    id: str
+    title: str
+    kind: str = "entity"
+    description: str = ""
+    fields: list[str] = []
 
 
 class SpecCatalogOut(CamelModel):
     spec_version: str
     component_types: list[str]
-    components: list[ComponentDescriptor]
-    data_sources: list[DataSourceDescriptor]
+    components: list[SpecCatalogComponentOut]
+    data_sources: list[SpecCatalogSourceOut]
     spec_schema: dict[str, Any] = {}
 
 
@@ -30,7 +41,6 @@ class ReportTemplateOut(CamelModel):
     study_id: str | None = None
     report_kind: str
     status: str
-    is_system: bool = False
     version_count: int = 0
     current_version: int = 0
     prompt_text: str = ""
@@ -63,32 +73,21 @@ class CreateReportTemplateInput(CamelModel):
     description: str = ""
     study_id: str | None = None
     report_kind: str = "adhoc"
-    #: Natural-language definition. The planner turns it into a specification.
     prompt: str = ""
-    #: Supply a specification directly to skip planning (used by tests and imports).
     spec: dict[str, Any] | None = None
 
 
 class UpdateReportTemplatePromptInput(CamelModel):
     prompt: str
     notes: str = ""
+    commit: bool = True
+    spec: dict[str, Any] | None = None
 
 
 class ReportTemplateMetaInput(CamelModel):
     name: str | None = None
     description: str | None = None
     status: str | None = None
-
-
-class ExecuteTemplateInput(CamelModel):
-    study_id: str | None = None
-    #: Overrides the resolved reporting day. Omit for "today" in the study timezone.
-    execution_date: str | None = None
-    date_from: str | None = None
-    date_to: str | None = None
-    report_kind: str | None = None
-    run_ai: bool = True
-    version: int | None = None
 
 
 class PlanFailureOut(CamelModel):
@@ -99,37 +98,14 @@ class PlanFailureOut(CamelModel):
 
 
 class TemplatePlanResultOut(CamelModel):
-    """Result of planning: either a saved template or something the user must resolve."""
-
     status: str
     template: ReportTemplateDetailOut | None = None
+    spec: dict[str, Any] | None = None
     summary: str | None = None
     question: str | None = None
     reason: str | None = None
     errors: list[SpecIssueOut] = []
     warnings: list[SpecIssueOut] = []
-
-
-class ExecutedReportOut(CamelModel):
-    """Rendered preview: specification, resolved data and HTML, without persisting."""
-
-    template_id: str | None = None
-    template_version: int | None = None
-    spec: dict[str, Any]
-    data: dict[str, Any]
-    narratives: dict[str, str] = {}
-    unavailable: dict[str, str] = {}
-    meta: dict[str, Any] = {}
-    html: str
-    plain_text: str
-    ai_source: str = "none"
-
-
-class ExecuteTemplateResultOut(CamelModel):
-    """Persisted report plus the same rendered payload Preview returns."""
-
-    report: ReportOut
-    preview: ExecutedReportOut
 
 
 class ReportConversationMessageOut(CamelModel):
@@ -156,12 +132,21 @@ class ReportConversationOut(CamelModel):
 class CreateReportConversationInput(CamelModel):
     study_id: str | None = None
     title: str = "Untitled report"
-    #: Optional opening request; when present the planner runs immediately.
     message: str = ""
+    spec: dict[str, Any] | None = None
+    unmapped: list[dict[str, Any]] | None = None
+    judgement: dict[str, Any] | None = None
+
+
+class UpdateReportConversationInput(CamelModel):
+    title: str | None = None
 
 
 class ReportConversationTurnInput(CamelModel):
     message: str
+    spec: dict[str, Any] | None = None
+    unmapped: list[dict[str, Any]] | None = None
+    judgement: dict[str, Any] | None = None
 
 
 class ReportConversationTurnOut(CamelModel):
@@ -172,6 +157,9 @@ class ReportConversationTurnOut(CamelModel):
     question: str | None = None
     reason: str | None = None
     errors: list[SpecIssueOut] = []
+    unmapped: list[dict[str, Any]] = []
+    judgement: dict[str, Any] | None = None
+    spec: dict[str, Any] | None = None
 
 
 class SaveConversationAsTemplateInput(CamelModel):

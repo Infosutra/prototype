@@ -4,7 +4,6 @@ import {
   useGetSettings,
   useGetUsageEvents,
   useGetUsageSummary,
-  useSendDailyReport,
   useTestSmtpConnection,
   useUpdateSettings,
 } from "@workspace/api-client-react";
@@ -65,9 +64,6 @@ function modelsForProvider(
 const smtpActionButtonClass =
   "bg-green-600 text-white border-green-700 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 dark:border-green-600";
 
-function parseRecipientInput(value: string): string[] {
-  return [...new Set(value.split(/[,;\n]+/).map((item) => item.trim()).filter(Boolean))];
-}
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -83,15 +79,11 @@ export default function Settings() {
   const [smtpFromEmail, setSmtpFromEmail] = useState("");
   const [smtpUseTls, setSmtpUseTls] = useState(true);
 
-  const [dailyReportEnabled, setDailyReportEnabled] = useState(false);
-  const [dailyReportTime, setDailyReportTime] = useState("21:00");
-  const [dailyReportRecipients, setDailyReportRecipients] = useState("");
-
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState("nvidia/nemotron-3-super-120b-a12b:free");
   const [aiCompileModel, setAiCompileModel] = useState("");
-  const [aiReportPlannerModel, setAiReportPlannerModel] = useState("");
+  const [aiReportingPlanModel, setAiReportingPlanModel] = useState("");
   const [aiBaseUrl, setAiBaseUrl] = useState("https://openrouter.ai/api/v1");
 
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(false);
@@ -115,14 +107,11 @@ export default function Settings() {
     mutation: {
       onSuccess: (settings) => {
         setSmtpPassword(settings.smtp.password);
-        setDailyReportEnabled(settings.dailyReport.enabled);
-        setDailyReportTime(settings.dailyReport.sendTime || "21:00");
-        setDailyReportRecipients(settings.dailyReport.recipients.join("\n"));
         setAiEnabled(Boolean(settings.general.aiEnabled));
         setAiApiKey(settings.general.aiApiKey || "");
         setAiModel(settings.general.aiModel || "nvidia/nemotron-3-super-120b-a12b:free");
         setAiCompileModel(settings.general.aiCompileModel || "");
-        setAiReportPlannerModel(settings.general.aiReportPlannerModel || "");
+        setAiReportingPlanModel(settings.general.aiReportingPlanModel || "");
         setAiBaseUrl(settings.general.aiBaseUrl || "https://openrouter.ai/api/v1");
         setTranscriptionApiKey(settings.general.transcriptionApiKey || "");
         setTranscriptionEnabled(Boolean(settings.general.transcriptionEnabled));
@@ -160,15 +149,31 @@ export default function Settings() {
     },
   });
 
-  const sendDailyReport = useSendDailyReport({
-    mutation: {
-      onSuccess: (result) => {
-        setFeedback({ success: result.success, message: result.details ?? result.message });
-        queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-      },
-      onError: (error) => setFeedback({ success: false, message: error.message }),
-    },
-  });
+  const [sendNowPending, setSendNowPending] = useState(false);
+
+  const sendReportNow = async () => {
+    if (!activeStudyId) return;
+    setFeedback(null);
+    setSendNowPending(true);
+    try {
+      const resp = await fetch(
+        `/api/settings/send-report-now?studyId=${encodeURIComponent(activeStudyId)}`,
+        { method: "POST" },
+      );
+      const body = await resp.json();
+      if (!resp.ok || !body.success) {
+        throw new Error(body.details || body.message || `HTTP ${resp.status}`);
+      }
+      setFeedback({ success: true, message: body.details ?? body.message });
+    } catch (err) {
+      setFeedback({
+        success: false,
+        message: err instanceof Error ? err.message : "Failed to enqueue report",
+      });
+    } finally {
+      setSendNowPending(false);
+    }
+  };
 
   useEffect(() => {
     if (!settingsQuery.data) return;
@@ -180,15 +185,12 @@ export default function Settings() {
     setSmtpFromEmail(settingsQuery.data.smtp.fromEmail);
     setSmtpUseTls(settingsQuery.data.smtp.useTls);
 
-    setDailyReportEnabled(settingsQuery.data.dailyReport.enabled);
-    setDailyReportTime(settingsQuery.data.dailyReport.sendTime || "21:00");
-    setDailyReportRecipients(settingsQuery.data.dailyReport.recipients.join("\n"));
 
     setAiEnabled(Boolean(settingsQuery.data.general.aiEnabled));
     setAiApiKey(settingsQuery.data.general.aiApiKey || "");
     setAiModel(settingsQuery.data.general.aiModel || "nvidia/nemotron-3-super-120b-a12b:free");
     setAiCompileModel(settingsQuery.data.general.aiCompileModel || "");
-    setAiReportPlannerModel(settingsQuery.data.general.aiReportPlannerModel || "");
+    setAiReportingPlanModel(settingsQuery.data.general.aiReportingPlanModel || "");
     setAiBaseUrl(settingsQuery.data.general.aiBaseUrl || "https://openrouter.ai/api/v1");
     setTranscriptionEnabled(Boolean(settingsQuery.data.general.transcriptionEnabled));
     setTranscriptionProvider(settingsQuery.data.general.transcriptionProvider || "sarvam");
@@ -221,13 +223,6 @@ export default function Settings() {
           connected: settingsQuery.data?.smtp.connected ?? false,
           lastTestedAt: settingsQuery.data?.smtp.lastTestedAt ?? null,
         },
-        dailyReport: {
-          enabled: dailyReportEnabled,
-          sendTime: dailyReportTime,
-          timezone: settingsQuery.data?.dailyReport.timezone ?? "Asia/Kolkata",
-          recipients: parseRecipientInput(dailyReportRecipients),
-          lastSentOn: settingsQuery.data?.dailyReport.lastSentOn ?? null,
-        },
       },
     });
   };
@@ -249,7 +244,7 @@ export default function Settings() {
           aiBaseUrl,
           aiModel,
           aiCompileModel,
-          aiReportPlannerModel,
+          aiReportingPlanModel,
           aiTemperature: 0.3,
           aiMaxTokens: 2048,
           aiTimeoutSeconds: 60,
@@ -305,14 +300,14 @@ export default function Settings() {
                   <DialogHeader>
                     <DialogTitle>Email delivery help</DialogTitle>
                     <DialogDescription>
-                      Brevo SMTP setup and daily consolidated report overview.
+                      Brevo SMTP setup and scheduled report email overview.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-6 text-sm">
                     <div className="space-y-2">
                       <h3 className="font-semibold text-foreground">Email Delivery (Brevo)</h3>
                       <p className="text-muted-foreground">
-                        Use Brevo SMTP for daily reports and alerts. Create an SMTP key in Brevo under
+                        Use Brevo SMTP for scheduled report emails and alerts. Create an SMTP key in Brevo under
                         {" "}Settings → SMTP & API, and verify your sender email.
                       </p>
                     </div>
@@ -329,10 +324,11 @@ export default function Settings() {
                       </CollapsibleContent>
                     </Collapsible>
                     <div className="space-y-2 border-t pt-4">
-                      <h3 className="font-semibold text-foreground">Daily consolidated report</h3>
+                      <h3 className="font-semibold text-foreground">Scheduled reports</h3>
                       <p className="text-muted-foreground">
-                        One email covering all projects: enumerator counts, invalid submissions with
-                        reasons, and totals for the day (Asia/Kolkata).
+                        Schedules require a saved report template. At send time the API enqueues an
+                        execute job, then emails the PDF. Timezone comes from the study (or the
+                        schedule override), not a fixed Asia/Kolkata digest.
                       </p>
                     </div>
                   </div>
@@ -467,71 +463,30 @@ export default function Settings() {
                     )}
                   </div>
 
-                  <div className="pt-6 border-t space-y-6">
-                    <div className="setting-toggle-row">
-                      <div className="space-y-0.5">
-                        <Label className="text-base">Enable daily report</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Sends one email per study at the time below when SMTP and recipients are set.
-                        </p>
-                      </div>
-                      <Switch checked={dailyReportEnabled} onCheckedChange={setDailyReportEnabled} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="daily-report-time">Send time (IST)</Label>
-                        <Input
-                          id="daily-report-time"
-                          type="time"
-                          value={dailyReportTime}
-                          onChange={(event) => setDailyReportTime(event.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">Default 21:00 Asia/Kolkata</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Last sent</Label>
-                        <p className="text-sm text-muted-foreground pt-2">
-                          {settingsQuery.data?.dailyReport.lastSentOn ?? "Never"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="daily-report-recipients">Recipient emails</Label>
-                      <Textarea
-                        id="daily-report-recipients"
-                        value={dailyReportRecipients}
-                        onChange={(event) => setDailyReportRecipients(event.target.value)}
-                        placeholder={"one@example.com\ntwo@example.com"}
-                        rows={4}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        One email per line, or separate with commas.
-                      </p>
-                    </div>
+                  <div className="pt-6 border-t space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Send-now enqueues execute then email for the study schedule template.
+                      Configure template and recipients under Studies.
+                    </p>
                     <Button
                       variant="outline"
                       className={smtpActionButtonClass}
                       disabled={
-                        sendDailyReport.isPending ||
+                        sendNowPending ||
                         !activeStudyId ||
-                        parseRecipientInput(dailyReportRecipients).length === 0 ||
                         !settingsQuery.data?.smtp.connected
                       }
-                      onClick={() => {
-                        if (!activeStudyId) return;
-                        setFeedback(null);
-                        sendDailyReport.mutate({ params: { studyId: activeStudyId } });
-                      }}
+                      onClick={() => void sendReportNow()}
                     >
-                      {sendDailyReport.isPending
-                        ? "Sending…"
+                      {sendNowPending
+                        ? "Queuing…"
                         : activeStudy
-                          ? `Send today’s report for ${activeStudy.name}`
-                          : "Send today’s report now"}
+                          ? `Send report now for ${activeStudy.name}`
+                          : "Send report now"}
                     </Button>
                     {!activeStudyId && (
                       <p className="text-xs text-muted-foreground">
-                        Select an active study in the sidebar to send a study-scoped digest.
+                        Select an active study in the sidebar to enqueue a study-scoped report.
                       </p>
                     )}
                   </div>
@@ -589,8 +544,9 @@ export default function Settings() {
                   <div className="pt-6 border-t mt-6 space-y-4">
                     <h3 className="text-lg font-medium">AI Configuration (OpenRouter)</h3>
                     <p className="text-sm text-muted-foreground">
-                      Powers DQA Daily / Final narratives. Edit prompts under Prompt Templates and
-                      assign them per study. DQA rule compilation can use a separate model below.
+                      Powers report planning and narrative sections. Edit system prompts under
+                      Prompt Templates (report-planner / report-analyst). DQA rule compilation can
+                      use a separate model below.
                     </p>
                     <div className="setting-toggle-row">
                       <div className="space-y-0.5">
@@ -637,8 +593,8 @@ export default function Settings() {
                       <Label htmlFor="ai-report-planner-model">Report planner model</Label>
                       <Input
                         id="ai-report-planner-model"
-                        value={aiReportPlannerModel}
-                        onChange={(e) => setAiReportPlannerModel(e.target.value)}
+                        value={aiReportingPlanModel}
+                        onChange={(e) => setAiReportingPlanModel(e.target.value)}
                         placeholder="Leave blank to use the model above"
                         className="font-mono text-sm"
                       />

@@ -124,31 +124,25 @@ export interface BodyCreateAudioRecording {
   file: Blob;
 }
 
-export type ComponentDescriptorSourceKind = typeof ComponentDescriptorSourceKind[keyof typeof ComponentDescriptorSourceKind] | null;
-
-
-export const ComponentDescriptorSourceKind = {
-  object: 'object',
-  table: 'table',
-} as const;
-
-export interface ComponentDescriptor {
-  type: string;
-  required: string[];
-  optional: string[];
-  sourceKind?: ComponentDescriptorSourceKind;
-}
-
 export interface ConnectionTestResult {
   success: boolean;
   message: string;
   details?: string | null;
 }
 
+export type CreateReportConversationInputSpec = { [key: string]: unknown } | null;
+
+export type CreateReportConversationInputUnmapped = { [key: string]: unknown }[] | null;
+
+export type CreateReportConversationInputJudgement = { [key: string]: unknown } | null;
+
 export interface CreateReportConversationInput {
   studyId?: string | null;
   title?: string;
   message?: string;
+  spec?: CreateReportConversationInputSpec;
+  unmapped?: CreateReportConversationInputUnmapped;
+  judgement?: CreateReportConversationInputJudgement;
 }
 
 export type CreateReportTemplateInputSpec = { [key: string]: unknown } | null;
@@ -160,14 +154,6 @@ export interface CreateReportTemplateInput {
   reportKind?: string;
   prompt?: string;
   spec?: CreateReportTemplateInputSpec;
-}
-
-export interface DailyReportSettings {
-  enabled: boolean;
-  sendTime: string;
-  timezone: string;
-  recipients: string[];
-  lastSentOn?: string | null;
 }
 
 export interface ProjectSummary {
@@ -186,67 +172,6 @@ export interface DashboardSummary {
   lastSyncAt?: string | null;
   submissionsByStatus: StatusCount[];
   topProjects: ProjectSummary[];
-}
-
-export type DataFieldType = typeof DataFieldType[keyof typeof DataFieldType];
-
-
-export const DataFieldType = {
-  string: 'string',
-  int: 'int',
-  float: 'float',
-  percent: 'percent',
-  datetime: 'datetime',
-  bool: 'bool',
-} as const;
-
-export interface DataField {
-  name: string;
-  label: string;
-  type: DataFieldType;
-  description?: string;
-}
-
-export type DataSourceDescriptorKind = typeof DataSourceDescriptorKind[keyof typeof DataSourceDescriptorKind];
-
-
-export const DataSourceDescriptorKind = {
-  object: 'object',
-  table: 'table',
-} as const;
-
-export type DataSourceParamType = typeof DataSourceParamType[keyof typeof DataSourceParamType];
-
-
-export const DataSourceParamType = {
-  string: 'string',
-  int: 'int',
-  bool: 'bool',
-} as const;
-
-export interface DataSourceParam {
-  name: string;
-  type?: DataSourceParamType;
-  required?: boolean;
-  allowed?: string[] | null;
-  default?: unknown;
-  description?: string;
-}
-
-/**
- * Business-language description of one semantic tool.
- */
-export interface DataSourceDescriptor {
-  id: string;
-  title: string;
-  description: string;
-  kind: DataSourceDescriptorKind;
-  fields?: DataField[];
-  params?: DataSourceParam[];
-  businessDefinition?: string;
-  benchmarkFields?: string[];
-  supportsDateWindow?: boolean;
-  executionDayScoped?: boolean;
 }
 
 export type DqaCompileInputExistingRule = { [key: string]: unknown } | null;
@@ -501,71 +426,6 @@ export interface DqaValidateRuleOut {
   warnings?: DqaRuleWarning[];
 }
 
-export interface ExecuteTemplateInput {
-  studyId?: string | null;
-  executionDate?: string | null;
-  dateFrom?: string | null;
-  dateTo?: string | null;
-  reportKind?: string | null;
-  runAi?: boolean;
-  version?: number | null;
-}
-
-export interface ReportOut {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  format: string;
-  reportType?: string;
-  studyId?: string | null;
-  reportDate?: string | null;
-  promptId?: string | null;
-  promptName?: string | null;
-  projectIds: string[];
-  projectNames: string[];
-  generatedContent?: string | null;
-  downloadUrl?: string | null;
-  pageCount?: number | null;
-  fileSizeKb?: number | null;
-  generatedAt?: string | null;
-  createdAt: string;
-}
-
-export type ExecutedReportOutSpec = { [key: string]: unknown };
-
-export type ExecutedReportOutData = { [key: string]: unknown };
-
-export type ExecutedReportOutNarratives = {[key: string]: string};
-
-export type ExecutedReportOutUnavailable = {[key: string]: string};
-
-export type ExecutedReportOutMeta = { [key: string]: unknown };
-
-/**
- * Rendered preview: specification, resolved data and HTML, without persisting.
- */
-export interface ExecutedReportOut {
-  templateId?: string | null;
-  templateVersion?: number | null;
-  spec: ExecutedReportOutSpec;
-  data: ExecutedReportOutData;
-  narratives?: ExecutedReportOutNarratives;
-  unavailable?: ExecutedReportOutUnavailable;
-  meta?: ExecutedReportOutMeta;
-  html: string;
-  plainText: string;
-  aiSource?: string;
-}
-
-/**
- * Persisted report plus the same rendered payload Preview returns.
- */
-export interface ExecuteTemplateResultOut {
-  report: ReportOut;
-  preview: ExecutedReportOut;
-}
-
 export type FormFieldOutChoicesItem = { [key: string]: unknown };
 
 export interface FormFieldOut {
@@ -594,7 +454,7 @@ export interface GeneralSettings {
   aiBaseUrl?: string;
   aiModel?: string;
   aiCompileModel?: string;
-  aiReportPlannerModel?: string;
+  aiReportingPlanModel?: string;
   aiTemperature?: number;
   aiMaxTokens?: number;
   aiTimeoutSeconds?: number;
@@ -608,17 +468,17 @@ export interface GeneralSettings {
   transcriptionRatePerMinute?: number;
 }
 
-export interface GenerateDqaDailyInput {
-  studyId?: string | null;
-  reportDate?: string | null;
-  sendEmail?: boolean;
-  runAi?: boolean;
-}
+export type GenerateReportInputWindow = { [key: string]: unknown } | null;
 
-export interface GenerateDqaFinalInput {
-  studyId?: string | null;
-  runAi?: boolean;
+/**
+ * Generate from a user-saved template (enqueue execute job).
+ */
+export interface GenerateReportInput {
+  studyId: string;
+  templateId: string;
+  window?: GenerateReportInputWindow;
   sendEmail?: boolean;
+  recipients?: string[] | null;
 }
 
 export interface GridFlagRef {
@@ -712,6 +572,27 @@ export interface InsightOut {
   severity: string;
   tags: string[];
   createdAt: string;
+}
+
+export type JobCreatePayload = { [key: string]: unknown } | null;
+
+export interface JobCreate {
+  type: string;
+  studyId?: string | null;
+  payload?: JobCreatePayload;
+}
+
+export interface JobCreated {
+  jobId: string;
+}
+
+export interface JobStatusOut {
+  jobId: string;
+  type: string;
+  status: string;
+  studyId?: string | null;
+  result?: unknown | null;
+  error?: string | null;
 }
 
 export interface OkResponse {
@@ -834,9 +715,24 @@ export interface ReportConversationOut {
   updatedAt: string;
 }
 
+export type ReportConversationTurnInputSpec = { [key: string]: unknown } | null;
+
+export type ReportConversationTurnInputUnmapped = { [key: string]: unknown }[] | null;
+
+export type ReportConversationTurnInputJudgement = { [key: string]: unknown } | null;
+
 export interface ReportConversationTurnInput {
   message: string;
+  spec?: ReportConversationTurnInputSpec;
+  unmapped?: ReportConversationTurnInputUnmapped;
+  judgement?: ReportConversationTurnInputJudgement;
 }
+
+export type ReportConversationTurnOutUnmappedItem = { [key: string]: unknown };
+
+export type ReportConversationTurnOutJudgement = { [key: string]: unknown } | null;
+
+export type ReportConversationTurnOutSpec = { [key: string]: unknown } | null;
 
 export interface SpecIssueOut {
   path: string;
@@ -852,6 +748,9 @@ export interface ReportConversationTurnOut {
   question?: string | null;
   reason?: string | null;
   errors?: SpecIssueOut[];
+  unmapped?: ReportConversationTurnOutUnmappedItem[];
+  judgement?: ReportConversationTurnOutJudgement;
+  spec?: ReportConversationTurnOutSpec;
 }
 
 export interface ReportInput {
@@ -865,10 +764,32 @@ export interface ReportInput {
   projectIds?: string[];
 }
 
+export interface ReportOut {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  format: string;
+  reportType?: string;
+  studyId?: string | null;
+  reportDate?: string | null;
+  promptId?: string | null;
+  promptName?: string | null;
+  projectIds: string[];
+  projectNames: string[];
+  resultRef?: string | null;
+  downloadUrl?: string | null;
+  pageCount?: number | null;
+  fileSizeKb?: number | null;
+  generatedAt?: string | null;
+  createdAt: string;
+}
+
 export interface ReportScheduleOut {
   id: string;
   studyId: string;
   reportType: string;
+  templateId: string;
   enabled: boolean;
   time: string;
   timezone: string;
@@ -881,6 +802,7 @@ export interface ReportScheduleUpdate {
   time?: string | null;
   timezone?: string | null;
   recipients?: string[] | null;
+  templateId?: string | null;
 }
 
 export type ReportTemplateDetailOutSpec = { [key: string]: unknown };
@@ -908,7 +830,6 @@ export interface ReportTemplateDetailOut {
   studyId?: string | null;
   reportKind: string;
   status: string;
-  isSystem?: boolean;
   versionCount?: number;
   currentVersion?: number;
   promptText?: string;
@@ -932,7 +853,6 @@ export interface ReportTemplateOut {
   studyId?: string | null;
   reportKind: string;
   status: string;
-  isSystem?: boolean;
   versionCount?: number;
   currentVersion?: number;
   promptText?: string;
@@ -987,28 +907,20 @@ export interface SmtpSettings {
 
 export interface SettingsOut {
   smtp: SmtpSettings;
-  dailyReport: DailyReportSettings;
   general: GeneralSettings;
   activeStudyId?: string | null;
 }
 
 export interface SettingsUpdate {
   smtp?: SmtpSettings | null;
-  dailyReport?: DailyReportSettings | null;
   general?: GeneralSettings | null;
   activeStudyId?: string | null;
 }
 
 export interface ShareReportInput {
   recipients: string[];
-  subject: string;
+  subject?: string | null;
   message?: string | null;
-}
-
-export interface ShareResult {
-  success: boolean;
-  recipientsCount: number;
-  message: string;
 }
 
 export type SpeakerLabelsUpdateLabels = {[key: string]: string};
@@ -1017,13 +929,26 @@ export interface SpeakerLabelsUpdate {
   labels?: SpeakerLabelsUpdateLabels;
 }
 
+export interface SpecCatalogComponentOut {
+  type: string;
+  description?: string;
+}
+
 export type SpecCatalogOutSpecSchema = { [key: string]: unknown };
+
+export interface SpecCatalogSourceOut {
+  id: string;
+  title: string;
+  kind?: string;
+  description?: string;
+  fields?: string[];
+}
 
 export interface SpecCatalogOut {
   specVersion: string;
   componentTypes: string[];
-  components: ComponentDescriptor[];
-  dataSources: DataSourceDescriptor[];
+  components: SpecCatalogComponentOut[];
+  dataSources: SpecCatalogSourceOut[];
   specSchema?: SpecCatalogOutSpecSchema;
 }
 
@@ -1048,8 +973,6 @@ export interface StudyCreate {
   startDate?: string | null;
   endDate?: string | null;
   timezone?: string;
-  dailyDqaPromptId?: string | null;
-  finalDqaPromptId?: string | null;
   tools?: StudyToolIn[];
 }
 
@@ -1092,8 +1015,6 @@ export interface StudyOut {
   startDate?: string | null;
   endDate?: string | null;
   timezone?: string;
-  dailyDqaPromptId?: string | null;
-  finalDqaPromptId?: string | null;
   tools?: StudyToolOut[];
   credential?: StudyCredentialSummary | null;
   dayNumber?: number | null;
@@ -1110,8 +1031,6 @@ export interface StudyUpdate {
   startDate?: string | null;
   endDate?: string | null;
   timezone?: string | null;
-  dailyDqaPromptId?: string | null;
-  finalDqaPromptId?: string | null;
   tools?: StudyToolIn[] | null;
 }
 
@@ -1156,22 +1075,12 @@ export interface SubmissionsPage {
   totalPages: number;
 }
 
-export interface SyncResult {
-  success: boolean;
-  projectsSynced: number;
-  submissionsFetched: number;
-  newSubmissions: number;
-  deletedSubmissions?: number;
-  syncedAt: string;
-  errors: string[];
-}
+export type TemplatePlanResultOutSpec = { [key: string]: unknown } | null;
 
-/**
- * Result of planning: either a saved template or something the user must resolve.
- */
 export interface TemplatePlanResultOut {
   status: string;
   template?: ReportTemplateDetailOut | null;
+  spec?: TemplatePlanResultOutSpec;
   summary?: string | null;
   question?: string | null;
   reason?: string | null;
@@ -1275,9 +1184,17 @@ export interface TriangulationViewOut {
   practices?: TriangulationPracticeStat[];
 }
 
+export interface UpdateReportConversationInput {
+  title?: string | null;
+}
+
+export type UpdateReportTemplatePromptInputSpec = { [key: string]: unknown } | null;
+
 export interface UpdateReportTemplatePromptInput {
   prompt: string;
   notes?: string;
+  commit?: boolean;
+  spec?: UpdateReportTemplatePromptInputSpec;
 }
 
 export type UsageEventOutMetadata = { [key: string]: unknown } | null;
@@ -1407,21 +1324,11 @@ studyId?: string | null;
 reportKind?: string | null;
 };
 
-export type PreviewReportTemplateHtmlParams = {
-studyId?: string | null;
-executionDate?: string | null;
-runAi?: boolean;
-};
-
 export type ListReportConversationsParams = {
 studyId?: string | null;
 };
 
-export type SendDailyReportParams = {
-studyId?: string | null;
-};
-
-export type SendDqaDailyReportParams = {
+export type SendReportNowParams = {
 studyId?: string | null;
 };
 

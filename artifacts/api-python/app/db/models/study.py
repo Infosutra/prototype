@@ -37,20 +37,6 @@ class Study(Base):
     start_date: Mapped[str | None] = mapped_column(String, nullable=True)
     end_date: Mapped[str | None] = mapped_column(String, nullable=True)
     timezone: Mapped[str] = mapped_column(String, nullable=False, default="Asia/Kolkata")
-    daily_dqa_prompt_id: Mapped[str | None] = mapped_column(
-        ForeignKey("prompts.id", ondelete="SET NULL"), nullable=True
-    )
-    final_dqa_prompt_id: Mapped[str | None] = mapped_column(
-        ForeignKey("prompts.id", ondelete="SET NULL"), nullable=True
-    )
-    # Report templates executed by the Daily / Final flows. Null falls back to the
-    # seeded system template for that report kind.
-    daily_report_template_id: Mapped[str | None] = mapped_column(
-        ForeignKey("report_templates.id", ondelete="SET NULL"), nullable=True
-    )
-    final_report_template_id: Mapped[str | None] = mapped_column(
-        ForeignKey("report_templates.id", ondelete="SET NULL"), nullable=True
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
@@ -78,11 +64,7 @@ class Study(Base):
         back_populates="study", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        Index("studies_name_idx", "name"),
-        Index("studies_daily_dqa_prompt_idx", "daily_dqa_prompt_id"),
-        Index("studies_final_dqa_prompt_idx", "final_dqa_prompt_id"),
-    )
+    __table_args__ = (Index("studies_name_idx", "name"),)
 
 
 class StudyCredential(Base):

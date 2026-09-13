@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Project, Report, Study, Submission
 from app.db.session import get_db
-from app.repositories.dqa import parse_submitted_at_bound
+from app.domain.time_window import resolve_optional_submitted_at_bounds
 from app.schemas.common import StudyDateRangeQuery
 from app.schemas.misc import (
     ActivityItem,
@@ -30,22 +30,26 @@ def _apply_submitted_at_window(
     *,
     date_from: str | None,
     date_to: str | None,
+    timezone: str,
 ) -> Select[Any]:
-    start = parse_submitted_at_bound(date_from, end=False)
-    finish = parse_submitted_at_bound(date_to, end=True)
+    start, finish = resolve_optional_submitted_at_bounds(
+        date_from, date_to, timezone=timezone
+    )
     if start is not None:
         query = query.where(Submission.submitted_at >= start)
     if finish is not None:
-        query = query.where(Submission.submitted_at <= finish)
+        query = query.where(Submission.submitted_at < finish)
     return query
 
 
-def _require_study(db: Session, study_id: str | None) -> str:
+def _require_study(db: Session, study_id: str | None) -> tuple[str, str]:
     if not study_id:
         raise HTTPException(status_code=400, detail="studyId is required")
-    if not db.get(Study, study_id):
+    study = db.get(Study, study_id)
+    if not study:
         raise HTTPException(status_code=404, detail="Study not found")
-    return study_id
+    tz = (study.timezone or "UTC").strip() or "UTC"
+    return study_id, tz
 
 
 @router.get("/summary", response_model=DashboardSummary, operation_id="getDashboardSummary")
@@ -53,7 +57,7 @@ def dashboard_summary(
     q: Annotated[StudyDateRangeQuery, Query()],
     db: Session = Depends(get_db),
 ) -> DashboardSummary:
-    study_id = _require_study(db, q.study_id)
+    study_id, tz = _require_study(db, q.study_id)
     project_ids = _study_project_ids(study_id)
     total_projects = (
         db.scalar(
@@ -66,7 +70,7 @@ def dashboard_summary(
         Submission.project_id.in_(project_ids)
     )
     sub_count_q = _apply_submitted_at_window(
-        sub_count_q, date_from=q.date_from, date_to=q.date_to
+        sub_count_q, date_from=q.date_from, date_to=q.date_to, timezone=tz
     )
     total_submissions = db.scalar(sub_count_q) or 0
 
@@ -77,7 +81,7 @@ def dashboard_summary(
         Submission.submitted_at >= month_start,
     )
     month_q = _apply_submitted_at_window(
-        month_q, date_from=q.date_from, date_to=q.date_to
+        month_q, date_from=q.date_from, date_to=q.date_to, timezone=tz
     )
     submissions_this_month = db.scalar(month_q) or 0
 
@@ -85,7 +89,7 @@ def dashboard_summary(
         Submission.project_id.in_(project_ids)
     )
     enum_q = _apply_submitted_at_window(
-        enum_q, date_from=q.date_from, date_to=q.date_to
+        enum_q, date_from=q.date_from, date_to=q.date_to, timezone=tz
     )
     active_enumerators = db.scalar(enum_q) or 0
 
@@ -107,7 +111,7 @@ def dashboard_summary(
         .group_by(Submission.status)
     )
     status_q = _apply_submitted_at_window(
-        status_q, date_from=q.date_from, date_to=q.date_to
+        status_q, date_from=q.date_from, date_to=q.date_to, timezone=tz
     )
     status_rows = db.execute(status_q).all()
 
@@ -121,8 +125,8 @@ def dashboard_summary(
             .where(Submission.project_id.in_(project_ids))
         )
         ranked = _apply_submitted_at_window(
-            ranked, date_from=q.date_from, date_to=q.date_to
-        )
+        ranked, date_from=q.date_from, date_to=q.date_to, timezone=tz
+    )
         ranked = ranked.group_by(Submission.project_id).subquery()
         top_rows = db.execute(
             select(Project, ranked.c.cnt, ranked.c.last_at)
@@ -178,7 +182,7 @@ def dashboard_activity(
     q: Annotated[StudyDateRangeQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[ActivityItem]:
-    study_id = _require_study(db, q.study_id)
+    study_id, tz = _require_study(db, q.study_id)
 
     activity_q = (
         select(Submission)
@@ -188,7 +192,7 @@ def dashboard_activity(
         .limit(20)
     )
     activity_q = _apply_submitted_at_window(
-        activity_q, date_from=q.date_from, date_to=q.date_to
+        activity_q, date_from=q.date_from, date_to=q.date_to, timezone=tz
     )
     rows = db.scalars(activity_q).unique().all()
     return [

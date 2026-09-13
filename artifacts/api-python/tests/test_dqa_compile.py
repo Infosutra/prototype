@@ -152,3 +152,91 @@ def test_compile_invalid_after_repair_exhausted(db: Session):
         assert mocked.call_count == 3
     assert result["status"] == "invalid"
     assert result["validation"]["valid"] is False
+
+
+def test_resolve_compile_home_picks_form_that_owns_fields(db: Session) -> None:
+    from app.services.dqa_compile import resolve_compile_home
+
+    host = _seed_project(db)
+    other = Project(
+        id="proj-2",
+        uid="uid-2",
+        name="Interview",
+        study_id=host.study_id,
+        form_definition={
+            "survey": [
+                {"type": "text", "name": "D4", "label": "Centre id"},
+            ],
+            "choices": [],
+        },
+    )
+    db.add(other)
+    db.commit()
+
+    home = resolve_compile_home(
+        db,
+        host,
+        {"check": {"op": "required", "field": "D4"}},
+        [],
+    )
+    assert home.id == "proj-2"
+
+
+def test_normalize_related_field_sibling_to_field_b() -> None:
+    from app.services.dqa_compile import _finalize_rule
+
+    rule = _finalize_rule(
+        {
+            "severity": "amber",
+            "title": "Cross",
+            "message": "T1 A5 > T2 D3",
+            "check": {
+                "op": "gt",
+                "field": "A5",
+                "related_field": {
+                    "type": "related_field",
+                    "relationship": "t1_to_t2",
+                    "field": "D3",
+                },
+            },
+        },
+        english="T1 A5 > T2 D3",
+        existing_rule=None,
+    )
+    assert "related_field" not in rule["check"]
+    assert rule["check"]["field_b"] == {
+        "type": "related_field",
+        "relationship": "t1_to_t2",
+        "field": "D3",
+    }
+
+
+def test_resolve_compile_home_prefers_tool_code_in_english(db: Session) -> None:
+    from app.services.dqa_compile import resolve_compile_home
+
+    host = _seed_project(db)
+    t2 = StudyTool(id="tool-2", study_id=host.study_id, code="T2", label="Tool 2", sort_order=1)
+    db.add(t2)
+    other = Project(
+        id="proj-2",
+        uid="uid-2",
+        name="Interview",
+        study_id=host.study_id,
+        study_tool_id=t2.id,
+        form_definition={
+            "survey": [{"type": "integer", "name": "D3", "label": "Books"}],
+            "choices": [],
+        },
+    )
+    db.add(other)
+    db.commit()
+    db.refresh(host)
+
+    home = resolve_compile_home(
+        db,
+        other,
+        {"check": {"op": "gt", "field": "B21", "field_b": "B22"}},
+        [],
+        english="T1 form's B21 should always be greater than T2 D3",
+    )
+    assert home.id == host.id

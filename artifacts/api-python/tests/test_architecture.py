@@ -7,6 +7,14 @@ from pathlib import Path
 
 DOMAIN_ROOT = Path(__file__).resolve().parents[1] / "app" / "domain"
 
+# Query IR field maps bind to SQLAlchemy columns (Phase 2). Keep this exception
+# narrow — do not add more domain modules that import the ORM.
+_SQLALCHEMY_ALLOWED = frozenset(
+    {
+        "reporting/catalog.py",
+    }
+)
+
 
 def _imports_sqlalchemy(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -26,6 +34,9 @@ def _imports_sqlalchemy(path: Path) -> list[str]:
 def test_domain_never_imports_sqlalchemy():
     offenders: list[str] = []
     for path in sorted(DOMAIN_ROOT.rglob("*.py")):
+        rel = str(path.relative_to(DOMAIN_ROOT))
+        if rel in _SQLALCHEMY_ALLOWED:
+            continue
         for name in _imports_sqlalchemy(path):
             offenders.append(f"{path.relative_to(DOMAIN_ROOT.parent.parent)}: {name}")
     assert offenders == [], "app/domain must stay DB-free:\n" + "\n".join(offenders)
@@ -55,9 +66,18 @@ def test_domain_never_imports_langchain():
     assert offenders == [], "app/domain must not import LangChain:\n" + "\n".join(offenders)
 
 
-def test_report_spec_package_is_present_and_db_free():
-    spec_root = DOMAIN_ROOT / "report_spec"
-    assert spec_root.is_dir()
-    assert list(spec_root.glob("*.py"))
-    for path in spec_root.rglob("*.py"):
+def test_reporting_package_is_present_and_mostly_db_free():
+    """ReportSpec 1.0 lives under domain/reporting (legacy report_spec deleted)."""
+    reporting_root = DOMAIN_ROOT / "reporting"
+    assert reporting_root.is_dir()
+    assert (reporting_root / "spec.py").is_file()
+    assert (reporting_root / "query.py").is_file()
+    for path in reporting_root.rglob("*.py"):
+        rel = str(path.relative_to(DOMAIN_ROOT))
+        if rel in _SQLALCHEMY_ALLOWED:
+            continue
         assert not _imports_sqlalchemy(path), path.name
+
+
+def test_legacy_report_spec_package_removed():
+    assert not (DOMAIN_ROOT / "report_spec").exists()

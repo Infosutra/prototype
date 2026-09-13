@@ -22,6 +22,7 @@ from app.routers import (
     dqa,
     health,
     insights,
+    jobs,
     projects,
     prompts,
     report_conversations,
@@ -32,9 +33,9 @@ from app.routers import (
     submissions,
     usage,
 )
-from app.services.daily_report import maybe_send_scheduled_report
-from app.services.dqa_daily_email import maybe_send_scheduled_dqa_daily
 from app.services.kobo_auto_sync import maybe_run_scheduled_kobo_sync
+from app.services.jobs import worker as jobs_worker
+from app.services.reporting.schedule_email import maybe_send_scheduled_reports
 from app.services.transcription_job import drain_pending_transcriptions
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -52,8 +53,9 @@ def _scheduler_tick() -> None:
     db = SessionLocal()
     try:
         maybe_run_scheduled_kobo_sync(db)
-        maybe_send_scheduled_report(db)
-        maybe_send_scheduled_dqa_daily(db)
+        maybe_send_scheduled_reports(db)
+        # Small budget so long execute jobs do not starve Kobo/email ticks.
+        jobs_worker.run_claimed(db, limit=2)
     finally:
         db.close()
     drain_pending_transcriptions()
@@ -88,25 +90,22 @@ async def lifespan(_app: FastAPI):
         if seeded:
             logger.info("seeded_dqa_rule_packs", count=seeded)
         from app.services.dqa_compile_prompt import seed_dqa_compile_prompt
-        from app.services.dqa_report_prompts import seed_dqa_report_prompts
 
         if seed_dqa_compile_prompt(db):
             logger.info("seeded_dqa_compile_prompt")
-        report_prompts = seed_dqa_report_prompts(db)
-        if report_prompts:
-            logger.info("seeded_dqa_report_prompts", count=report_prompts)
-        from app.services.report_planner_prompts import seed_report_ai_prompts
-        from app.services.report_seed_templates import seed_report_templates
+        from app.services.reporting.prompt_seeds import seed_reporting_prompts
 
-        ai_prompts = seed_report_ai_prompts(db)
+        ai_prompts = seed_reporting_prompts(db)
         if ai_prompts:
-            logger.info("seeded_report_ai_prompts", count=ai_prompts)
-        templates = seed_report_templates(db)
-        if templates:
-            logger.info("seeded_report_templates", count=templates)
+            logger.info("seeded_reporting_prompts", count=ai_prompts)
         assigned = studies_service.apply_all_study_form_maps(db)
         if assigned:
             logger.info("assigned_study_form_maps", count=assigned)
+        from app.services.jobs import store as job_store
+
+        orphaned = job_store.fail_orphaned_processing(db)
+        if orphaned:
+            logger.info("failed_orphaned_jobs", count=orphaned)
     finally:
         db.close()
 
@@ -171,6 +170,7 @@ def create_app() -> FastAPI:
     app.include_router(report_templates.catalog_router, prefix=prefix)
     app.include_router(report_templates.router, prefix=prefix)
     app.include_router(report_conversations.router, prefix=prefix)
+    app.include_router(jobs.router, prefix=prefix)
     app.include_router(settings.router, prefix=prefix)
     app.include_router(dqa.router, prefix=prefix)
     app.include_router(dqa.projects_router, prefix=prefix)

@@ -80,8 +80,11 @@ def operator_catalog_for_prompt() -> list[dict[str, Any]]:
         {"op": "not_in", "params": ["field", "values[]"], "passes_when": "field is not in forbidden values"},
         {
             "op": "gt|lt|gte|lte",
-            "params": ["field", "value|field_b|related_field|threshold"],
-            "passes_when": "numeric relation holds (e.g. must-not-exceed → lte)",
+            "params": ["field", "value|field_b|threshold"],
+            "passes_when": (
+                "numeric relation holds (e.g. must-not-exceed → lte). "
+                "field_b may be a plain field string or a related_field object"
+            ),
         },
         {"op": "between", "params": ["field", "min|min_threshold", "max|max_threshold"], "passes_when": "value inside inclusive range"},
         {"op": "required", "params": ["field"], "passes_when": "field is non-blank"},

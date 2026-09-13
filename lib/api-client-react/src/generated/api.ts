@@ -50,12 +50,8 @@ import type {
   DqaTestRuleOut,
   DqaValidateRuleInput,
   DqaValidateRuleOut,
-  ExecuteTemplateInput,
-  ExecuteTemplateResultOut,
-  ExecutedReportOut,
   FormFieldOut,
-  GenerateDqaDailyInput,
-  GenerateDqaFinalInput,
+  GenerateReportInput,
   GetAnalyticsOverviewParams,
   GetAudioRecordingParams,
   GetAudioRecordingsParams,
@@ -81,6 +77,9 @@ import type {
   InsightGenerateInput,
   InsightInput,
   InsightOut,
+  JobCreate,
+  JobCreated,
+  JobStatusOut,
   ListDqaCompileSessionsParams,
   ListDqaRelationshipsParams,
   ListDqaRules200Item,
@@ -89,7 +88,6 @@ import type {
   ListReportConversationsParams,
   ListReportTemplatesParams,
   OkResponse,
-  PreviewReportTemplateHtmlParams,
   ProjectAnalytics,
   ProjectDqaStat,
   ProjectOut,
@@ -113,13 +111,11 @@ import type {
   RulePackUpdate,
   RulePackVersionOut,
   SaveConversationAsTemplateInput,
-  SendDailyReportParams,
-  SendDqaDailyReportParams,
+  SendReportNowParams,
   SetDqaRuleLifecycle200,
   SettingsOut,
   SettingsUpdate,
   ShareReportInput,
-  ShareResult,
   SpeakerLabelsUpdate,
   SpecCatalogOut,
   StudyAssignProject,
@@ -132,7 +128,6 @@ import type {
   SubmissionOut,
   SubmissionsPage,
   SyncProjectsParams,
-  SyncResult,
   TemplatePlanResultOut,
   TranscribeRequest,
   TrendPoint,
@@ -142,6 +137,7 @@ import type {
   TriangulationViewInfo,
   TriangulationViewOut,
   UpdateDqaRelationshipParams,
+  UpdateReportConversationInput,
   UpdateReportTemplatePromptInput,
   UsageEventOut,
   UsageSummaryOut
@@ -1768,11 +1764,12 @@ export const getSyncProjectsUrl = (params?: SyncProjectsParams,) => {
 }
 
 /**
+ * Enqueue a study-wide Kobo sync job; poll GET /jobs/{id} for SyncResult.
  * @summary Sync Projects
  */
-export const syncProjects = async (params?: SyncProjectsParams, options?: RequestInit): Promise<SyncResult> => {
+export const syncProjects = async (params?: SyncProjectsParams, options?: RequestInit): Promise<JobCreated> => {
 
-  return customFetch<SyncResult>(getSyncProjectsUrl(params),
+  return customFetch<JobCreated>(getSyncProjectsUrl(params),
   {
     ...options,
     method: 'POST'
@@ -2076,11 +2073,12 @@ export const getSyncProjectUrl = (projectId: string,) => {
 }
 
 /**
+ * Enqueue a single-form Kobo sync job; poll GET /jobs/{id} for SyncResult.
  * @summary Sync One Project
  */
-export const syncProject = async (projectId: string, options?: RequestInit): Promise<SyncResult> => {
+export const syncProject = async (projectId: string, options?: RequestInit): Promise<JobCreated> => {
 
-  return customFetch<SyncResult>(getSyncProjectUrl(projectId),
+  return customFetch<JobCreated>(getSyncProjectUrl(projectId),
   {
     ...options,
     method: 'POST'
@@ -3504,36 +3502,37 @@ export const useCreateReport = <TError = ErrorType<HTTPValidationError>,
       return useMutation(getCreateReportMutationOptions(options));
     }
 
-export const getCreateDqaDailyReportUrl = () => {
+export const getGenerateReportFromTemplateUrl = () => {
 
 
 
 
-  return `/api/reports/dqa-daily`
+  return `/api/reports/generate`
 }
 
 /**
- * @summary Create Dqa Daily
+ * Enqueue execute for a user-saved template. Refuses without templateId.
+ * @summary Generate From Template
  */
-export const createDqaDailyReport = async (generateDqaDailyInput: GenerateDqaDailyInput, options?: RequestInit): Promise<ReportOut> => {
+export const generateReportFromTemplate = async (generateReportInput: GenerateReportInput, options?: RequestInit): Promise<JobCreated> => {
 
-  return customFetch<ReportOut>(getCreateDqaDailyReportUrl(),
+  return customFetch<JobCreated>(getGenerateReportFromTemplateUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(generateDqaDailyInput)
+    body: JSON.stringify(generateReportInput)
   }
 );}
 
 
 
 
-export const getCreateDqaDailyReportMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDqaDailyReport>>, TError,{data: BodyType<GenerateDqaDailyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDqaDailyReport>>, TError,{data: BodyType<GenerateDqaDailyInput>}, TContext> => {
+export const getGenerateReportFromTemplateMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateReportFromTemplate>>, TError,{data: BodyType<GenerateReportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateReportFromTemplate>>, TError,{data: BodyType<GenerateReportInput>}, TContext> => {
 
-const mutationKey = ['createDqaDailyReport'];
+const mutationKey = ['generateReportFromTemplate'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -3543,10 +3542,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDqaDailyReport>>, {data: BodyType<GenerateDqaDailyInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateReportFromTemplate>>, {data: BodyType<GenerateReportInput>}> = (props) => {
           const {data} = props ?? {};
 
-          return  createDqaDailyReport(data,requestOptions)
+          return  generateReportFromTemplate(data,requestOptions)
         }
 
 
@@ -3556,92 +3555,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CreateDqaDailyReportMutationResult = NonNullable<Awaited<ReturnType<typeof createDqaDailyReport>>>
-    export type CreateDqaDailyReportMutationBody = BodyType<GenerateDqaDailyInput>
-    export type CreateDqaDailyReportMutationError = ErrorType<HTTPValidationError>
+    export type GenerateReportFromTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof generateReportFromTemplate>>>
+    export type GenerateReportFromTemplateMutationBody = BodyType<GenerateReportInput>
+    export type GenerateReportFromTemplateMutationError = ErrorType<HTTPValidationError>
 
     /**
- * @summary Create Dqa Daily
+ * @summary Generate From Template
  */
-export const useCreateDqaDailyReport = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDqaDailyReport>>, TError,{data: BodyType<GenerateDqaDailyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useGenerateReportFromTemplate = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateReportFromTemplate>>, TError,{data: BodyType<GenerateReportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof createDqaDailyReport>>,
+        Awaited<ReturnType<typeof generateReportFromTemplate>>,
         TError,
-        {data: BodyType<GenerateDqaDailyInput>},
+        {data: BodyType<GenerateReportInput>},
         TContext
       > => {
-      return useMutation(getCreateDqaDailyReportMutationOptions(options));
-    }
-
-export const getCreateDqaFinalReportUrl = () => {
-
-
-
-
-  return `/api/reports/dqa-final`
-}
-
-/**
- * @summary Create Dqa Final
- */
-export const createDqaFinalReport = async (generateDqaFinalInput: GenerateDqaFinalInput, options?: RequestInit): Promise<ReportOut> => {
-
-  return customFetch<ReportOut>(getCreateDqaFinalReportUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(generateDqaFinalInput)
-  }
-);}
-
-
-
-
-export const getCreateDqaFinalReportMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDqaFinalReport>>, TError,{data: BodyType<GenerateDqaFinalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDqaFinalReport>>, TError,{data: BodyType<GenerateDqaFinalInput>}, TContext> => {
-
-const mutationKey = ['createDqaFinalReport'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDqaFinalReport>>, {data: BodyType<GenerateDqaFinalInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  createDqaFinalReport(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateDqaFinalReportMutationResult = NonNullable<Awaited<ReturnType<typeof createDqaFinalReport>>>
-    export type CreateDqaFinalReportMutationBody = BodyType<GenerateDqaFinalInput>
-    export type CreateDqaFinalReportMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Create Dqa Final
- */
-export const useCreateDqaFinalReport = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDqaFinalReport>>, TError,{data: BodyType<GenerateDqaFinalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof createDqaFinalReport>>,
-        TError,
-        {data: BodyType<GenerateDqaFinalInput>},
-        TContext
-      > => {
-      return useMutation(getCreateDqaFinalReportMutationOptions(options));
+      return useMutation(getGenerateReportFromTemplateMutationOptions(options));
     }
 
 export const getGetReportUrl = (reportId: string,) => {
@@ -3957,76 +3886,6 @@ export function useDownloadReport<TData = Awaited<ReturnType<typeof downloadRepo
 
 
 
-export const getGenerateReportUrl = (reportId: string,) => {
-
-
-
-
-  return `/api/reports/${reportId}/generate`
-}
-
-/**
- * @summary Generate Report
- */
-export const generateReport = async (reportId: string, options?: RequestInit): Promise<ReportOut> => {
-
-  return customFetch<ReportOut>(getGenerateReportUrl(reportId),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-export const getGenerateReportMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateReport>>, TError,{reportId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof generateReport>>, TError,{reportId: string}, TContext> => {
-
-const mutationKey = ['generateReport'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateReport>>, {reportId: string}> = (props) => {
-          const {reportId} = props ?? {};
-
-          return  generateReport(reportId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type GenerateReportMutationResult = NonNullable<Awaited<ReturnType<typeof generateReport>>>
-
-    export type GenerateReportMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Generate Report
- */
-export const useGenerateReport = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateReport>>, TError,{reportId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof generateReport>>,
-        TError,
-        {reportId: string},
-        TContext
-      > => {
-      return useMutation(getGenerateReportMutationOptions(options));
-    }
-
 export const getShareReportUrl = (reportId: string,) => {
 
 
@@ -4036,12 +3895,13 @@ export const getShareReportUrl = (reportId: string,) => {
 }
 
 /**
+ * Enqueue email job for an existing report. Does not SMTP in the request.
  * @summary Share Report
  */
 export const shareReport = async (reportId: string,
-    shareReportInput: ShareReportInput, options?: RequestInit): Promise<ShareResult> => {
+    shareReportInput: ShareReportInput, options?: RequestInit): Promise<JobCreated> => {
 
-  return customFetch<ShareResult>(getShareReportUrl(reportId),
+  return customFetch<JobCreated>(getShareReportUrl(reportId),
   {
     ...options,
     method: 'POST',
@@ -4114,7 +3974,7 @@ export const getGetReportSpecCatalogUrl = (params?: GetReportSpecCatalogParams,)
 }
 
 /**
- * Component types and business data sources a report may use.
+ * Query IR component types and entity field allowlists (no certified tools).
  * @summary Get Catalog
  */
 export const getReportSpecCatalog = async (params?: GetReportSpecCatalogParams, options?: RequestInit): Promise<SpecCatalogOut> => {
@@ -4276,7 +4136,7 @@ export const getCreateReportTemplateUrl = () => {
 }
 
 /**
- * Plan a specification from the prompt (or accept one directly) and save v1.
+ * Save a pre-planned ReportSpec as a new template (no LLM on this path).
  * @summary Create Template
  */
 export const createReportTemplate = async (createReportTemplateInput: CreateReportTemplateInput, options?: RequestInit): Promise<TemplatePlanResultOut> => {
@@ -4336,77 +4196,6 @@ export const useCreateReportTemplate = <TError = ErrorType<HTTPValidationError>,
         TContext
       > => {
       return useMutation(getCreateReportTemplateMutationOptions(options));
-    }
-
-export const getCreateReportTemplateStreamUrl = () => {
-
-
-
-
-  return `/api/report-templates/create/stream`
-}
-
-/**
- * SSE stream of planner progress, then the same create result as POST /report-templates.
- * @summary Create Template Stream
- */
-export const createReportTemplateStream = async (createReportTemplateInput: CreateReportTemplateInput, options?: RequestInit): Promise<unknown> => {
-
-  return customFetch<unknown>(getCreateReportTemplateStreamUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(createReportTemplateInput)
-  }
-);}
-
-
-
-
-export const getCreateReportTemplateStreamMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReportTemplateStream>>, TError,{data: BodyType<CreateReportTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createReportTemplateStream>>, TError,{data: BodyType<CreateReportTemplateInput>}, TContext> => {
-
-const mutationKey = ['createReportTemplateStream'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createReportTemplateStream>>, {data: BodyType<CreateReportTemplateInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  createReportTemplateStream(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateReportTemplateStreamMutationResult = NonNullable<Awaited<ReturnType<typeof createReportTemplateStream>>>
-    export type CreateReportTemplateStreamMutationBody = BodyType<CreateReportTemplateInput>
-    export type CreateReportTemplateStreamMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Create Template Stream
- */
-export const useCreateReportTemplateStream = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReportTemplateStream>>, TError,{data: BodyType<CreateReportTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof createReportTemplateStream>>,
-        TError,
-        {data: BodyType<CreateReportTemplateInput>},
-        TContext
-      > => {
-      return useMutation(getCreateReportTemplateStreamMutationOptions(options));
     }
 
 export const getGetReportTemplateUrl = (templateId: string,) => {
@@ -4636,7 +4425,7 @@ export const getUpdateReportTemplatePromptUrl = (templateId: string,) => {
 }
 
 /**
- * Re-plan from an edited prompt and append a new version.
+ * Save a pre-planned ReportSpec as a new version (no LLM on this path).
  * @summary Update Template Prompt
  */
 export const updateReportTemplatePrompt = async (templateId: string,
@@ -4858,38 +4647,39 @@ export function useGetReportTemplateVersion<TData = Awaited<ReturnType<typeof ge
 
 
 
-export const getPreviewReportTemplateUrl = (templateId: string,) => {
+export const getRestoreReportTemplateVersionUrl = (templateId: string,
+    version: number,) => {
 
 
 
 
-  return `/api/report-templates/${templateId}/preview`
+  return `/api/report-templates/${templateId}/versions/${version}/restore`
 }
 
 /**
- * Execute a template and return the rendered result without saving a report.
- * @summary Preview Template
+ * Restore an earlier version by appending a new version with its prompt and spec.
+ * @summary Restore Template Version
  */
-export const previewReportTemplate = async (templateId: string,
-    executeTemplateInput: ExecuteTemplateInput, options?: RequestInit): Promise<ExecutedReportOut> => {
+export const restoreReportTemplateVersion = async (templateId: string,
+    version: number, options?: RequestInit): Promise<ReportTemplateDetailOut> => {
 
-  return customFetch<ExecutedReportOut>(getPreviewReportTemplateUrl(templateId),
+  return customFetch<ReportTemplateDetailOut>(getRestoreReportTemplateVersionUrl(templateId,version),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(executeTemplateInput)
+    method: 'POST'
+
+
   }
 );}
 
 
 
 
-export const getPreviewReportTemplateMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewReportTemplate>>, TError,{templateId: string;data: BodyType<ExecuteTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof previewReportTemplate>>, TError,{templateId: string;data: BodyType<ExecuteTemplateInput>}, TContext> => {
+export const getRestoreReportTemplateVersionMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreReportTemplateVersion>>, TError,{templateId: string;version: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreReportTemplateVersion>>, TError,{templateId: string;version: number}, TContext> => {
 
-const mutationKey = ['previewReportTemplate'];
+const mutationKey = ['restoreReportTemplateVersion'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -4899,10 +4689,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewReportTemplate>>, {templateId: string;data: BodyType<ExecuteTemplateInput>}> = (props) => {
-          const {templateId,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreReportTemplateVersion>>, {templateId: string;version: number}> = (props) => {
+          const {templateId,version} = props ?? {};
 
-          return  previewReportTemplate(templateId,data,requestOptions)
+          return  restoreReportTemplateVersion(templateId,version,requestOptions)
         }
 
 
@@ -4912,184 +4702,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PreviewReportTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof previewReportTemplate>>>
-    export type PreviewReportTemplateMutationBody = BodyType<ExecuteTemplateInput>
-    export type PreviewReportTemplateMutationError = ErrorType<HTTPValidationError>
+    export type RestoreReportTemplateVersionMutationResult = NonNullable<Awaited<ReturnType<typeof restoreReportTemplateVersion>>>
+
+    export type RestoreReportTemplateVersionMutationError = ErrorType<HTTPValidationError>
 
     /**
- * @summary Preview Template
+ * @summary Restore Template Version
  */
-export const usePreviewReportTemplate = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewReportTemplate>>, TError,{templateId: string;data: BodyType<ExecuteTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useRestoreReportTemplateVersion = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreReportTemplateVersion>>, TError,{templateId: string;version: number}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof previewReportTemplate>>,
+        Awaited<ReturnType<typeof restoreReportTemplateVersion>>,
         TError,
-        {templateId: string;data: BodyType<ExecuteTemplateInput>},
+        {templateId: string;version: number},
         TContext
       > => {
-      return useMutation(getPreviewReportTemplateMutationOptions(options));
-    }
-
-export const getPreviewReportTemplateHtmlUrl = (templateId: string,
-    params?: PreviewReportTemplateHtmlParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/report-templates/${templateId}/preview.html?${stringifiedParams}` : `/api/report-templates/${templateId}/preview.html`
-}
-
-/**
- * Server-rendered preview for embedding in the template editor.
- * @summary Preview Template Html
- */
-export const previewReportTemplateHtml = async (templateId: string,
-    params?: PreviewReportTemplateHtmlParams, options?: RequestInit): Promise<string> => {
-
-  return customFetch<string>(getPreviewReportTemplateHtmlUrl(templateId,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getPreviewReportTemplateHtmlQueryKey = (templateId: string,
-    params?: PreviewReportTemplateHtmlParams,) => {
-    return [
-    `/api/report-templates/${templateId}/preview.html`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getPreviewReportTemplateHtmlQueryOptions = <TData = Awaited<ReturnType<typeof previewReportTemplateHtml>>, TError = ErrorType<HTTPValidationError>>(templateId: string,
-    params?: PreviewReportTemplateHtmlParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewReportTemplateHtml>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getPreviewReportTemplateHtmlQueryKey(templateId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewReportTemplateHtml>>> = ({ signal }) => previewReportTemplateHtml(templateId,params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: templateId !== null && templateId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewReportTemplateHtml>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type PreviewReportTemplateHtmlQueryResult = NonNullable<Awaited<ReturnType<typeof previewReportTemplateHtml>>>
-export type PreviewReportTemplateHtmlQueryError = ErrorType<HTTPValidationError>
-
-
-/**
- * @summary Preview Template Html
- */
-
-export function usePreviewReportTemplateHtml<TData = Awaited<ReturnType<typeof previewReportTemplateHtml>>, TError = ErrorType<HTTPValidationError>>(
- templateId: string,
-    params?: PreviewReportTemplateHtmlParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewReportTemplateHtml>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getPreviewReportTemplateHtmlQueryOptions(templateId,params,options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getExecuteReportTemplateUrl = (templateId: string,) => {
-
-
-
-
-  return `/api/report-templates/${templateId}/execute`
-}
-
-/**
- * Execute a template, persist the report, and return the same preview payload.
- * @summary Execute Template
- */
-export const executeReportTemplate = async (templateId: string,
-    executeTemplateInput: ExecuteTemplateInput, options?: RequestInit): Promise<ExecuteTemplateResultOut> => {
-
-  return customFetch<ExecuteTemplateResultOut>(getExecuteReportTemplateUrl(templateId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(executeTemplateInput)
-  }
-);}
-
-
-
-
-export const getExecuteReportTemplateMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeReportTemplate>>, TError,{templateId: string;data: BodyType<ExecuteTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof executeReportTemplate>>, TError,{templateId: string;data: BodyType<ExecuteTemplateInput>}, TContext> => {
-
-const mutationKey = ['executeReportTemplate'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof executeReportTemplate>>, {templateId: string;data: BodyType<ExecuteTemplateInput>}> = (props) => {
-          const {templateId,data} = props ?? {};
-
-          return  executeReportTemplate(templateId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ExecuteReportTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof executeReportTemplate>>>
-    export type ExecuteReportTemplateMutationBody = BodyType<ExecuteTemplateInput>
-    export type ExecuteReportTemplateMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Execute Template
- */
-export const useExecuteReportTemplate = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeReportTemplate>>, TError,{templateId: string;data: BodyType<ExecuteTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof executeReportTemplate>>,
-        TError,
-        {templateId: string;data: BodyType<ExecuteTemplateInput>},
-        TContext
-      > => {
-      return useMutation(getExecuteReportTemplateMutationOptions(options));
+      return useMutation(getRestoreReportTemplateVersionMutationOptions(options));
     }
 
 export const getListReportConversationsUrl = (params?: ListReportConversationsParams,) => {
@@ -5323,6 +4951,147 @@ export function useGetReportConversation<TData = Awaited<ReturnType<typeof getRe
 
 
 
+export const getUpdateReportConversationUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/report-conversations/${conversationId}`
+}
+
+/**
+ * @summary Update Conversation
+ */
+export const updateReportConversation = async (conversationId: string,
+    updateReportConversationInput: UpdateReportConversationInput, options?: RequestInit): Promise<ReportConversationOut> => {
+
+  return customFetch<ReportConversationOut>(getUpdateReportConversationUrl(conversationId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateReportConversationInput)
+  }
+);}
+
+
+
+
+export const getUpdateReportConversationMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReportConversation>>, TError,{conversationId: string;data: BodyType<UpdateReportConversationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateReportConversation>>, TError,{conversationId: string;data: BodyType<UpdateReportConversationInput>}, TContext> => {
+
+const mutationKey = ['updateReportConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateReportConversation>>, {conversationId: string;data: BodyType<UpdateReportConversationInput>}> = (props) => {
+          const {conversationId,data} = props ?? {};
+
+          return  updateReportConversation(conversationId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateReportConversationMutationResult = NonNullable<Awaited<ReturnType<typeof updateReportConversation>>>
+    export type UpdateReportConversationMutationBody = BodyType<UpdateReportConversationInput>
+    export type UpdateReportConversationMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Conversation
+ */
+export const useUpdateReportConversation = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReportConversation>>, TError,{conversationId: string;data: BodyType<UpdateReportConversationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateReportConversation>>,
+        TError,
+        {conversationId: string;data: BodyType<UpdateReportConversationInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateReportConversationMutationOptions(options));
+    }
+
+export const getDeleteReportConversationUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/report-conversations/${conversationId}`
+}
+
+/**
+ * @summary Delete Conversation
+ */
+export const deleteReportConversation = async (conversationId: string, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDeleteReportConversationUrl(conversationId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteReportConversationMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReportConversation>>, TError,{conversationId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReportConversation>>, TError,{conversationId: string}, TContext> => {
+
+const mutationKey = ['deleteReportConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReportConversation>>, {conversationId: string}> = (props) => {
+          const {conversationId} = props ?? {};
+
+          return  deleteReportConversation(conversationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReportConversationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReportConversation>>>
+
+    export type DeleteReportConversationMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Delete Conversation
+ */
+export const useDeleteReportConversation = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReportConversation>>, TError,{conversationId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReportConversation>>,
+        TError,
+        {conversationId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteReportConversationMutationOptions(options));
+    }
+
 export const getAddReportConversationMessageUrl = (conversationId: string,) => {
 
 
@@ -5392,77 +5161,6 @@ export const useAddReportConversationMessage = <TError = ErrorType<HTTPValidatio
         TContext
       > => {
       return useMutation(getAddReportConversationMessageMutationOptions(options));
-    }
-
-export const getPreviewReportConversationUrl = (conversationId: string,) => {
-
-
-
-
-  return `/api/report-conversations/${conversationId}/preview`
-}
-
-/**
- * @summary Preview Conversation
- */
-export const previewReportConversation = async (conversationId: string,
-    executeTemplateInput: ExecuteTemplateInput, options?: RequestInit): Promise<ExecutedReportOut> => {
-
-  return customFetch<ExecutedReportOut>(getPreviewReportConversationUrl(conversationId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(executeTemplateInput)
-  }
-);}
-
-
-
-
-export const getPreviewReportConversationMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewReportConversation>>, TError,{conversationId: string;data: BodyType<ExecuteTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof previewReportConversation>>, TError,{conversationId: string;data: BodyType<ExecuteTemplateInput>}, TContext> => {
-
-const mutationKey = ['previewReportConversation'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewReportConversation>>, {conversationId: string;data: BodyType<ExecuteTemplateInput>}> = (props) => {
-          const {conversationId,data} = props ?? {};
-
-          return  previewReportConversation(conversationId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PreviewReportConversationMutationResult = NonNullable<Awaited<ReturnType<typeof previewReportConversation>>>
-    export type PreviewReportConversationMutationBody = BodyType<ExecuteTemplateInput>
-    export type PreviewReportConversationMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Preview Conversation
- */
-export const usePreviewReportConversation = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewReportConversation>>, TError,{conversationId: string;data: BodyType<ExecuteTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof previewReportConversation>>,
-        TError,
-        {conversationId: string;data: BodyType<ExecuteTemplateInput>},
-        TContext
-      > => {
-      return useMutation(getPreviewReportConversationMutationOptions(options));
     }
 
 export const getSaveReportConversationAsTemplateUrl = (conversationId: string,) => {
@@ -5535,6 +5233,153 @@ export const useSaveReportConversationAsTemplate = <TError = ErrorType<HTTPValid
       > => {
       return useMutation(getSaveReportConversationAsTemplateMutationOptions(options));
     }
+
+export const getCreateJobUrl = () => {
+
+
+
+
+  return `/api/jobs`
+}
+
+/**
+ * @summary Create Job
+ */
+export const createJob = async (jobCreate: JobCreate, options?: RequestInit): Promise<JobCreated> => {
+
+  return customFetch<JobCreated>(getCreateJobUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(jobCreate)
+  }
+);}
+
+
+
+
+export const getCreateJobMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createJob>>, TError,{data: BodyType<JobCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createJob>>, TError,{data: BodyType<JobCreate>}, TContext> => {
+
+const mutationKey = ['createJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createJob>>, {data: BodyType<JobCreate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createJob(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateJobMutationResult = NonNullable<Awaited<ReturnType<typeof createJob>>>
+    export type CreateJobMutationBody = BodyType<JobCreate>
+    export type CreateJobMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Job
+ */
+export const useCreateJob = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createJob>>, TError,{data: BodyType<JobCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createJob>>,
+        TError,
+        {data: BodyType<JobCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateJobMutationOptions(options));
+    }
+
+export const getGetJobUrl = (jobId: string,) => {
+
+
+
+
+  return `/api/jobs/${jobId}`
+}
+
+/**
+ * @summary Get Job
+ */
+export const getJob = async (jobId: string, options?: RequestInit): Promise<JobStatusOut> => {
+
+  return customFetch<JobStatusOut>(getGetJobUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetJobQueryKey = (jobId: string,) => {
+    return [
+    `/api/jobs/${jobId}`
+    ] as const;
+    }
+
+
+export const getGetJobQueryOptions = <TData = Awaited<ReturnType<typeof getJob>>, TError = ErrorType<HTTPValidationError>>(jobId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetJobQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getJob>>> = ({ signal }) => getJob(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetJobQueryResult = NonNullable<Awaited<ReturnType<typeof getJob>>>
+export type GetJobQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Job
+ */
+
+export function useGetJob<TData = Awaited<ReturnType<typeof getJob>>, TError = ErrorType<HTTPValidationError>>(
+ jobId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetJobQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetSettingsUrl = () => {
 
@@ -5753,7 +5598,7 @@ export const useTestSmtpConnection = <TError = ErrorType<unknown>,
       return useMutation(getTestSmtpConnectionMutationOptions(options));
     }
 
-export const getSendDailyReportUrl = (params?: SendDailyReportParams,) => {
+export const getSendReportNowUrl = (params?: SendReportNowParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -5765,15 +5610,16 @@ export const getSendDailyReportUrl = (params?: SendDailyReportParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/settings/send-daily-report?${stringifiedParams}` : `/api/settings/send-daily-report`
+  return stringifiedParams.length > 0 ? `/api/settings/send-report-now?${stringifiedParams}` : `/api/settings/send-report-now`
 }
 
 /**
- * @summary Send Daily Report
+ * Enqueue execute then email for the study's scheduled template.
+ * @summary Send Report Now
  */
-export const sendDailyReport = async (params?: SendDailyReportParams, options?: RequestInit): Promise<ConnectionTestResult> => {
+export const sendReportNow = async (params?: SendReportNowParams, options?: RequestInit): Promise<ConnectionTestResult> => {
 
-  return customFetch<ConnectionTestResult>(getSendDailyReportUrl(params),
+  return customFetch<ConnectionTestResult>(getSendReportNowUrl(params),
   {
     ...options,
     method: 'POST'
@@ -5785,11 +5631,11 @@ export const sendDailyReport = async (params?: SendDailyReportParams, options?: 
 
 
 
-export const getSendDailyReportMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,{params?: SendDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,{params?: SendDailyReportParams}, TContext> => {
+export const getSendReportNowMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendReportNow>>, TError,{params?: SendReportNowParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendReportNow>>, TError,{params?: SendReportNowParams}, TContext> => {
 
-const mutationKey = ['sendDailyReport'];
+const mutationKey = ['sendReportNow'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -5799,10 +5645,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDailyReport>>, {params?: SendDailyReportParams}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendReportNow>>, {params?: SendReportNowParams}> = (props) => {
           const {params} = props ?? {};
 
-          return  sendDailyReport(params,requestOptions)
+          return  sendReportNow(params,requestOptions)
         }
 
 
@@ -5812,100 +5658,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type SendDailyReportMutationResult = NonNullable<Awaited<ReturnType<typeof sendDailyReport>>>
+    export type SendReportNowMutationResult = NonNullable<Awaited<ReturnType<typeof sendReportNow>>>
 
-    export type SendDailyReportMutationError = ErrorType<void | HTTPValidationError>
-
-    /**
- * @summary Send Daily Report
- */
-export const useSendDailyReport = <TError = ErrorType<void | HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailyReport>>, TError,{params?: SendDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof sendDailyReport>>,
-        TError,
-        {params?: SendDailyReportParams},
-        TContext
-      > => {
-      return useMutation(getSendDailyReportMutationOptions(options));
-    }
-
-export const getSendDqaDailyReportUrl = (params?: SendDqaDailyReportParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/settings/send-dqa-daily-report?${stringifiedParams}` : `/api/settings/send-dqa-daily-report`
-}
-
-/**
- * Generate and email today's DQA Daily (separate from submission digest).
- * @summary Send Dqa Daily Report
- */
-export const sendDqaDailyReport = async (params?: SendDqaDailyReportParams, options?: RequestInit): Promise<ConnectionTestResult> => {
-
-  return customFetch<ConnectionTestResult>(getSendDqaDailyReportUrl(params),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-export const getSendDqaDailyReportMutationOptions = <TError = ErrorType<void | HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,{params?: SendDqaDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,{params?: SendDqaDailyReportParams}, TContext> => {
-
-const mutationKey = ['sendDqaDailyReport'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDqaDailyReport>>, {params?: SendDqaDailyReportParams}> = (props) => {
-          const {params} = props ?? {};
-
-          return  sendDqaDailyReport(params,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SendDqaDailyReportMutationResult = NonNullable<Awaited<ReturnType<typeof sendDqaDailyReport>>>
-
-    export type SendDqaDailyReportMutationError = ErrorType<void | HTTPValidationError>
+    export type SendReportNowMutationError = ErrorType<void | HTTPValidationError>
 
     /**
- * @summary Send Dqa Daily Report
+ * @summary Send Report Now
  */
-export const useSendDqaDailyReport = <TError = ErrorType<void | HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDqaDailyReport>>, TError,{params?: SendDqaDailyReportParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSendReportNow = <TError = ErrorType<void | HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendReportNow>>, TError,{params?: SendReportNowParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof sendDqaDailyReport>>,
+        Awaited<ReturnType<typeof sendReportNow>>,
         TError,
-        {params?: SendDqaDailyReportParams},
+        {params?: SendReportNowParams},
         TContext
       > => {
-      return useMutation(getSendDqaDailyReportMutationOptions(options));
+      return useMutation(getSendReportNowMutationOptions(options));
     }
 
 export const getGetDqaSummaryUrl = (params?: GetDqaSummaryParams,) => {
@@ -6177,7 +5945,7 @@ export const getGetDqaEnumeratorsUrl = (params?: GetDqaEnumeratorsParams,) => {
 }
 
 /**
- * @summary Enumerator Stats
+ * @summary Get Dqa Enumerators
  */
 export const getDqaEnumerators = async (params?: GetDqaEnumeratorsParams, options?: RequestInit): Promise<AppSchemasDqaEnumeratorStat[]> => {
 
@@ -6224,7 +5992,7 @@ export type GetDqaEnumeratorsQueryError = ErrorType<HTTPValidationError>
 
 
 /**
- * @summary Enumerator Stats
+ * @summary Get Dqa Enumerators
  */
 
 export function useGetDqaEnumerators<TData = Awaited<ReturnType<typeof getDqaEnumerators>>, TError = ErrorType<HTTPValidationError>>(

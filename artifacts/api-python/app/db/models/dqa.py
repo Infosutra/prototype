@@ -164,6 +164,8 @@ class DqaFlag(Base):
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
+    # Denormalized from project/submission study at flag write.
+    study_id: Mapped[str | None] = mapped_column(String, nullable=True)
     rule_id: Mapped[str] = mapped_column(String, nullable=False)
     severity: Mapped[str] = mapped_column(String, nullable=False, default="amber")
     title: Mapped[str] = mapped_column(String, nullable=False, default="")
@@ -177,5 +179,6 @@ class DqaFlag(Base):
         Index("dqa_flags_project_idx", "project_id"),
         Index("dqa_flags_submission_idx", "submission_id"),
         Index("dqa_flags_severity_idx", "severity"),
+        Index("dqa_flags_study_idx", "study_id"),
         UniqueConstraint("submission_id", "rule_id", name="dqa_flags_submission_rule_uidx"),
     )

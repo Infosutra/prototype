@@ -90,6 +90,7 @@ type CompileResponse = {
   warnings?: DqaRuleWarning[];
   lastProposal?: Record<string, unknown>;
   resolvedFields?: ResolvedField[];
+  sourceProjectId?: string;
 };
 
 const THINKING_LINES = [
@@ -440,12 +441,14 @@ function normalizeCompileResponse(data: CompileResponse): CompileResponse {
     resolved_fields?: ResolvedField[];
     partial_explanation?: string;
     last_proposal?: Record<string, unknown>;
+    source_project_id?: string;
   };
   return {
     ...data,
     resolvedFields: data.resolvedFields ?? raw.resolved_fields ?? [],
     partialExplanation: data.partialExplanation ?? raw.partial_explanation,
     lastProposal: data.lastProposal ?? raw.last_proposal,
+    sourceProjectId: data.sourceProjectId ?? raw.source_project_id,
   };
 }
 
@@ -898,6 +901,7 @@ function RuleAuthoringChat({
   initialEnglish,
   existingRule,
   fields,
+  scopeNote,
   onBack,
   onApprove,
 }: {
@@ -906,10 +910,12 @@ function RuleAuthoringChat({
   initialEnglish: string;
   existingRule: Record<string, unknown> | null;
   fields: { name: string; label: string }[];
+  scopeNote?: string;
   onBack: () => void;
   onApprove: (
     rule: Record<string, unknown>,
     lifecycle: RuleLifecycleStatus,
+    sourceProjectId?: string,
   ) => void | Promise<void>;
 }) {
   const compileRule = useCompileDqaRule();
@@ -947,6 +953,7 @@ function RuleAuthoringChat({
   const [jsonDraft, setJsonDraft] = useState("");
   const [confirmActivate, setConfirmActivate] = useState(false);
   const [resolvedFields, setResolvedFields] = useState<ResolvedField[]>([]);
+  const [sourceProjectId, setSourceProjectId] = useState<string | undefined>(undefined);
   const [aiExplanation, setAiExplanation] = useState("");
   const [proposalConfirmed, setProposalConfirmed] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1005,6 +1012,7 @@ function RuleAuthoringChat({
       setValidation(normalized.validation ?? null);
       setConfirmActivate(false);
       setResolvedFields(normalized.resolvedFields ?? []);
+      setSourceProjectId(normalized.sourceProjectId || projectId);
       setAiExplanation(cleanAiExplanation(String(normalized.explanation || "")));
       setProposalConfirmed(false);
       const explanation =
@@ -1046,7 +1054,7 @@ function RuleAuthoringChat({
       { role: "user", content: userText },
       { role: "assistant", content: message },
     ]);
-  }, []);
+  }, [projectId]);
 
   const runCompile = useCallback(
     async (userText: string) => {
@@ -1243,7 +1251,7 @@ function RuleAuthoringChat({
         description: summary || String(compiledRule.description || compiledRule.message || ""),
         resolvedFields,
       };
-      await onApprove(applyLifecycle(toSave, lifecycle), lifecycle);
+      await onApprove(applyLifecycle(toSave, lifecycle), lifecycle, sourceProjectId || projectId);
     } catch (err) {
       const message =
         err instanceof Error
@@ -1271,6 +1279,9 @@ function RuleAuthoringChat({
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
+        {scopeNote && (
+          <p className="text-xs text-muted-foreground">{scopeNote}</p>
+        )}
       </div>
 
       <div className="mx-auto flex w-full max-w-2xl flex-col rounded-xl border bg-card min-h-[520px]">
@@ -1457,7 +1468,7 @@ function RuleAuthoringChat({
                   ? "Answer the clarification…"
                   : compileStatus === "success" && !proposalConfirmed
                     ? "Yes to confirm, or describe corrections…"
-                    : "Describe the rule in English…"
+                    : "Describe the rule in English. It can cover one form or several related forms…"
               }
               disabled={busy}
               onKeyDown={(e) => {
@@ -1673,6 +1684,7 @@ export function DqaChecksPanel({
           initialEnglish={editRule?.english ?? ""}
           existingRule={editRule?.raw ?? null}
           fields={fields}
+          scopeNote="This form, plus related study forms when the rule spans more than one."
           onBack={() => {
             if (view === "edit-ai" && editRuleId) {
               setView("edit");
@@ -1720,8 +1732,9 @@ export function DqaChecksPanel({
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground space-y-2">
             <p>
-              Write rules in plain English. The compiler validates against this form&apos;s schema,
-              previews on recent submissions, and saves deterministic JSON checks.
+              Write rules in plain English. A rule can stay on this form or span related
+              study forms. The compiler validates against the study schemas, previews on
+              recent submissions, and saves deterministic JSON checks.
             </p>
             <p>
               Runtime evaluation uses compiled JSON only. Form schemas are sent to the compiler,
@@ -1868,9 +1881,11 @@ export function DqaStudyRulesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
-  const [addFormId, setAddFormId] = useState<string>("");
+  const [view, setView] = useState<"table" | "add">("table");
+  const [authoringSession, setAuthoringSession] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const compileHostId = projects[0]?.id ?? "";
 
   const packQueries = useQueries({
     queries: projects.map((project) => ({
@@ -1988,31 +2003,67 @@ export function DqaStudyRulesPanel({
     }
   };
 
+  const approveStudyRule = async (
+    compiled: Record<string, unknown>,
+    lifecycle: RuleLifecycleStatus,
+    sourceProjectId?: string,
+  ) => {
+    const projectId =
+      (sourceProjectId && projects.some((p) => p.id === sourceProjectId)
+        ? sourceProjectId
+        : compileHostId) || "";
+    if (!projectId) {
+      throw new Error("No form in this study to store the rule");
+    }
+    const packOut = await getProjectRulePack(projectId);
+    const existing = packOut.pack || {};
+    const rawRules = Array.isArray(existing.rules) ? [...(existing.rules as unknown[])] : [];
+    const withLifecycle = applyLifecycle(compiled, lifecycle);
+    const id = String(withLifecycle.id || `R-${Date.now()}`);
+    const pack = {
+      ...existing,
+      id: existing.id || projectId,
+      project_uids: existing.project_uids || [projectId],
+      rules: [...rawRules, { ...withLifecycle, id }],
+    };
+    await updatePack.mutateAsync({ projectId, data: { pack } });
+    if (lifecycle === "active") {
+      await recompute.mutateAsync({ params: { projectId } });
+    }
+    await refreshProject(projectId);
+    setView("table");
+  };
+
+  if (view === "add" && compileHostId) {
+    return (
+      <div key={`study-add-${authoringSession}`}>
+        <RuleAuthoringChat
+          projectId={compileHostId}
+          mode="add"
+          initialEnglish=""
+          existingRule={null}
+          fields={[]}
+          scopeNote="Uses every form in this study. A rule can stay on one form or span related forms."
+          onBack={() => setView("table")}
+          onApprove={approveStudyRule}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-semibold">DQA checks</p>
         <span className="text-sm text-muted-foreground">· All study forms</span>
         <div className="flex-1" />
-        <Select value={addFormId} onValueChange={setAddFormId}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="Form for new rule" />
-          </SelectTrigger>
-          <SelectContent>
-            {projects.map((project) => (
-              <SelectItem key={project.id} value={project.id}>
-                {formLabelFor(project)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Button
           size="sm"
           className="bg-primary text-primary-foreground"
-          disabled={!addFormId}
+          disabled={!compileHostId}
           onClick={() => {
-            if (!addFormId) return;
-            onOpenForm(addFormId, { add: true });
+            setAuthoringSession((n) => n + 1);
+            setView("add");
           }}
         >
           Add rule in English
@@ -2020,8 +2071,8 @@ export function DqaStudyRulesPanel({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Showing rules across every form in this study. Choose a form to add a rule, or edit a row to
-        open that form&apos;s authoring view.
+        Showing rules across every form in this study. Add a rule in English — it can cover one
+        form or several related forms. Edit a row to open that form&apos;s authoring view.
       </p>
 
       {errorMessage && (
@@ -2090,7 +2141,7 @@ export function DqaStudyRulesPanel({
                 <tr>
                   <td colSpan={5} className="p-6 text-center text-muted-foreground">
                     {allRows.length === 0
-                      ? "No rules yet across study forms. Pick a form above to add one."
+                      ? "No rules yet across study forms. Add a rule in English to get started."
                       : "No rules match your filters."}
                   </td>
                 </tr>

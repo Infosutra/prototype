@@ -44,9 +44,6 @@ export function RequireActiveStudy({
                 {studies.length === 0 ? "Create a study" : "Open Studies"}
               </Link>
             </Button>
-            <Button variant="outline" asChild>
-              <Link href="/forms">Sync forms</Link>
-            </Button>
           </div>
         </CardContent>
       </Card>

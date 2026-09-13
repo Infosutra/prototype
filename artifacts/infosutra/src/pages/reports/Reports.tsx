@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetReportsQueryKey,
-  useCreateDqaDailyReport,
-  useCreateDqaFinalReport,
+  useCreateJob,
   useDeleteReport,
   useGetReports,
+  useListReportTemplates,
   type ReportOut,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout/Layout";
@@ -31,26 +31,32 @@ export default function Reports() {
   const { activeStudy, activeStudyId } = useStudy();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
 
   const listQuery = useGetReports(
     { studyId: activeStudyId || undefined },
     { query: { enabled: Boolean(activeStudyId) } as never },
   );
 
-  const generateDaily = useCreateDqaDailyReport({
-    mutation: {
-      onSuccess: () => {
-        setError(null);
-        queryClient.invalidateQueries({ queryKey: getGetReportsQueryKey() });
-      },
-      onError: (err) => setError(err.message),
-    },
-  });
+  const templatesQuery = useListReportTemplates(
+    { studyId: activeStudyId || undefined },
+    { query: { enabled: Boolean(activeStudyId) } as never },
+  );
 
-  const generateFinal = useCreateDqaFinalReport({
+  const templates = templatesQuery.data ?? [];
+  const templateId = useMemo(() => {
+    if (selectedTemplateId && templates.some((t) => t.id === selectedTemplateId)) {
+      return selectedTemplateId;
+    }
+    return templates[0]?.id ?? "";
+  }, [selectedTemplateId, templates]);
+
+  const generate = useCreateJob({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
         setError(null);
+        setLastJobId(data.jobId);
         queryClient.invalidateQueries({ queryKey: getGetReportsQueryKey() });
       },
       onError: (err) => setError(err.message),
@@ -64,10 +70,23 @@ export default function Reports() {
     },
   });
 
-  const reports = (listQuery.data ?? []).filter(
-    (r) => r.reportType === "daily_dqa" || r.reportType === "final_dqa" || !r.reportType,
-  );
-  const busy = generateDaily.isPending || generateFinal.isPending;
+  const reports = listQuery.data ?? [];
+  const busy = generate.isPending;
+  const hasTemplates = templates.length > 0;
+
+  const onGenerate = () => {
+    if (!activeStudyId || !templateId) return;
+    generate.mutate({
+      data: {
+        type: "execute",
+        studyId: activeStudyId,
+        payload: {
+          templateId,
+          window: { preset: "execution_date" },
+        },
+      },
+    });
+  };
 
   return (
     <Layout>
@@ -77,55 +96,49 @@ export default function Reports() {
           activeStudy
             ? `${activeStudy.name}${
                 activeStudy.dayNumber != null ? ` · Day ${activeStudy.dayNumber}` : ""
-              } — DQA Daily & Final`
-            : "DQA Daily and Final analytical reports"
+              } — generate from a saved template`
+            : "Generate reports from user-authored templates"
         }
         action={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <Button size="sm" variant="outline" asChild>
               <Link href="/report-templates">Templates</Link>
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!activeStudyId || busy}
-              onClick={() =>
-                generateDaily.mutate({
-                  data: {
-                    studyId: activeStudyId || undefined,
-                    runAi: true,
-                    sendEmail: false,
-                  },
-                })
-              }
-            >
-              <Sparkles className={`w-4 h-4 mr-2 ${generateDaily.isPending ? "animate-pulse" : ""}`} />
-              {generateDaily.isPending ? "Generating…" : "DQA Daily"}
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/report-composer">Compose</Link>
             </Button>
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground"
-              disabled={!activeStudyId || busy}
-              onClick={() =>
-                generateFinal.mutate({
-                  data: {
-                    studyId: activeStudyId || undefined,
-                    runAi: true,
-                    sendEmail: false,
-                  },
-                })
-              }
-            >
-              <FileBarChart className={`w-4 h-4 mr-2 ${generateFinal.isPending ? "animate-pulse" : ""}`} />
-              {generateFinal.isPending ? "Generating…" : "Final DQA"}
-            </Button>
+            {hasTemplates ? (
+              <>
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={templateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  disabled={busy}
+                >
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  className="bg-primary text-primary-foreground"
+                  disabled={!activeStudyId || !templateId || busy}
+                  onClick={onGenerate}
+                >
+                  <Sparkles className={`w-4 h-4 mr-2 ${busy ? "animate-pulse" : ""}`} />
+                  {busy ? "Queuing…" : "Generate"}
+                </Button>
+              </>
+            ) : null}
           </div>
         }
       />
       <div className="flex-1 overflow-auto p-4 md:p-6 bg-muted/30">
         <RequireActiveStudy
           title="Select a study for reports"
-          description="DQA Daily and Final reports are generated for the active study workspace."
+          description="Reports are generated for the active study from a saved template."
         >
         {(error || listQuery.error) && (
           <div className="mb-4 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive max-w-3xl mx-auto">
@@ -134,26 +147,53 @@ export default function Reports() {
           </div>
         )}
 
-        {(generateDaily.data || generateFinal.data) && (
+        {lastJobId && (
           <div className="mb-4 rounded-md border border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300 p-3 text-sm max-w-3xl mx-auto">
-            Generated {(generateFinal.data || generateDaily.data)?.title}. Preview or download PDF.
+            Execute job queued ({lastJobId}).{" "}
+            <Link
+              href={`/reports/execute-preview?job=${encodeURIComponent(lastJobId)}`}
+              className="underline"
+            >
+              Open preview
+            </Link>
           </div>
         )}
 
         <div className="grid grid-cols-1 gap-4 max-w-3xl mx-auto">
-          {listQuery.isLoading && (
-            <p className="text-sm text-muted-foreground text-center py-12">Loading reports…</p>
-          )}
-
-          {!listQuery.isLoading && reports.length === 0 && (
+          {!hasTemplates && !templatesQuery.isLoading && (
             <Card>
               <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
                 <FileBarChart className="w-8 h-8 text-muted-foreground" />
                 <div>
-                  <h3 className="font-semibold">No DQA reports yet</h3>
+                  <h3 className="font-semibold">No report templates yet</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Generate a Daily report for field ops, or a Final close-out with TR-1 / TR-3 / TR-5
-                    triangulation.
+                    Author and save a template before Generate or schedule can run.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" asChild>
+                    <Link href="/report-templates">Create template</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/report-composer">Compose</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {listQuery.isLoading && (
+            <p className="text-sm text-muted-foreground text-center py-12">Loading reports…</p>
+          )}
+
+          {!listQuery.isLoading && hasTemplates && reports.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+                <FileBarChart className="w-8 h-8 text-muted-foreground" />
+                <div>
+                  <h3 className="font-semibold">No reports yet</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Choose a saved template and Generate to enqueue an execute job.
                   </p>
                 </div>
               </CardContent>
@@ -198,12 +238,6 @@ export default function Reports() {
                       PDF
                     </a>
                   </Button>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={reportDownloadUrl(report.id, "docx")} download>
-                      <Download className="w-4 h-4 mr-1.5" />
-                      DOCX
-                    </a>
-                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -220,7 +254,7 @@ export default function Reports() {
         </div>
 
         <p className="text-xs text-muted-foreground text-center mt-8 max-w-xl mx-auto">
-          Scheduled DQA Daily email is under Settings. Final reports are generated on demand.
+          Schedules require a template and enqueue execute then email. Configure under Studies.
         </p>
         </RequireActiveStudy>
       </div>

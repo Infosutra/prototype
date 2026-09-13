@@ -1,0 +1,87 @@
+{
+  "specVersion": "1.0",
+  "title": "Golden daily DQA snapshot",
+  "subtitle": "Test fixture only — not a shipped template",
+  "sections": [
+    {
+      "id": "s1",
+      "title": "Today's submissions",
+      "components": [
+        {
+          "id": "s1c1",
+          "type": "kpi_group",
+          "query": {
+            "entity": "submission",
+            "window": "execution_date",
+            "measures": [
+              { "id": "total", "fn": "count" },
+              { "id": "clean", "fn": "countWhere", "field": "isClean", "eq": true },
+              { "id": "flagged", "fn": "countWhere", "field": "isClean", "eq": false }
+            ]
+          },
+          "display": {
+            "items": [
+              { "label": "Total", "field": "total" },
+              { "label": "Clean", "field": "clean" },
+              { "label": "Flagged", "field": "flagged" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "title": "By enumerator",
+      "components": [
+        {
+          "id": "s2c1",
+          "type": "table",
+          "query": {
+            "entity": "submission",
+            "window": "execution_date",
+            "groupBy": ["enumerator"],
+            "measures": [
+              { "id": "total", "fn": "count" },
+              { "id": "clean", "fn": "countWhere", "field": "isClean", "eq": true },
+              { "id": "flagged", "fn": "countWhere", "field": "isClean", "eq": false }
+            ]
+          },
+          "display": {
+            "columns": ["enumerator", "total", "clean", "flagged"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "title": "Red flags",
+      "components": [
+        {
+          "id": "s3c1",
+          "type": "table",
+          "query": {
+            "entity": "flag",
+            "window": "execution_date",
+            "filters": [
+              { "field": "severity", "op": "eq", "value": "red" }
+            ],
+            "limit": 50
+          },
+          "display": {
+            "columns": ["enumerator", "ruleTitle", "toolCode", "severity"]
+          }
+        },
+        {
+          "id": "s3c2",
+          "type": "narrative",
+          "uses": ["s1c1", "s2c1", "s3c1"],
+          "display": {
+            "role": "warning",
+            "instruction": "Write a short note on what looks concerning in today's submissions and red flags.",
+            "maxWords": 120
+          }
+        }
+      ]
+    }
+  ]
+}

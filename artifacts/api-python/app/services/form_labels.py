@@ -261,7 +261,7 @@ def clean_enumerator_name(raw: str) -> str:
     return " ".join(parts)
 
 
-def enumerator_match_key(name: str) -> str:
+def match_key_for_enumerator(name: str) -> str:
     """Case-insensitive key with spaces removed (joins Devanagari spaced variants)."""
     normalized = clean_enumerator_name(name)
     return "".join(normalized.casefold().split())
@@ -290,9 +290,9 @@ def _levenshtein(a: str, b: str) -> int:
 
 # Explicit typo / spelling aliases → preferred display form (after clean).
 ENUMERATOR_DISPLAY_ALIASES: dict[str, str] = {
-    enumerator_match_key("Laxman lal mant"): "Laxman Lal Manat",
-    enumerator_match_key("लखाराम"): "लखा राम",
-    enumerator_match_key("Lakha Ram"): "लखा राम",
+    match_key_for_enumerator("Laxman lal mant"): "Laxman Lal Manat",
+    match_key_for_enumerator("लखाराम"): "लखा राम",
+    match_key_for_enumerator("Lakha Ram"): "लखा राम",
 }
 
 
@@ -344,7 +344,7 @@ def build_enumerator_canonical_map(
     # 1) Explicit aliases + identical match keys.
     by_key: dict[str, list[str]] = defaultdict(list)
     for name in freq:
-        key = enumerator_match_key(name)
+        key = match_key_for_enumerator(name)
         alias = ENUMERATOR_DISPLAY_ALIASES.get(key)
         if alias:
             alias_clean = clean_enumerator_name(alias)
@@ -352,7 +352,7 @@ def build_enumerator_canonical_map(
                 parent[alias_clean] = alias_clean
                 freq[alias_clean] = freq.get(alias_clean, 0)
             union(name, alias_clean)
-            key = enumerator_match_key(alias_clean)
+            key = match_key_for_enumerator(alias_clean)
         by_key[key].append(name)
     for group in by_key.values():
         for other in group[1:]:
@@ -381,14 +381,14 @@ def build_enumerator_canonical_map(
         left_tokens = _enumerator_tokens(left)
         if not left_tokens:
             continue
-        left_key = enumerator_match_key(left)
+        left_key = match_key_for_enumerator(left)
         if len(left_key) < 8:
             continue
         for right in cleaned_names[i + 1 :]:
             right_tokens = _enumerator_tokens(right)
             if not right_tokens or left_tokens[0] != right_tokens[0]:
                 continue
-            right_key = enumerator_match_key(right)
+            right_key = match_key_for_enumerator(right)
             if abs(len(left_key) - len(right_key)) > 1:
                 continue
             if _levenshtein(left_key, right_key) == 1:
@@ -411,7 +411,7 @@ def build_enumerator_canonical_map(
         )
         # Prefer explicit alias display when present in the component.
         for name in group:
-            key = enumerator_match_key(name)
+            key = match_key_for_enumerator(name)
             if key in ENUMERATOR_DISPLAY_ALIASES:
                 preferred = clean_enumerator_name(ENUMERATOR_DISPLAY_ALIASES[key])
                 break

@@ -9,6 +9,8 @@ from app.db.models.dqa import (
     RulePackVersion,
     TriangulationView,
 )
+from app.db.models.ingest import SubmissionAnswer, SubmissionQuality
+from app.db.models.jobs import Job
 from app.db.models.project import Project
 from app.db.models.reporting import (
     Insight,
@@ -17,7 +19,6 @@ from app.db.models.reporting import (
     ReportConversation,
     ReportConversationMessage,
     ReportProject,
-    ReportRun,
     ReportSchedule,
     ReportTemplate,
     ReportTemplateVersion,
@@ -33,13 +34,13 @@ __all__ = [
     "DqaFlag",
     "DqaRelationship",
     "Insight",
+    "Job",
     "Project",
     "Prompt",
     "Report",
     "ReportConversation",
     "ReportConversationMessage",
     "ReportProject",
-    "ReportRun",
     "ReportSchedule",
     "ReportTemplate",
     "ReportTemplateVersion",
@@ -49,6 +50,8 @@ __all__ = [
     "StudyCredential",
     "StudyTool",
     "Submission",
+    "SubmissionAnswer",
+    "SubmissionQuality",
     "TriangulationView",
     "UsageEvent",
 ]

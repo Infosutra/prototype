@@ -105,6 +105,7 @@ def evaluate_rule(
         id=stable_flag_id(current.id, rule_id),
         submission_id=current.id,
         project_id=current.project_id,
+        study_id=study_id,
         rule_id=rule_id,
         severity=str(rule.get("severity") or "amber").lower(),
         title=str(rule.get("title") or rule.get("id") or "Flag"),
@@ -131,16 +132,28 @@ def evaluate_submission(
     pack_version: int | None = None,
     metrics: EvaluationMetrics | None = None,
 ) -> list[DqaFlag]:
+    from app.services.reporting.quality import upsert_quality_for_submission
+
     pack = pack or get_pack_for_project(db, submission.project_id)
     db.execute(delete(DqaFlag).where(DqaFlag.submission_id == submission.id))
-    if not pack:
-        if commit:
-            db.commit()
-        return []
 
     if study_id is None:
         project = db.get(Project, submission.project_id)
         study_id = project.study_id if project else None
+        if study_id is None and submission.study_id:
+            study_id = submission.study_id
+
+    if not pack:
+        upsert_quality_for_submission(
+            db,
+            submission.id,
+            project_id=submission.project_id,
+            study_id=study_id,
+        )
+        if commit:
+            db.commit()
+        return []
+
     if study_id and rel_map is None:
         rel_map = load_study_relationships(db, study_id)
     target_rows_cache = target_rows_cache or {}
@@ -188,6 +201,15 @@ def evaluate_submission(
         submission.status = "flagged"
     elif submission.status == "flagged":
         submission.status = "validated"
+
+    # Flush flags so quality rollup can count them before commit.
+    db.flush()
+    upsert_quality_for_submission(
+        db,
+        submission.id,
+        project_id=submission.project_id,
+        study_id=study_id,
+    )
 
     if commit:
         db.commit()

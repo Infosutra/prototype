@@ -33,7 +33,10 @@ Rules:
 - If a referenced code is missing from form_fields, set clarifying_question (do not invent a nearby field).
 - Intra-form fields use plain string refs. Inter-form fields use related_field objects only.
 - Never invent relationship codes. Use only relationships listed in context.relationships.
+- related_field is an operand value for field / field_b — never a sibling key next to field.
 - related_field shape: {"type":"related_field","relationship":"<code>","field":"<target_field>"}
+- Inter-form example: "T1 A5 must be greater than T2 D3" → {"op":"gt","field":"A5","field_b":{"type":"related_field","relationship":"<code_from_context>","field":"D3"}} (home form = T1).
+- If the requirement spans forms and context.relationships is empty, set clarifying_question asking the user to create a study relationship first; do not invent a code.
 - For field-to-field comparisons use field_b. Choose the operator that should hold: e.g. "B22 must not exceed B21" → {"op":"lte","field":"B22","field_b":"B21"} (not gt, and not if_then hacks).
 - Intra-form consistency / cross-check between two fields (values should match): use equals with field + field_b (passes when equal; flags when they differ). Use not_equals only when values are required to differ.
 - For duration bands (min and/or max minutes): use duration_minutes_gte with start_field, end_field, and min/max — alone, without wrapping in not. It already passes inside the band and flags outside.
@@ -68,7 +71,12 @@ COMPILER_CONTRACT = """Compiler contract (always enforce):
 - Intra-form consistency between two fields → {"op":"equals","field":"<a>","field_b":"<b>"}.
 - Duration band → {"op":"duration_minutes_gte","start_field":"<start>","end_field":"<end>","min":<n>,"max":<n>} (no not wrapper).
 - "A must not be greater than B" → {"op":"lte","field":"A","field_b":"B"}.
-- Keep checks shallow; prefer a single operator when it is enough."""
+- Keep checks shallow; prefer a single operator when it is enough.
+- A study may have multiple forms. Context includes study_forms (every form and its fields) and relationships.
+- A rule may span forms. Evaluate it on one source form's submissions. Fields on another form must use related_field with a relationship whose source_project_id is that source form.
+- Inter-form comparison example: {"op":"gt","field":"A5","field_b":{"type":"related_field","relationship":"<code>","field":"D3"}}. Never emit {"related_field":{...}} as a sibling of "field".
+- If relationships is empty and the requirement names two forms/tools, ask a clarifying_question — do not invent relationship codes.
+- Match question codes in study_forms by name. If the same code exists on more than one form, disambiguate with form name/tool_code or ask a clarifying_question."""
 
 
 def seed_dqa_compile_prompt(db: Session) -> bool:
@@ -81,6 +89,7 @@ def seed_dqa_compile_prompt(db: Session) -> bool:
             or '{"op":"not_equals","field":"<a>","field_b":"<b>"}' in content
             or "e.g. gt with field + field_b" in content
             or "Evaluator polarity" not in content
+            or "never a sibling key next to field" not in content
         )
         if stale:
             existing.content = DEFAULT_DQA_COMPILE_PROMPT
@@ -161,11 +170,13 @@ def build_compiler_messages(
     repair_context: dict[str, Any] | None = None,
     relationships: list[dict[str, Any]] | None = None,
     source_relationships: list[str] | None = None,
+    study_forms: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     schema, _ = compact_form_schema(form_fields)
     context_payload: dict[str, Any] = {
         "operators": operator_catalog_for_prompt(),
         "form_fields": schema,
+        "study_forms": study_forms or [],
         "pack_fields": (pack or {}).get("fields") or {},
         "thresholds": (pack or {}).get("thresholds") or {},
         "relationships": relationships or [],

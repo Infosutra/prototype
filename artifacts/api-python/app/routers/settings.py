@@ -7,14 +7,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.db.models import ReportSchedule, Study
 from app.db.session import SessionLocal, get_db
 from app.integrations.smtp import SmtpError
 from app.schemas.common import StudyIdQuery
 from app.schemas.settings import ConnectionTestResult, SettingsOut, SettingsUpdate
-from app.services import daily_report as daily_report_service
-from app.services import dqa_daily_email as dqa_daily_email
 from app.services import settings as settings_service
 from app.services.kobo_sync import sync_all_projects
+from app.services.reporting.schedule_email import enqueue_execute_then_email
+from sqlalchemy import select
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -66,81 +67,80 @@ def test_smtp(db: Session = Depends(get_db)) -> ConnectionTestResult:
 
 
 @router.post(
-    "/send-daily-report",
+    "/send-report-now",
     response_model=ConnectionTestResult,
-    operation_id="sendDailyReport",
+    operation_id="sendReportNow",
     responses={400: {"description": "Bad request"}},
 )
-def send_daily_report(
+def send_report_now(
     q: Annotated[StudyIdQuery, Query()],
     db: Session = Depends(get_db),
 ) -> ConnectionTestResult:
+    """Enqueue execute then email for the study's scheduled template."""
     if not q.study_id:
         return JSONResponse(
             status_code=400,
             content={
                 "success": False,
-                "message": "Failed to send daily report",
+                "message": "Failed to enqueue report",
                 "details": "studyId is required",
             },
         )
-    try:
-        report, recipients = daily_report_service.send_daily_report_now(
-            db, study_id=q.study_id
-        )
-        study_bit = f" ({report.study_name})" if report.study_name else ""
-        return ConnectionTestResult(
-            success=True,
-            message="Daily report sent",
-            details=(
-                f"Report for {report.report_date}{study_bit} sent to {len(recipients)} recipient(s). "
-                f"{report.grand_total} submissions ({report.invalid_total} invalid)."
-            ),
-        )
-    except (ValueError, SmtpError) as exc:
+    study = db.get(Study, q.study_id)
+    if study is None:
         return JSONResponse(
-            status_code=400,
+            status_code=404,
             content={
                 "success": False,
-                "message": "Failed to send daily report",
-                "details": str(exc),
+                "message": "Failed to enqueue report",
+                "details": "Study not found",
             },
         )
-
-
-@router.post(
-    "/send-dqa-daily-report",
-    response_model=ConnectionTestResult,
-    operation_id="sendDqaDailyReport",
-    responses={400: {"description": "Bad request"}},
-)
-def send_dqa_daily_report(
-    q: Annotated[StudyIdQuery, Query()],
-    db: Session = Depends(get_db),
-) -> ConnectionTestResult:
-    """Generate and email today's DQA Daily (separate from submission digest)."""
-    if not q.study_id:
+    schedule = db.scalars(
+        select(ReportSchedule).where(
+            ReportSchedule.study_id == q.study_id,
+            ReportSchedule.report_type == "daily_dqa",
+        )
+    ).first()
+    if schedule is None or not schedule.template_id:
         return JSONResponse(
             status_code=400,
             content={
                 "success": False,
-                "message": "Failed to send DQA Daily",
-                "details": "studyId is required",
+                "message": "Failed to enqueue report",
+                "details": (
+                    "Create and assign a report template to the study schedule first."
+                ),
+            },
+        )
+    recipients = [e.strip() for e in (schedule.recipients or []) if e and e.strip()]
+    if not recipients:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": "Failed to enqueue report",
+                "details": "Configure schedule recipients before sending.",
             },
         )
     try:
-        report, recipients = dqa_daily_email.send_dqa_daily_now(db, study_id=q.study_id)
+        job_id = enqueue_execute_then_email(
+            db,
+            study_id=q.study_id,
+            template_id=schedule.template_id,
+            recipients=recipients,
+        )
         return ConnectionTestResult(
             success=True,
-            message="DQA Daily sent",
-            details=f"{report.title} emailed to {len(recipients)} recipient(s).",
+            message="Report job enqueued",
+            details=f"Execute+email job {job_id} queued for {len(recipients)} recipient(s).",
         )
-    except (ValueError, SmtpError) as exc:
+    except ValueError as exc:
         return JSONResponse(
             status_code=400,
             content={
                 "success": False,
-                "message": "Failed to send DQA Daily",
+                "message": "Failed to enqueue report",
                 "details": str(exc),
             },
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AppSettings, Project
@@ -29,7 +30,6 @@ from app.services.dqa_preview import preview_rule
 from app.services.dqa_test import run_rule_test
 from app.services.dqa_relationships import (
     build_relationship_schema,
-    relationships_for_source_project,
 )
 from app.services.dqa_rule_packs import get_pack_for_project
 
@@ -67,9 +67,165 @@ class CompileError(Exception):
         self.status_code = status_code
         self.code = code
 
+def _study_projects(db: Session, study_id: str) -> list[Project]:
+    return list(
+        db.scalars(select(Project).where(Project.study_id == study_id).order_by(Project.name)).all()
+    )
+
+
+def _study_forms_catalog(db: Session, study_id: str) -> list[dict[str, Any]]:
+    from app.services.dqa_compile_prompt import compact_form_schema
+
+    catalog: list[dict[str, Any]] = []
+    for project in _study_projects(db, study_id):
+        raw = list_form_fields(
+            project.form_definition if isinstance(project.form_definition, dict) else None
+        )
+        compact, _ = compact_form_schema(raw)
+        catalog.append(
+            {
+                "project_id": project.id,
+                "name": project.name,
+                "tool_code": project.tool_code,
+                "fields": [{k: v for k, v in item.items() if k != "choices"} for item in compact[:80]],
+            }
+        )
+    return catalog
+
+
+def _plain_field_names(node: Any) -> set[str]:
+    names: set[str] = set()
+    if not isinstance(node, dict):
+        return names
+    for key in FIELD_REF_KEYS:
+        value = node.get(key)
+        if isinstance(value, str) and value.strip():
+            names.add(value.strip())
+    for key in FIELD_LIST_KEYS:
+        for item in node.get(key) or []:
+            if isinstance(item, str) and item.strip():
+                names.add(item.strip())
+    for nested in ("check", "if", "then", "failed", "inner"):
+        if nested in node:
+            names |= _plain_field_names(node[nested])
+    for child in node.get("checks") or []:
+        names |= _plain_field_names(child)
+    return names
+
+
+def _normalize_check_tree(node: Any) -> Any:
+    """Fix common LLM mistakes in check trees (related_field as sibling key)."""
+    if isinstance(node, list):
+        return [_normalize_check_tree(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    out = {key: _normalize_check_tree(value) for key, value in node.items()}
+    related = out.get("related_field")
+    if is_related_field_operand(related):
+        if "field_b" not in out:
+            out["field_b"] = related
+        elif not is_related_field_operand(out.get("field_b")) and not isinstance(
+            out.get("field"), dict
+        ):
+            # Prefer keeping an explicit related operand on field_b.
+            out["field_b"] = related
+        out.pop("related_field", None)
+    return out
+
+
+def _tool_codes_in_english(english: str) -> list[str]:
+    import re
+
+    return [m.upper() for m in re.findall(r"\bT\d+\b", english or "", flags=re.IGNORECASE)]
+
+
+def resolve_compile_home(
+    db: Session,
+    fallback: Project,
+    rule: dict[str, Any],
+    rel_catalog: list[dict[str, Any]],
+    *,
+    english: str = "",
+) -> Project:
+    """Pick the form pack this compiled rule should live on."""
+    study_id = fallback.study_id
+    if not study_id:
+        return fallback
+    check = rule.get("check") if isinstance(rule.get("check"), dict) else None
+    rel_codes = collect_relationship_codes(check)
+    if rel_codes:
+        by_code = {str(row.get("code") or ""): row for row in rel_catalog}
+        sources = {
+            str(by_code[code].get("source_project_id") or "")
+            for code in rel_codes
+            if code in by_code
+        }
+        sources.discard("")
+        if len(sources) == 1:
+            home = db.get(Project, next(iter(sources)))
+            if home is not None:
+                return home
+
+    projects = _study_projects(db, study_id)
+    by_tool = {str(p.tool_code or "").upper(): p for p in projects if p.tool_code}
+    mentioned = [code for code in _tool_codes_in_english(english) if code in by_tool]
+    if mentioned:
+        # First mentioned tool is usually the source ("T1 A5 > T2 D3").
+        return by_tool[mentioned[0]]
+
+    names = _plain_field_names(check)
+    if names:
+        matches: list[Project] = []
+        for project in projects:
+            fields = {
+                str(item.get("name") or "")
+                for item in list_form_fields(
+                    project.form_definition if isinstance(project.form_definition, dict) else None
+                )
+            }
+            fields.discard("")
+            if names <= fields:
+                matches.append(project)
+        if len(matches) == 1:
+            return matches[0]
+        if fallback in matches:
+            return fallback
+    return fallback
+
+
+def _validate_compiled_rule(
+    db: Session,
+    project: Project,
+    rule: dict[str, Any],
+    *,
+    pack: dict[str, Any],
+    form_fields: list[dict[str, Any]],
+    rel_catalog: list[dict[str, Any]],
+    related_field_map: dict[str, set[str]],
+    english: str = "",
+) -> tuple[Project, list[dict[str, Any]], ValidationResult]:
+    home = resolve_compile_home(db, project, rule, rel_catalog, english=english)
+    home_fields = form_fields
+    home_pack = pack
+    if home.id != project.id:
+        home_fields = list_form_fields(
+            home.form_definition if isinstance(home.form_definition, dict) else None
+        )
+        home_pack = get_pack_for_project(db, home.id) or {}
+    validation = validate_rule(
+        rule,
+        form_fields=home_fields,
+        pack=home_pack,
+        for_compile=True,
+        related_fields=related_field_map,
+    )
+    return home, home_fields, validation
+
+
 def _parse_compiler_payload(text: str) -> dict[str, Any]:
     """Best-effort JSON object from model output; logs empty vs malformed distinctly."""
     return parse_json_object(text, log_label="DQA compiler").data or {}
+
 
 def _finalize_rule(
     proposal: dict[str, Any],
@@ -84,7 +240,7 @@ def _finalize_rule(
         "title": str(proposal.get("title") or english[:80] or "DQA rule"),
         "message": str(proposal.get("message") or english),
         "english": sanitize_english(english),
-        "check": proposal.get("check"),
+        "check": _normalize_check_tree(proposal.get("check")),
     }
 
 def _meta_from_recorder(recorder: CompileSessionRecorder, *, prompt_id: str | None) -> dict[str, Any]:
@@ -257,11 +413,9 @@ def compile_dqa_rule(
     rel_catalog, related_field_map = (
         build_relationship_schema(db, study_id) if study_id else ([], {})
     )
+    study_forms = _study_forms_catalog(db, study_id) if study_id else []
     source_relationships = [
-        row.code
-        for row in (
-            relationships_for_source_project(db, study_id, project.id) if study_id else []
-        )
+        str(row.get("code") or "") for row in rel_catalog if row.get("code")
     ]
     if len(form_fields) > 500:
         raise CompileError(
@@ -306,6 +460,7 @@ def compile_dqa_rule(
             repair_context=repair_context,
             relationships=rel_catalog,
             source_relationships=source_relationships,
+            study_forms=study_forms,
         )
         try:
             completion = chat_completion_detailed(
@@ -402,16 +557,19 @@ def compile_dqa_rule(
 
         last_proposal = proposal
         rule = _finalize_rule(proposal, english=text, existing_rule=existing_rule)
-        validation = validate_rule(
+        home, home_fields, validation = _validate_compiled_rule(
+            db,
+            project,
             rule,
-            form_fields=form_fields,
             pack=pack,
-            for_compile=True,
-            related_fields=related_field_map,
+            form_fields=form_fields,
+            rel_catalog=rel_catalog,
+            related_field_map=related_field_map,
+            english=text,
         )
         last_validation = validation
         if validation.valid:
-            preview = preview_rule(db, project.id, rule, limit=preview_limit)
+            preview = preview_rule(db, home.id, rule, limit=preview_limit)
             audited_rule = attach_compile_audit(
                 rule,
                 english=text,
@@ -434,11 +592,12 @@ def compile_dqa_rule(
                 "preview": preview,
                 "resolved_fields": build_resolved_fields(
                     db,
-                    project,
+                    home,
                     audited_rule.get("check") if isinstance(audited_rule.get("check"), dict) else None,
-                    source_fields=form_fields,
+                    source_fields=home_fields,
                     rel_catalog=rel_catalog,
                 ),
+                "source_project_id": home.id,
                 "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
                 "session_id": session.id,
                 "warnings": preview.get("warnings") if isinstance(preview, dict) else [],
@@ -565,11 +724,9 @@ def compile_dqa_rule_stream(
     rel_catalog, related_field_map = (
         build_relationship_schema(db, study_id) if study_id else ([], {})
     )
+    study_forms = _study_forms_catalog(db, study_id) if study_id else []
     source_relationships = [
-        row.code
-        for row in (
-            relationships_for_source_project(db, study_id, project.id) if study_id else []
-        )
+        str(row.get("code") or "") for row in rel_catalog if row.get("code")
     ]
     if len(form_fields) > 500:
         yield {
@@ -627,6 +784,7 @@ def compile_dqa_rule_stream(
             repair_context=repair_context,
             relationships=rel_catalog,
             source_relationships=source_relationships,
+            study_forms=study_forms,
         )
         try:
             completion = None
@@ -744,17 +902,20 @@ def compile_dqa_rule_stream(
         last_proposal = proposal
         rule = _finalize_rule(proposal, english=text, existing_rule=existing_rule)
         yield {"event": "progress", "phase": "validate", "message": "Validating compiled check…"}
-        validation = validate_rule(
+        home, home_fields, validation = _validate_compiled_rule(
+            db,
+            project,
             rule,
-            form_fields=form_fields,
             pack=pack,
-            for_compile=True,
-            related_fields=related_field_map,
+            form_fields=form_fields,
+            rel_catalog=rel_catalog,
+            related_field_map=related_field_map,
+            english=text,
         )
         last_validation = validation
         if validation.valid:
             yield {"event": "progress", "phase": "preview", "message": "Running preview on submissions…"}
-            preview = preview_rule(db, project.id, rule, limit=preview_limit)
+            preview = preview_rule(db, home.id, rule, limit=preview_limit)
             audited_rule = attach_compile_audit(
                 rule,
                 english=text,
@@ -777,11 +938,12 @@ def compile_dqa_rule_stream(
                 "preview": preview,
                 "resolved_fields": build_resolved_fields(
                     db,
-                    project,
+                    home,
                     audited_rule.get("check") if isinstance(audited_rule.get("check"), dict) else None,
-                    source_fields=form_fields,
+                    source_fields=home_fields,
                     rel_catalog=rel_catalog,
                 ),
+                "source_project_id": home.id,
                 "meta": _meta_from_recorder(recorder, prompt_id=prompt_id),
                 "session_id": session.id,
                 "warnings": preview.get("warnings") if isinstance(preview, dict) else [],

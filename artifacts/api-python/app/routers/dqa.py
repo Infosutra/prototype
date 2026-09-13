@@ -254,7 +254,7 @@ def list_flags(
 
 
 @router.get("/enumerators", response_model=list[EnumeratorStat], operation_id="getDqaEnumerators")
-def enumerator_stats(
+def get_dqa_enumerators(
     q: Annotated[DqaDashboardQuery, Query()],
     db: Session = Depends(get_db),
 ) -> list[EnumeratorStat]:
@@ -330,11 +330,13 @@ def create_dqa_relationship(
 ) -> DqaRelationshipOut:
     if not q.study_id:
         raise HTTPException(status_code=400, detail="studyId is required")
-    validation = validate_relationship_payload(db, q.study_id, payload.model_dump())
+    validation = validate_relationship_payload(
+        db, q.study_id, payload.model_dump(by_alias=False)
+    )
     if not validation.valid:
         raise HTTPException(status_code=400, detail=validation.to_dict())
     try:
-        row = create_relationship(db, q.study_id, payload.model_dump())
+        row = create_relationship(db, q.study_id, payload.model_dump(by_alias=False))
     except RelationshipError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return DqaRelationshipOut.model_validate(row, from_attributes=True)
@@ -358,7 +360,7 @@ def update_dqa_relationship(
             db,
             q.study_id,
             relationship_id,
-            payload.model_dump(exclude_unset=True),
+            payload.model_dump(exclude_unset=True, by_alias=False),
         )
     except RelationshipError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

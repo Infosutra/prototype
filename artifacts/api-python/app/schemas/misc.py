@@ -118,6 +118,7 @@ class ReportScheduleOut(CamelModel):
     id: str
     study_id: str
     report_type: str
+    template_id: str
     enabled: bool
     time: str
     timezone: str
@@ -130,6 +131,7 @@ class ReportScheduleUpdate(CamelModel):
     time: str | None = None
     timezone: str | None = None
     recipients: list[str] | None = None
+    template_id: str | None = None
 
 
 class PromptOut(CamelModel):
@@ -174,7 +176,7 @@ class ReportOut(CamelModel):
     prompt_name: str | None = None
     project_ids: list[str]
     project_names: list[str]
-    generated_content: str | None = None
+    result_ref: str | None = None
     download_url: str | None = None
     page_count: int | None = None
     file_size_kb: float | None = None
@@ -193,26 +195,17 @@ class ReportInput(CamelModel):
     project_ids: list[str] = []
 
 
-class GenerateDqaDailyInput(CamelModel):
-    study_id: str | None = None
-    report_date: str | None = None
-    send_email: bool = False
-    run_ai: bool = True
+class GenerateReportInput(CamelModel):
+    """Generate from a user-saved template (enqueue execute job)."""
 
-
-class GenerateDqaFinalInput(CamelModel):
-    study_id: str | None = None
-    run_ai: bool = True
+    study_id: str
+    template_id: str
+    window: dict | None = None
     send_email: bool = False
+    recipients: list[str] | None = None
 
 
 class ShareReportInput(CamelModel):
     recipients: list[str]
-    subject: str
+    subject: str | None = None
     message: str | None = None
-
-
-class ShareResult(CamelModel):
-    success: bool
-    recipients_count: int
-    message: str

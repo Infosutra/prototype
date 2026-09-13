@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -6,7 +7,6 @@ import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { StudyProvider } from '@/components/study/StudyProvider';
 
 import Dashboard from './pages/dashboard/Dashboard';
-import FormsPage from './pages/projects/Projects';
 import ProjectDetail from './pages/projects/ProjectDetail';
 import ProjectSubmissions from './pages/projects/ProjectSubmissions';
 import SubmissionDetail from './pages/projects/SubmissionDetail';
@@ -17,6 +17,7 @@ import PromptTemplates from './pages/prompts/PromptTemplates';
 import Reports from './pages/reports/Reports';
 import ReportTemplates from './pages/reports/ReportTemplates';
 import ReportComposer from './pages/reports/ReportComposer';
+import ReportExecutePreview from './pages/reports/ReportExecutePreview';
 import Settings from './pages/settings/Settings';
 import DqaDashboard from './pages/dqa/DqaDashboard';
 import RulePackEditor from './pages/dqa/RulePackEditor';
@@ -35,18 +36,32 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Former Forms/Projects index → Dashboard; preserve ?study= and other params. */
+function FormsIndexRedirect() {
+  useEffect(() => {
+    const search = window.location.search;
+    const base = String(import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+    window.location.replace(`${base}/${search}`);
+  }, []);
+  return (
+    <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+      Redirecting…
+    </div>
+  );
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/studies" component={Studies} />
-      <Route path="/forms" component={FormsPage} />
+      <Route path="/forms" component={FormsIndexRedirect} />
       <Route path="/forms/:id/submissions" component={ProjectSubmissions} />
       <Route path="/forms/:id/rules" component={RulePackEditor} />
       <Route path="/forms/:id" component={ProjectDetail} />
-      {/* Legacy /projects URLs redirect via same components */}
-      <Route path="/projects" component={FormsPage} />
+      {/* Legacy /projects URLs */}
+      <Route path="/projects" component={FormsIndexRedirect} />
       <Route path="/projects/:id/submissions" component={ProjectSubmissions} />
       <Route path="/projects/:id/rules" component={RulePackEditor} />
       <Route path="/projects/:id" component={ProjectDetail} />
@@ -59,6 +74,7 @@ function Router() {
       <Route path="/recordings/:id" component={RecordingDetail} />
       <Route path="/recordings" component={Recordings} />
       <Route path="/prompts" component={PromptTemplates} />
+      <Route path="/reports/execute-preview" component={ReportExecutePreview} />
       <Route path="/reports" component={Reports} />
       <Route path="/report-templates" component={ReportTemplates} />
       <Route path="/report-composer/:id" component={ReportComposer} />

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from app.integrations.llm.settings import (
     llm_compile_config_from_app_settings,
     llm_config_from_app_settings,
-    llm_report_planner_config_from_app_settings,
+    llm_plan_config_from_app_settings,
 )
 
 
@@ -18,7 +18,7 @@ def _settings(**overrides: object) -> SimpleNamespace:
         "ai_base_url": "https://openrouter.ai/api/v1",
         "ai_model": "deepseek/deepseek-v4-flash-0731",
         "ai_compile_model": "",
-        "ai_report_planner_model": "",
+        "ai_reporting_plan_model": "",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -26,23 +26,23 @@ def _settings(**overrides: object) -> SimpleNamespace:
 
 def test_report_planner_uses_dedicated_model_when_set() -> None:
     settings = _settings(
-        ai_report_planner_model="openai/gpt-4o-mini",
+        ai_reporting_plan_model="openai/gpt-4o-mini",
         ai_compile_model="some/other-compile-model",
         ai_model="deepseek/deepseek-v4-flash-0731",
     )
     assert (
-        llm_report_planner_config_from_app_settings(settings).model
+        llm_plan_config_from_app_settings(settings).model
         == "openai/gpt-4o-mini"
     )
 
 
 def test_report_planner_falls_back_to_ai_model_not_compile_model() -> None:
     settings = _settings(
-        ai_report_planner_model="",
+        ai_reporting_plan_model="",
         ai_compile_model="compile/only-model",
         ai_model="deepseek/deepseek-v4-flash-0731",
     )
-    planner = llm_report_planner_config_from_app_settings(settings)
+    planner = llm_plan_config_from_app_settings(settings)
     compile_cfg = llm_compile_config_from_app_settings(settings)
     default_cfg = llm_config_from_app_settings(settings)
 
@@ -54,11 +54,11 @@ def test_report_planner_falls_back_to_ai_model_not_compile_model() -> None:
 
 def test_report_planner_whitespace_treated_as_unset() -> None:
     settings = _settings(
-        ai_report_planner_model="   ",
+        ai_reporting_plan_model="   ",
         ai_compile_model="compile/only-model",
         ai_model="deepseek/deepseek-v4-flash-0731",
     )
     assert (
-        llm_report_planner_config_from_app_settings(settings).model
+        llm_plan_config_from_app_settings(settings).model
         == "deepseek/deepseek-v4-flash-0731"
     )

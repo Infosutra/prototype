@@ -11,7 +11,6 @@ from app.integrations.kobo import KoboApiError, KoboClient, normalize_kobo_serve
 from app.integrations.smtp import SmtpConfig, SmtpError, send_test_email, test_smtp_connection
 from app.schemas.settings import (
     ConnectionTestResult,
-    DailyReportSettings,
     GeneralSettings,
     SettingsOut,
     SettingsUpdate,
@@ -59,13 +58,6 @@ def to_settings_out(row: AppSettings) -> SettingsOut:
             connected=row.smtp_connected,
             last_tested_at=_iso(row.smtp_last_tested_at),
         ),
-        daily_report=DailyReportSettings(
-            enabled=row.daily_report_enabled,
-            send_time=row.daily_report_time or "21:00",
-            timezone=row.daily_report_timezone or "Asia/Kolkata",
-            recipients=list(row.daily_report_recipients or []),
-            last_sent_on=row.daily_report_last_sent_on,
-        ),
         general=GeneralSettings(
             organization_name=row.organization_name,
             timezone=row.timezone,
@@ -78,7 +70,7 @@ def to_settings_out(row: AppSettings) -> SettingsOut:
             ai_model=getattr(row, "ai_model", None)
             or "nvidia/nemotron-3-super-120b-a12b:free",
             ai_compile_model=getattr(row, "ai_compile_model", None) or "",
-            ai_report_planner_model=getattr(row, "ai_report_planner_model", None) or "",
+            ai_reporting_plan_model=getattr(row, "ai_reporting_plan_model", None) or "",
             ai_temperature=float(getattr(row, "ai_temperature", None) or 0.3),
             ai_max_tokens=int(getattr(row, "ai_max_tokens", None) or 2048),
             ai_timeout_seconds=int(getattr(row, "ai_timeout_seconds", None) or 60),
@@ -187,13 +179,6 @@ def update_settings(db: Session, payload: SettingsUpdate) -> tuple[SettingsOut, 
             row.smtp_connected = True
             row.smtp_last_tested_at = datetime.now(timezone.utc)
 
-    if payload.daily_report is not None:
-        daily = payload.daily_report
-        row.daily_report_enabled = daily.enabled
-        row.daily_report_time = daily.send_time.strip()
-        row.daily_report_timezone = daily.timezone.strip() or "Asia/Kolkata"
-        row.daily_report_recipients = list(daily.recipients or [])
-
     if payload.general is not None:
         general = payload.general
         row.organization_name = general.organization_name
@@ -209,7 +194,7 @@ def update_settings(db: Session, payload: SettingsUpdate) -> tuple[SettingsOut, 
             general.ai_model or "nvidia/nemotron-3-super-120b-a12b:free"
         ).strip()
         row.ai_compile_model = (general.ai_compile_model or "").strip()
-        row.ai_report_planner_model = (general.ai_report_planner_model or "").strip()
+        row.ai_reporting_plan_model = (general.ai_reporting_plan_model or "").strip()
         row.ai_temperature = float(general.ai_temperature)
         row.ai_max_tokens = int(general.ai_max_tokens)
         row.ai_timeout_seconds = int(general.ai_timeout_seconds)

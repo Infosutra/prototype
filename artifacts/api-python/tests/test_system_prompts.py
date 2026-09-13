@@ -13,18 +13,20 @@ from app.db.base import Base
 from app.db.models import Prompt
 from app.db.session import get_db
 from app.routers.prompts import router
-from app.services.dqa_report_prompts import (
-    DAILY_DQA_PROMPT_ID,
-    DEFAULT_DAILY_DQA_PROMPT,
-    SYSTEM_PROMPT_IDS,
-    revert_system_prompt,
-    seed_dqa_report_prompts,
+from app.services.dqa_compile_prompt import (
+    DEFAULT_DQA_COMPILE_PROMPT,
+    DQA_COMPILE_PROMPT_ID,
+    seed_dqa_compile_prompt,
 )
-from app.services.report_analyst import DEFAULT_ANALYST_PROMPT, REPORT_ANALYST_PROMPT_ID
-from app.services.report_planner_prompts import (
+from app.services.dqa_report_prompts import SYSTEM_PROMPT_IDS, revert_system_prompt
+from app.services.reporting.prompt_seeds import (
+    DEFAULT_ANALYST_PROMPT,
     DEFAULT_PLANNER_PROMPT,
+    REPORT_ANALYST_PROMPT_ID,
+    REPORT_PLANNER_JUDGE_PROMPT_ID,
     REPORT_PLANNER_PROMPT_ID,
-    seed_report_ai_prompts,
+    REPORT_PLANNER_REPAIR_PROMPT_ID,
+    seed_reporting_prompts,
 )
 
 
@@ -60,18 +62,22 @@ def client(db: Session) -> TestClient:
     return TestClient(app)
 
 
-def test_planner_and_analyst_are_system_prompts() -> None:
+def test_reporting_prompts_are_system_prompts() -> None:
     assert REPORT_PLANNER_PROMPT_ID in SYSTEM_PROMPT_IDS
+    assert REPORT_PLANNER_REPAIR_PROMPT_ID in SYSTEM_PROMPT_IDS
+    assert REPORT_PLANNER_JUDGE_PROMPT_ID in SYSTEM_PROMPT_IDS
     assert REPORT_ANALYST_PROMPT_ID in SYSTEM_PROMPT_IDS
+    assert DQA_COMPILE_PROMPT_ID in SYSTEM_PROMPT_IDS
 
 
 def test_system_prompts_cannot_be_deleted(client: TestClient, db: Session) -> None:
-    seed_report_ai_prompts(db)
-    seed_dqa_report_prompts(db)
+    seed_reporting_prompts(db)
+    seed_dqa_compile_prompt(db)
     for prompt_id in (
         REPORT_PLANNER_PROMPT_ID,
         REPORT_ANALYST_PROMPT_ID,
-        DAILY_DQA_PROMPT_ID,
+        REPORT_PLANNER_JUDGE_PROMPT_ID,
+        DQA_COMPILE_PROMPT_ID,
     ):
         response = client.delete(f"/prompts/{prompt_id}")
         assert response.status_code == 400
@@ -79,7 +85,7 @@ def test_system_prompts_cannot_be_deleted(client: TestClient, db: Session) -> No
 
 
 def test_system_prompts_can_be_updated(client: TestClient, db: Session) -> None:
-    seed_report_ai_prompts(db)
+    seed_reporting_prompts(db)
     response = client.put(
         f"/prompts/{REPORT_PLANNER_PROMPT_ID}",
         json={"content": "Custom planner instructions for this deployment."},
@@ -90,7 +96,7 @@ def test_system_prompts_can_be_updated(client: TestClient, db: Session) -> None:
 
 
 def test_revert_restores_planner_and_analyst_defaults(client: TestClient, db: Session) -> None:
-    seed_report_ai_prompts(db)
+    seed_reporting_prompts(db)
     client.put(
         f"/prompts/{REPORT_PLANNER_PROMPT_ID}",
         json={"content": "Edited planner prompt.", "name": "Edited Planner"},
@@ -127,11 +133,11 @@ def test_revert_rejects_non_system_prompts(client: TestClient, db: Session) -> N
     assert response.status_code == 400
 
 
-def test_revert_helper_restores_daily_seed(db: Session) -> None:
-    seed_dqa_report_prompts(db)
-    row = db.get(Prompt, DAILY_DQA_PROMPT_ID)
+def test_revert_helper_restores_compile_seed(db: Session) -> None:
+    seed_dqa_compile_prompt(db)
+    row = db.get(Prompt, DQA_COMPILE_PROMPT_ID)
     assert row is not None
     row.content = "changed"
     db.commit()
-    restored = revert_system_prompt(db, DAILY_DQA_PROMPT_ID)
-    assert restored.content == DEFAULT_DAILY_DQA_PROMPT
+    restored = revert_system_prompt(db, DQA_COMPILE_PROMPT_ID)
+    assert restored.content == DEFAULT_DQA_COMPILE_PROMPT

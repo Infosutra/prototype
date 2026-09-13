@@ -16,7 +16,7 @@ from app.integrations.llm.errors import LlmError
 from app.integrations.llm.settings import (
     llm_compile_config_from_app_settings,
     llm_config_from_app_settings,
-    llm_report_planner_config_from_app_settings,
+    llm_plan_config_from_app_settings,
 )
 from app.integrations.llm.types import (
     DEFAULT_BASE_URL,
@@ -46,7 +46,7 @@ __all__ = [
     "chat_model_from_app_settings",
     "llm_compile_config_from_app_settings",
     "llm_config_from_app_settings",
-    "llm_report_planner_config_from_app_settings",
+    "llm_plan_config_from_app_settings",
     "message_text",
     "to_lc_messages",
     "token_usage",

@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Project, Submission
+from app.db.models import Project, Study, Submission
 from app.db.session import get_db
-from app.repositories.dqa import parse_submitted_at_bound
+from app.domain.time_window import resolve_optional_submitted_at_bounds
 from app.schemas.common import StudyIdQuery
 from app.schemas.misc import (
     AnalyticsOverview,
@@ -140,15 +140,20 @@ def submission_trends(
     if study_filter is not None:
         conditions.append(study_filter)
 
-    start = parse_submitted_at_bound(date_from, end=False)
-    finish = parse_submitted_at_bound(date_to, end=True)
+    study = db.get(Study, study_id)
+    tz = ((study.timezone if study else None) or "UTC").strip() or "UTC"
+    start, finish = resolve_optional_submitted_at_bounds(
+        date_from,
+        date_to,
+        timezone=tz,
+    )
     if start is None and finish is None:
         days = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}.get(period, 30)
         start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     if start is not None:
         conditions.append(Submission.submitted_at >= start)
     if finish is not None:
-        conditions.append(Submission.submitted_at <= finish)
+        conditions.append(Submission.submitted_at < finish)
 
     rows = db.execute(
         select(

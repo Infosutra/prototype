@@ -24,13 +24,13 @@ def llm_compile_config_from_app_settings(settings: AppSettings) -> LlmConfig:
     return _llm_config_from_app_settings(settings, model=model)
 
 
-def llm_report_planner_config_from_app_settings(settings: AppSettings) -> LlmConfig:
+def llm_plan_config_from_app_settings(settings: AppSettings) -> LlmConfig:
     """Config for free-form report planning (structured ReportSpec output).
 
-    Uses ``ai_report_planner_model`` when set; otherwise ``ai_model`` directly.
+    Uses ``ai_reporting_plan_model`` when set; otherwise ``ai_model`` directly.
     Does **not** fall back through ``ai_compile_model``.
     """
-    planner_model = (getattr(settings, "ai_report_planner_model", None) or "").strip()
+    planner_model = (getattr(settings, "ai_reporting_plan_model", None) or "").strip()
     model = planner_model or (settings.ai_model or DEFAULT_MODEL).strip()
     return _llm_config_from_app_settings(settings, model=model)
 

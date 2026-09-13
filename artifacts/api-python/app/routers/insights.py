@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -11,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Insight, Project, Submission
 from app.db.session import get_db
-from app.integrations.llm import LlmError, chat_completion, llm_config_from_app_settings
-from app.integrations.llm.json_object import parse_json_object
+from app.integrations.llm import LlmError, llm_config_from_app_settings
 from app.schemas.common import OkResponse, StudyProjectQuery
 from app.schemas.misc import InsightGenerateInput, InsightInput, InsightOut
+from app.services.insights import generate_insight_payload
 from app.services.settings import get_or_create_settings
 
 router = APIRouter(prefix="/ai/insights", tags=["ai"])
@@ -34,11 +33,6 @@ def _map(row: Insight) -> InsightOut:
         tags=list(row.tags or []),
         created_at=row.created_at.isoformat(),
     )
-
-
-def _parse_insight_payload(text: str) -> dict[str, Any]:
-    """Best-effort JSON object from model output; logs empty vs malformed distinctly."""
-    return parse_json_object(text, log_label="AI insights").data or {}
 
 
 @router.get("", response_model=list[InsightOut], operation_id="getInsights")
@@ -165,36 +159,12 @@ def generate_insight(
         ],
     }
 
-    system = (
-        "You are a data quality analyst for field survey data. "
-        "Given study context and a user question, produce a concise insight. "
-        "Respond with ONLY valid JSON using keys: "
-        "title (string), summary (string), content (string), "
-        "type (one of: anomaly, trend, recommendation, summary), "
-        "severity (one of: critical, warning, info), "
-        "tags (array of short strings). "
-        "Base claims on the provided context; if evidence is thin, say so."
-    )
-    user = (
-        f"Question:\n{question}\n\n"
-        f"Context JSON:\n{json.dumps(context, default=str)[:12000]}"
-    )
-
     try:
-        raw = chat_completion(
-            llm,
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            temperature=float(settings.ai_temperature or 0.3),
-            max_tokens=max(int(settings.ai_max_tokens or 2048), 800),
-            timeout_seconds=float(settings.ai_timeout_seconds or 90),
-        )
+        parsed = generate_insight_payload(settings, question=question, context=context)
     except LlmError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    parsed = _parse_insight_payload(raw)
+    raw = str(parsed.pop("_raw", "") or "")
     title = str(parsed.get("title") or question[:80] or "AI Insight").strip()
     summary = str(parsed.get("summary") or "").strip() or title
     content = str(parsed.get("content") or raw).strip()

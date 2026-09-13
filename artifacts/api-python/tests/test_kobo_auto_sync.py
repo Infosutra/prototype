@@ -18,7 +18,6 @@ from app.db.models import ReportSchedule, Study
 from app.db.session import get_db
 from app.routers import settings as settings_router
 from app.schemas.settings import (
-    DailyReportSettings,
     GeneralSettings,
     SettingsOut,
     SettingsUpdate,
@@ -26,7 +25,7 @@ from app.schemas.settings import (
 )
 from app.services import kobo_auto_sync
 from app.services import settings as settings_service
-from app.services.dqa_daily_email import maybe_send_scheduled_dqa_daily
+from app.services.reporting.schedule_email import maybe_send_scheduled_reports
 from app.services.kobo_sync import _SYNC_RUN_LOCK, try_sync_all_projects
 
 
@@ -90,12 +89,6 @@ def _fake_settings_out(active_study_id: str | None = "study-a") -> SettingsOut:
             use_tls=True,
             connected=False,
         ),
-        daily_report=DailyReportSettings(
-            enabled=False,
-            send_time="21:00",
-            timezone="Asia/Kolkata",
-            recipients=[],
-        ),
         general=GeneralSettings(
             organization_name="Infosutra",
             timezone="UTC",
@@ -119,6 +112,24 @@ def test_try_sync_all_projects_skips_when_lock_held(db: Session) -> None:
             return_value={"success": True},
         ) as unlocked:
             assert try_sync_all_projects(db, "study-a") is None
+            unlocked.assert_not_called()
+    finally:
+        _SYNC_RUN_LOCK.release()
+
+
+def test_sync_all_projects_raises_when_lock_held(db: Session) -> None:
+    from app.services.kobo_sync import SyncBusyError, sync_all_projects
+
+    _add_study(db)
+    acquired = _SYNC_RUN_LOCK.acquire(blocking=False)
+    assert acquired
+    try:
+        with patch(
+            "app.services.kobo_sync._sync_all_projects_unlocked",
+            return_value={"success": True},
+        ) as unlocked:
+            with pytest.raises(SyncBusyError, match="already in progress"):
+                sync_all_projects(db, "study-a")
             unlocked.assert_not_called()
     finally:
         _SYNC_RUN_LOCK.release()
@@ -200,8 +211,22 @@ def test_auto_sync_skips_without_active_study(
         try_sync.assert_not_called()
 
 
-def test_maybe_send_scheduled_dqa_daily_syncs_before_generate(db: Session) -> None:
+def test_maybe_send_scheduled_reports_syncs_before_enqueue(db: Session) -> None:
+    from app.db.models import ReportTemplate
+
     _add_study(db, "study-a")
+    db.add(
+        ReportTemplate(
+            id="tmpl-1",
+            name="Daily",
+            description="",
+            study_id="study-a",
+            report_kind="daily",
+            status="active",
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+    )
     schedule = ReportSchedule(
         id="sched-1",
         study_id="study-a",
@@ -209,32 +234,29 @@ def test_maybe_send_scheduled_dqa_daily_syncs_before_generate(db: Session) -> No
         time="10:00",
         timezone="Asia/Kolkata",
         report_type="daily_dqa",
-        template_id=None,
+        template_id="tmpl-1",
         last_sent_on=None,
-        recipients=[],
+        recipients=["ops@example.org"],
     )
     db.add(schedule)
     db.commit()
 
-    fake_report = MagicMock()
     fixed = datetime(2026, 3, 15, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
 
     with (
-        patch("app.services.dqa_daily_email.datetime") as mock_dt,
+        patch("app.services.reporting.schedule_email.datetime") as mock_dt,
         patch(
-            "app.services.dqa_daily_email.sync_all_projects",
+            "app.services.reporting.schedule_email.sync_all_projects",
             return_value={"success": True, "errors": []},
         ) as sync_mock,
         patch(
-            "app.services.dqa_daily_email._generate_for_schedule",
-            return_value=fake_report,
-        ) as gen,
-        patch("app.services.dqa_daily_email.send_dqa_daily_email") as send,
+            "app.services.reporting.schedule_email.enqueue_execute_then_email",
+            return_value="job-1",
+        ) as enq,
     ):
         mock_dt.now.return_value = fixed
 
-        assert maybe_send_scheduled_dqa_daily(db) is True
+        assert maybe_send_scheduled_reports(db) is True
         sync_mock.assert_called_once_with(db, "study-a")
-        gen.assert_called_once()
-        send.assert_called_once_with(db, fake_report)
+        enq.assert_called_once()
         assert schedule.last_sent_on == "2026-03-15"

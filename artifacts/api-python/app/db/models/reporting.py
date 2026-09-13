@@ -34,6 +34,7 @@ class Report(Base):
     format: Mapped[str] = mapped_column(String, nullable=False, default="pdf")
     # daily_dqa | final_dqa | custom
     report_type: Mapped[str] = mapped_column(String, nullable=False, default="custom")
+    # Prefer NOT NULL on new writes; nullable kept so existing rows / draft creates do not break.
     study_id: Mapped[str | None] = mapped_column(
         ForeignKey("studies.id", ondelete="SET NULL"), nullable=True
     )
@@ -50,7 +51,8 @@ class Report(Base):
     # The exact specification and context this output was produced from.
     spec_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     execution_context_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    generated_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Path/key to ExecuteResult JSON file (canonical). No generated_content blob.
+    result_ref: Mapped[str | None] = mapped_column(String, nullable=True)
     download_url: Mapped[str | None] = mapped_column(String, nullable=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     file_size_kb: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -106,16 +108,14 @@ class ReportTemplate(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    study_id: Mapped[str | None] = mapped_column(
-        ForeignKey("studies.id", ondelete="CASCADE"), nullable=True
+    study_id: Mapped[str] = mapped_column(
+        ForeignKey("studies.id", ondelete="CASCADE"), nullable=False
     )
     # daily | final | adhoc — the context a template is designed to be executed in.
     report_kind: Mapped[str] = mapped_column(String, nullable=False, default="adhoc")
     status: Mapped[str] = mapped_column(String, nullable=False, default="active")
     # Denormalized pointer to the version currently used by execution.
     current_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    # System templates (e.g. the seeded DQA Daily) cannot be deleted.
-    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # When the prompt names a calendar day, preview/execute default to that ISO date.
     # Specs still use "today" sources; that day becomes the execution date.
     default_execution_date: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -215,42 +215,8 @@ class ReportConversationMessage(Base):
     __table_args__ = (Index("report_conversation_messages_conv_idx", "conversation_id"),)
 
 
-class ReportRun(Base):
-    """Observability record for one planning or execution run."""
-
-    __tablename__ = "report_runs"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    # plan | patch | execute | analyze
-    mode: Mapped[str] = mapped_column(String, nullable=False)
-    study_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    template_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    template_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    report_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    provider: Mapped[str | None] = mapped_column(String, nullable=True)
-    model: Mapped[str | None] = mapped_column(String, nullable=True)
-    prompt_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    latency_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    structured_output: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    tool_calls_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    validation_errors_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    # ok | invalid | error | clarification
-    status: Mapped[str] = mapped_column(String, nullable=False, default="ok")
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
-
-    __table_args__ = (
-        Index("report_runs_created_idx", "created_at"),
-        Index("report_runs_template_idx", "template_id"),
-    )
-
-
 class ReportSchedule(Base):
-    """Per-study scheduled report delivery (replaces AppSettings.dqa_daily_*)."""
+    """Per-study scheduled report delivery."""
 
     __tablename__ = "report_schedules"
 
@@ -259,9 +225,9 @@ class ReportSchedule(Base):
         ForeignKey("studies.id", ondelete="CASCADE"), nullable=False
     )
     report_type: Mapped[str] = mapped_column(String, nullable=False, default="daily_dqa")
-    # When set, the scheduler executes this template instead of the study default.
-    template_id: Mapped[str | None] = mapped_column(
-        ForeignKey("report_templates.id", ondelete="SET NULL"), nullable=True
+    # Every schedule must point at an explicit user template.
+    template_id: Mapped[str] = mapped_column(
+        ForeignKey("report_templates.id", ondelete="CASCADE"), nullable=False
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     time: Mapped[str] = mapped_column(String, nullable=False, default="21:30")

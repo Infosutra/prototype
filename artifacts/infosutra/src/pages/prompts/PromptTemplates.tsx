@@ -4,7 +4,6 @@ import {
   useCreatePrompt,
   useDeletePrompt,
   useGetPrompts,
-  useGetStudies,
   useRevertPrompt,
   useUpdatePrompt,
   type PromptInput,
@@ -29,8 +28,6 @@ import {
 import { Copy, Edit2, Trash2, Plus, RotateCcw } from "lucide-react";
 
 const CATEGORIES = [
-  { value: "daily-dqa", label: "Daily DQA" },
-  { value: "final-dqa", label: "Final DQA" },
   { value: "dqa-compile", label: "DQA compile" },
   { value: "report-planner", label: "Report Planner" },
   { value: "report-analyst", label: "Report Analyst" },
@@ -46,33 +43,20 @@ function emptyForm(): PromptInput {
     name: "",
     description: "",
     content: "",
-    category: "daily-dqa",
+    category: "general",
     projectIds: [],
   };
 }
 
-function assignmentLabel(
-  prompt: PromptOut,
-  studyNameById: Map<string, string>,
-): string {
-  const usedBy = (prompt.studyIds ?? [])
-    .map((id) => studyNameById.get(id) || id)
-    .filter(Boolean);
-  if (usedBy.length > 0) return usedBy.join(", ");
-  if (prompt.isSystem) return "Default when unassigned";
-  return "Not assigned";
+function assignmentLabel(prompt: PromptOut): string {
+  if (prompt.isSystem) return "System (editable)";
+  return "Custom";
 }
 
 export default function PromptTemplates() {
   const queryClient = useQueryClient();
   const promptsQuery = useGetPrompts();
-  const studiesQuery = useGetStudies();
   const prompts = promptsQuery.data ?? [];
-  const studies = studiesQuery.data ?? [];
-  const studyNameById = useMemo(
-    () => new Map(studies.map((s) => [s.id, s.name])),
-    [studies],
-  );
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<PromptOut | null>(null);
@@ -202,7 +186,7 @@ export default function PromptTemplates() {
     <Layout>
       <Header
         title="Prompt Templates"
-        description="Edit Daily / Final DQA narrative instructions and assign them on each study"
+        description="Edit system prompts for DQA compile and report planning / narrative"
         action={
           <Button size="sm" className="bg-primary text-primary-foreground" onClick={openCreate}>
             <Plus className="w-4 h-4 mr-2" />
@@ -227,7 +211,7 @@ export default function PromptTemplates() {
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Category</th>
                     <th className="px-4 py-3 font-medium">Description</th>
-                    <th className="px-4 py-3 font-medium">Assigned</th>
+                    <th className="px-4 py-3 font-medium">Kind</th>
                     <th className="px-4 py-3 font-medium">Updated</th>
                     <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr>
@@ -256,7 +240,7 @@ export default function PromptTemplates() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground max-w-[220px]">
                         <span className="line-clamp-2">
-                          {assignmentLabel(prompt, studyNameById)}
+                          {assignmentLabel(prompt)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
@@ -340,7 +324,7 @@ export default function PromptTemplates() {
               <Input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Daily DQA — health baseline"
+                placeholder="Report planner — field snapshot"
               />
             </div>
             <div className="space-y-1.5">

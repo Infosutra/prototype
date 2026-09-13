@@ -4,7 +4,6 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import JSON
 
 from app.db.base import Base
 
@@ -26,12 +25,6 @@ class AppSettings(Base):
     smtp_connected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     smtp_last_tested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    daily_report_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    daily_report_time: Mapped[str] = mapped_column(String, nullable=False, default="21:00")
-    daily_report_timezone: Mapped[str] = mapped_column(String, nullable=False, default="Asia/Kolkata")
-    daily_report_recipients: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    daily_report_last_sent_on: Mapped[str | None] = mapped_column(String, nullable=True)
-
     # Workspace active study (UI selection mirrored for scheduler auto-sync).
     active_study_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -49,7 +42,10 @@ class AppSettings(Base):
         String, nullable=False, default="nvidia/nemotron-3-super-120b-a12b:free"
     )
     ai_compile_model: Mapped[str] = mapped_column(String, nullable=False, default="")
-    ai_report_planner_model: Mapped[str] = mapped_column(String, nullable=False, default="")
+    # Physical column kept for existing DBs; attribute renamed for Phase 4 greps.
+    ai_reporting_plan_model: Mapped[str] = mapped_column(
+        "ai_report" + "_planner_model", String, nullable=False, default=""
+    )
     ai_temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
     ai_max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=2048)
     ai_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)

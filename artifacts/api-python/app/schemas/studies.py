@@ -50,8 +50,6 @@ class StudyOut(CamelModel):
     start_date: str | None = None
     end_date: str | None = None
     timezone: str = "Asia/Kolkata"
-    daily_dqa_prompt_id: str | None = None
-    final_dqa_prompt_id: str | None = None
     tools: list[StudyToolOut] = []
     credential: StudyCredentialSummary | None = None
     day_number: int | None = None
@@ -68,8 +66,6 @@ class StudyCreate(CamelModel):
     start_date: str | None = None
     end_date: str | None = None
     timezone: str = "Asia/Kolkata"
-    daily_dqa_prompt_id: str | None = None
-    final_dqa_prompt_id: str | None = None
     tools: list[StudyToolIn] = []
 
 
@@ -79,8 +75,6 @@ class StudyUpdate(CamelModel):
     start_date: str | None = None
     end_date: str | None = None
     timezone: str | None = None
-    daily_dqa_prompt_id: str | None = None
-    final_dqa_prompt_id: str | None = None
     tools: list[StudyToolIn] | None = None
 
 

@@ -542,6 +542,22 @@ def _sync_asset(
             db.flush()
     phase_ms["enumerators"] = (time.perf_counter() - t_enum) * 1000.0
 
+    # Dual-write reporting projections (answers + duration + calendar_day + study_id).
+    if touched_submission_ids:
+        from app.services.reporting.answers import replace_answers_for_submission
+
+        for sid in touched_submission_ids:
+            row = db.get(Submission, sid)
+            if row is None:
+                continue
+            replace_answers_for_submission(
+                db,
+                row,
+                project=project,
+                study_timezone=study_timezone,
+            )
+        db.flush()
+
     submission_count = db.scalar(
         select(func.count()).select_from(Submission).where(Submission.project_id == uid)
     ) or 0
@@ -811,9 +827,22 @@ def _slowest_form_s(phase_lists: list[dict[str, float]]) -> dict[str, float]:
     return {dst: _seconds(peaked_ms[src]) for src, dst in mapping}
 
 
+class SyncBusyError(RuntimeError):
+    """Raised when a sync is requested while another sync holds the run lock."""
+
+
 def sync_all_projects(db: Session, study_id: str) -> dict[str, Any]:
-    with _SYNC_RUN_LOCK:
+    """Sync all Kobo forms for a study.
+
+    Non-blocking on the run lock: a second concurrent UI/API sync gets
+    :class:`SyncBusyError` instead of hanging until the first finishes.
+    """
+    if not _SYNC_RUN_LOCK.acquire(blocking=False):
+        raise SyncBusyError("A Kobo sync is already in progress for this process")
+    try:
         return _sync_all_projects_unlocked(db, study_id)
+    finally:
+        _SYNC_RUN_LOCK.release()
 
 
 def try_sync_all_projects(db: Session, study_id: str) -> dict[str, Any] | None:
@@ -833,8 +862,14 @@ def _sync_all_projects_unlocked(db: Session, study_id: str) -> dict[str, Any]:
         raise LookupError("Study not found")
     client = _configured_client(db, study_id)
     study_timezone = study.timezone
+    workers = _sync_concurrency()
 
     t0 = time.perf_counter()
+    logger.info(
+        "sync_all_listing_forms",
+        study_id=study_id,
+        workers=workers,
+    )
     t_list = time.perf_counter()
     assets = [
         asset
@@ -843,7 +878,6 @@ def _sync_all_projects_unlocked(db: Session, study_id: str) -> dict[str, Any]:
     ]
     list_assets_ms = (time.perf_counter() - t_list) * 1000.0
 
-    workers = _sync_concurrency()
     logger.info(
         "sync_all_started",
         study_id=study_id,
@@ -961,8 +995,12 @@ def _sync_all_projects_unlocked(db: Session, study_id: str) -> dict[str, Any]:
 
 
 def sync_project(db: Session, project_id: str) -> dict[str, Any]:
-    with _SYNC_RUN_LOCK:
+    if not _SYNC_RUN_LOCK.acquire(blocking=False):
+        raise SyncBusyError("A Kobo sync is already in progress for this process")
+    try:
         return _sync_project_unlocked(db, project_id)
+    finally:
+        _SYNC_RUN_LOCK.release()
 
 
 def _sync_project_unlocked(db: Session, project_id: str) -> dict[str, Any]:

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime
 from statistics import median
 from typing import Any
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import DqaFlag, Project, Submission
+from app.db.models import DqaFlag, Project, Study, Submission
+from app.domain.time_window import resolve_optional_submitted_at_bounds
 
 
 def project_ids_for_study(db: Session, study_id: str) -> list[str]:
@@ -19,24 +20,13 @@ def project_ids_for_study(db: Session, study_id: str) -> list[str]:
     ]
 
 
-def parse_submitted_at_bound(value: str | None, *, end: bool = False) -> datetime | None:
-    """Parse optional ISO date/datetime for inclusive submitted_at windows.
-
-    Date-only values (``YYYY-MM-DD``) map to start or end of that calendar day.
-    """
-    if value is None:
-        return None
-    raw = str(value).strip()
-    if not raw:
-        return None
-    normalized = raw.replace("Z", "+00:00")
-    dt = datetime.fromisoformat(normalized)
-    if dt.tzinfo is not None:
-        dt = dt.replace(tzinfo=None)
-    date_only = "T" not in normalized and " " not in normalized
-    if date_only:
-        return datetime.combine(dt.date(), time.max if end else time.min)
-    return dt
+def study_timezone(db: Session, study_id: str | None) -> str:
+    if not study_id:
+        return "UTC"
+    study = db.get(Study, study_id)
+    if study is None:
+        return "UTC"
+    return (study.timezone or "UTC").strip() or "UTC"
 
 
 def _apply_submitted_at_window(
@@ -44,13 +34,15 @@ def _apply_submitted_at_window(
     *,
     date_from: str | None = None,
     date_to: str | None = None,
+    timezone: str = "UTC",
 ) -> Select[Any]:
-    start = parse_submitted_at_bound(date_from, end=False)
-    finish = parse_submitted_at_bound(date_to, end=True)
+    start, finish = resolve_optional_submitted_at_bounds(
+        date_from, date_to, timezone=timezone
+    )
     if start is not None:
         query = query.where(Submission.submitted_at >= start)
     if finish is not None:
-        query = query.where(Submission.submitted_at <= finish)
+        query = query.where(Submission.submitted_at < finish)
     return query
 
 
@@ -80,9 +72,17 @@ def load_submissions_and_flags(
         flag_q = flag_q.where(DqaFlag.project_id == project_id)
 
     if date_from or date_to:
-        sub_q = _apply_submitted_at_window(sub_q, date_from=date_from, date_to=date_to)
+        tz = study_timezone(db, study_id)
+        if not study_id and project_id:
+            project = db.get(Project, project_id)
+            tz = study_timezone(db, project.study_id if project else None)
+        sub_q = _apply_submitted_at_window(
+            sub_q, date_from=date_from, date_to=date_to, timezone=tz
+        )
         flag_q = flag_q.join(Submission, Submission.id == DqaFlag.submission_id)
-        flag_q = _apply_submitted_at_window(flag_q, date_from=date_from, date_to=date_to)
+        flag_q = _apply_submitted_at_window(
+            flag_q, date_from=date_from, date_to=date_to, timezone=tz
+        )
 
     return list(db.scalars(sub_q).all()), list(db.scalars(flag_q).all())
 
@@ -105,9 +105,14 @@ def load_projects_with_dqa(
     sub_q = select(Submission).where(Submission.project_id.in_(project_ids))
     flag_q = select(DqaFlag).where(DqaFlag.project_id.in_(project_ids))
     if date_from or date_to:
-        sub_q = _apply_submitted_at_window(sub_q, date_from=date_from, date_to=date_to)
+        tz = study_timezone(db, study_id)
+        sub_q = _apply_submitted_at_window(
+            sub_q, date_from=date_from, date_to=date_to, timezone=tz
+        )
         flag_q = flag_q.join(Submission, Submission.id == DqaFlag.submission_id)
-        flag_q = _apply_submitted_at_window(flag_q, date_from=date_from, date_to=date_to)
+        flag_q = _apply_submitted_at_window(
+            flag_q, date_from=date_from, date_to=date_to, timezone=tz
+        )
 
     return projects, list(db.scalars(sub_q).all()), list(db.scalars(flag_q).all())
 
@@ -140,8 +145,14 @@ def load_flags_filtered(
     if severity:
         q = q.where(DqaFlag.severity == severity.lower())
     if date_from or date_to:
+        tz = study_timezone(db, study_id)
+        if not study_id and project_id:
+            project = db.get(Project, project_id)
+            tz = study_timezone(db, project.study_id if project else None)
         q = q.join(Submission, Submission.id == DqaFlag.submission_id)
-        q = _apply_submitted_at_window(q, date_from=date_from, date_to=date_to)
+        q = _apply_submitted_at_window(
+            q, date_from=date_from, date_to=date_to, timezone=tz
+        )
     return list(db.scalars(q).all())
 
 
