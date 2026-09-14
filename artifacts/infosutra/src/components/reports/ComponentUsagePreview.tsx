@@ -39,7 +39,7 @@ export const COMPONENT_TITLES: Record<string, string> = {
 
 export const COMPONENT_BLURBS: Record<string, string> = {
   metric: "A single headline number (e.g. submissions today).",
-  kpi_group: "A row of related headline KPIs from one object source.",
+  kpi_group: "A glance row of headline KPIs — each card can use its own query.",
   text: "Static author prose — not for figures or tables.",
   table: "A sortable data table with columns bound to a row source.",
   ranking: "A top/bottom list ordered by a numeric field.",
@@ -56,7 +56,7 @@ export const COMPONENT_BLURBS: Record<string, string> = {
 /** Deterministic “Try this” prompts keyed by component type. */
 export const COMPONENT_EXAMPLE_PROMPTS: Record<string, string> = {
   metric: "Show today's submissions as a single KPI.",
-  kpi_group: "Show today's submissions, flagged percent, and open RED count as a KPI group.",
+  kpi_group: "Show today's submissions, cumulative total, and open RED/AMBER as a KPI group.",
   text: "Add a short intro paragraph explaining what this daily report covers.",
   table: "Table of enumerator submission quality with clean, RED and AMBER counts.",
   ranking: "Ranking of enumerators by flag rate today, worst first.",

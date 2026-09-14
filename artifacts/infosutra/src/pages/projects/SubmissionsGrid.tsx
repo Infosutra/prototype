@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearchParams } from "wouter";
 import {
   useGetProjectDataGrid,
   type GridCell,
@@ -216,6 +216,7 @@ function relatedAnswers(
 }
 
 export function SubmissionsGrid({ projectId }: { projectId: string }) {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [severity, setSeverity] = useState<SeverityFilter>("flagged");
@@ -225,6 +226,13 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
   const [section, setSection] = useState<SectionId>("flagged");
   const [detail, setDetail] = useState<CellDetail | null>(null);
 
+  const dateFrom = searchParams.get("dateFrom") || "";
+  const dateTo = searchParams.get("dateTo") || "";
+
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setEnumerator(enumeratorInput.trim());
@@ -233,6 +241,29 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
     return () => clearTimeout(timer);
   }, [enumeratorInput]);
 
+  const dateParams = {
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  };
+
+  // Flagged count within the active date window (ignores enumerator / severity UI).
+  const flagProbeQuery = useGetProjectDataGrid(
+    projectId,
+    { page: 1, limit: 1, severity: "flagged", ...dateParams },
+    { query: { enabled: Boolean(projectId) } as never },
+  );
+  const hasFlaggedSubmissions = (flagProbeQuery.data?.total ?? 0) > 0;
+  const dqaFiltersKnown =
+    flagProbeQuery.isSuccess || (flagProbeQuery.isError && !flagProbeQuery.isFetching);
+  const dqaFiltersDisabled = dqaFiltersKnown && !hasFlaggedSubmissions;
+
+  useEffect(() => {
+    if (!dqaFiltersDisabled) return;
+    setSeverity("");
+    setColumnMode("all");
+    setPage(1);
+  }, [projectId, dqaFiltersDisabled, dateFrom, dateTo]);
+
   const gridQuery = useGetProjectDataGrid(
     projectId,
     {
@@ -240,6 +271,7 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
       limit,
       severity: severity || undefined,
       enumerator: enumerator || undefined,
+      ...dateParams,
     },
     {
       query: {
@@ -359,6 +391,7 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
               if (!next) return;
               const mapped: SeverityFilter =
                 next === "all" ? "" : (next as SeverityFilter);
+              if (dqaFiltersDisabled && mapped !== "") return;
               setSeverity(mapped);
               setPage(1);
             }}
@@ -367,16 +400,52 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
             <ToggleGroupItem value="all" className="text-xs px-2.5 h-8">
               {qualityLabel("", "All")}
             </ToggleGroupItem>
-            <ToggleGroupItem value="flagged" className="text-xs px-2.5 h-8">
+            <ToggleGroupItem
+              value="flagged"
+              className="text-xs px-2.5 h-8"
+              disabled={dqaFiltersDisabled}
+              title={
+                dqaFiltersDisabled
+                  ? "No flagged submissions in this form"
+                  : undefined
+              }
+            >
               {qualityLabel("flagged", "Flagged")}
             </ToggleGroupItem>
-            <ToggleGroupItem value="red" className="text-xs px-2.5 h-8">
+            <ToggleGroupItem
+              value="red"
+              className="text-xs px-2.5 h-8"
+              disabled={dqaFiltersDisabled}
+              title={
+                dqaFiltersDisabled
+                  ? "No flagged submissions in this form"
+                  : undefined
+              }
+            >
               {qualityLabel("red", "Red")}
             </ToggleGroupItem>
-            <ToggleGroupItem value="amber" className="text-xs px-2.5 h-8">
+            <ToggleGroupItem
+              value="amber"
+              className="text-xs px-2.5 h-8"
+              disabled={dqaFiltersDisabled}
+              title={
+                dqaFiltersDisabled
+                  ? "No flagged submissions in this form"
+                  : undefined
+              }
+            >
               {qualityLabel("amber", "Amber")}
             </ToggleGroupItem>
-            <ToggleGroupItem value="clean" className="text-xs px-2.5 h-8">
+            <ToggleGroupItem
+              value="clean"
+              className="text-xs px-2.5 h-8"
+              disabled={dqaFiltersDisabled}
+              title={
+                dqaFiltersDisabled
+                  ? "No flagged submissions in this form"
+                  : undefined
+              }
+            >
               {qualityLabel("clean", "Clean")}
             </ToggleGroupItem>
           </ToggleGroup>
@@ -395,11 +464,21 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
               size="sm"
               value={columnMode}
               onValueChange={(next) => {
-                if (next === "review" || next === "all") setColumnMode(next);
+                if (next === "all") setColumnMode("all");
+                if (next === "review" && !dqaFiltersDisabled) setColumnMode("review");
               }}
               className="justify-start"
             >
-              <ToggleGroupItem value="review" className="text-xs px-2.5 h-8">
+              <ToggleGroupItem
+                value="review"
+                className="text-xs px-2.5 h-8"
+                disabled={dqaFiltersDisabled}
+                title={
+                  dqaFiltersDisabled
+                    ? "No flagged submissions to review"
+                    : undefined
+                }
+              >
                 Review
               </ToggleGroupItem>
               <ToggleGroupItem value="all" className="text-xs px-2.5 h-8">
@@ -432,13 +511,21 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
           </span>
           <button
             type="button"
+            disabled={dqaFiltersDisabled}
             className={cn(
               "rounded-md px-2 py-1 text-xs transition-colors",
+              dqaFiltersDisabled && "cursor-not-allowed opacity-50",
               section === "flagged" && columnMode === "review"
                 ? "bg-muted font-medium text-foreground"
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             )}
+            title={
+              dqaFiltersDisabled
+                ? "No flagged submissions in this form"
+                : undefined
+            }
             onClick={() => {
+              if (dqaFiltersDisabled) return;
               setSection("flagged");
               setColumnMode("review");
             }}
@@ -449,13 +536,21 @@ export function SubmissionsGrid({ projectId }: { projectId: string }) {
             <button
               key={group.id}
               type="button"
+              disabled={dqaFiltersDisabled}
               className={cn(
                 "rounded-md px-2 py-1 text-xs transition-colors",
+                dqaFiltersDisabled && "cursor-not-allowed opacity-50",
                 section === group.id && columnMode === "review"
                   ? "bg-muted font-medium text-foreground"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
+              title={
+                dqaFiltersDisabled
+                  ? "No flagged submissions to review"
+                  : undefined
+              }
               onClick={() => {
+                if (dqaFiltersDisabled) return;
                 setSection(group.id);
                 setColumnMode("review");
               }}

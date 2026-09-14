@@ -165,8 +165,6 @@ def _validate_component(comp: Any, *, path: str) -> list[str]:
     display = comp.display or {}
 
     if comp.type == "text":
-        body = display.get("body") or display.get("body")
-        # camelCase dump uses "body"
         body = display.get("body", "")
         if isinstance(body, str) and _PLACEHOLDER_RE.search(body):
             errors.append(f"{path}: text body must not contain {{{{placeholders}}}}")
@@ -179,9 +177,85 @@ def _validate_component(comp: Any, *, path: str) -> list[str]:
                 f"{path}: narrative instruction must not contain {{{{placeholders}}}}"
             )
 
+    if comp.type == "kpi_group":
+        errors.extend(_validate_kpi_group(comp, path=path))
+        return errors
+
     if comp.query is not None:
         errors.extend(_validate_query(comp.query, path=f"{path}.query"))
 
+    return errors
+
+
+def _validate_kpi_group(comp: Any, *, path: str) -> list[str]:
+    errors: list[str] = []
+    items = (comp.display or {}).get("items") or []
+    if not items:
+        errors.append(f"{path}: kpi_group needs at least one display item")
+        return errors
+
+    per_item = False
+    for item in items:
+        q = item.get("query") if isinstance(item, dict) else getattr(item, "query", None)
+        if q is not None:
+            per_item = True
+            break
+
+    if per_item:
+        for i, item in enumerate(items):
+            item_path = f"{path}.display.items[{i}]"
+            if not isinstance(item, dict):
+                q = getattr(item, "query", None)
+                label = getattr(item, "label", "")
+            else:
+                q = item.get("query")
+                label = item.get("label") or ""
+            if not str(label).strip():
+                errors.append(f"{item_path}: label is required")
+            if q is None:
+                errors.append(f"{item_path}: query is required in per-item mode")
+                continue
+            # Display dumps Query as dict; accept both.
+            if isinstance(q, dict):
+                from app.domain.reporting.query import Query
+
+                try:
+                    parsed_q = Query.model_validate(q)
+                except ValidationError as exc:
+                    for err in exc.errors():
+                        loc = ".".join(str(x) for x in err.get("loc", ()))
+                        msg = err.get("msg", "invalid")
+                        errors.append(
+                            f"{item_path}.query.{loc}: {msg}"
+                            if loc
+                            else f"{item_path}.query: {msg}"
+                        )
+                    continue
+            else:
+                parsed_q = q
+            if parsed_q.group_by:
+                errors.append(
+                    f"{item_path}.query: glance KPI queries must not use groupBy"
+                )
+            if not parsed_q.measures:
+                errors.append(f"{item_path}.query: glance KPI queries need measures")
+            errors.extend(_validate_query(parsed_q, path=f"{item_path}.query"))
+        return errors
+
+    if comp.query is not None:
+        errors.extend(_validate_query(comp.query, path=f"{path}.query"))
+    for i, item in enumerate(items):
+        item_path = f"{path}.display.items[{i}]"
+        if isinstance(item, dict):
+            field = item.get("field")
+            label = item.get("label")
+        else:
+            field = getattr(item, "field", None)
+            label = getattr(item, "label", None)
+        if not str(label or "").strip():
+            errors.append(f"{item_path}: label is required")
+        if not str(field or "").strip():
+            errors.append(f"{item_path}: field is required in shared-query mode")
     return errors
 
 

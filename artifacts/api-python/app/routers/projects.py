@@ -190,6 +190,8 @@ def project_data_grid(
     limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     severity: str | None = Query(default=None),
     enumerator: str | None = Query(default=None),
+    date_from: str | None = Query(default=None, alias="dateFrom"),
+    date_to: str | None = Query(default=None, alias="dateTo"),
     db: Session = Depends(get_db),
 ) -> SubmissionGrid:
     """All submissions of a project as rows x questions, with DQA severity per cell."""
@@ -203,6 +205,8 @@ def project_data_grid(
         limit=limit,
         severity=severity,
         enumerator=enumerator,
+        date_from=date_from,
+        date_to=date_to,
     )
     return SubmissionGrid.model_validate(grid)
 

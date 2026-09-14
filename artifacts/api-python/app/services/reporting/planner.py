@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.db.models import AppSettings
+from app.domain.reporting.compile import compile_report_spec
 from app.domain.reporting.validation import SpecValidationError, validate_report_spec
 from app.integrations.llm import (
     chat_completion_detailed,
@@ -71,11 +72,16 @@ def plan_report(
     current_spec: dict[str, Any] | None = None,
     llm: LlmInvoker | None = None,
     settings: AppSettings | None = None,
+    judge: bool = True,
+    partial_ok: bool = False,
 ) -> dict[str, Any]:
-    """Plan a ReportSpec. Returns ``{spec, unmapped, judgement}``.
+    """Plan a ReportSpec. Returns ``{spec, unmapped, judgement, partial, issues}``.
 
     ``llm`` may be injected for tests. Unmapped / faithful=false do not fail.
-    Invalid spec after one repair raises :class:`PlanError`.
+    Invalid spec after one repair raises :class:`PlanError`, unless
+    ``partial_ok`` is True — then a salvaged valid subset is returned with
+    ``partial=True`` and user-facing ``issues``.
+    Set ``judge=False`` when a human will confirm the spec instead.
     """
     text = (instructions or "").strip()
     if not text:
@@ -107,6 +113,10 @@ def plan_report(
         purpose="plan",
     )
     plan = _parse_plan_reply(plan_raw)
+    plan.spec = compile_report_spec(plan.spec)
+    from app.services.reporting.plan_salvage import autofix_narratives
+
+    plan.spec = autofix_narratives(plan.spec)
     errors = validate_report_spec(plan.spec)
 
     if errors:
@@ -127,19 +137,40 @@ def plan_report(
             purpose="repair",
         )
         plan = _parse_plan_reply(repair_raw)
+        plan.spec = autofix_narratives(compile_report_spec(plan.spec))
         errors = validate_report_spec(plan.spec)
         if errors:
-            raise PlanError(
-                "ReportSpec failed validation after repair: " + "; ".join(errors)
-            )
+            if partial_ok:
+                return _partial_plan_result(
+                    plan.spec,
+                    baseline=current_spec,
+                    errors=errors,
+                    unmapped=plan.unmapped,
+                )
+            raise PlanError(_format_validation_failure(errors))
 
     # Re-validate with raise to normalize (and catch edge cases).
     try:
         validate_report_spec(plan.spec, raise_on_error=True)
     except SpecValidationError as exc:
-        raise PlanError(
-            "ReportSpec failed validation after repair: " + "; ".join(exc.errors)
-        ) from exc
+        if partial_ok:
+            return _partial_plan_result(
+                plan.spec,
+                baseline=current_spec,
+                errors=list(exc.errors),
+                unmapped=plan.unmapped,
+            )
+        raise PlanError(_format_validation_failure(exc.errors)) from exc
+
+    result = {
+        "spec": plan.spec,
+        "unmapped": _normalize_unmapped(plan.unmapped),
+        "judgement": {"faithful": True, "issues": []},
+        "partial": False,
+        "issues": [],
+    }
+    if not judge:
+        return result
 
     judge_system = resolve_prompt_content(
         db, REPORT_PLANNER_JUDGE_PROMPT_ID, default=DEFAULT_JUDGE_PROMPT
@@ -155,15 +186,47 @@ def plan_report(
         purpose="judge",
     )
     judgement = _parse_judge_reply(judge_raw)
-
-    return {
-        "spec": plan.spec,
-        "unmapped": _normalize_unmapped(plan.unmapped),
-        "judgement": {
-            "faithful": bool(judgement.faithful),
-            "issues": [str(x) for x in judgement.issues if str(x).strip()],
-        },
+    result["judgement"] = {
+        "faithful": bool(judgement.faithful),
+        "issues": [str(x) for x in judgement.issues if str(x).strip()],
     }
+    return result
+
+
+def _partial_plan_result(
+    candidate: dict[str, Any],
+    *,
+    baseline: dict[str, Any] | None,
+    errors: list[str],
+    unmapped: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from app.services.reporting.plan_salvage import salvage_report_spec
+
+    salvaged = salvage_report_spec(candidate, baseline=baseline, errors=errors)
+    spec = salvaged.get("spec")
+    issues = list(salvaged.get("issues") or [])
+    if spec is None:
+        raise PlanError(_format_validation_failure(errors))
+    return {
+        "spec": spec,
+        "unmapped": _normalize_unmapped(unmapped),
+        "judgement": {"faithful": True, "issues": []},
+        "partial": True,
+        "issues": issues,
+        "keptFrom": salvaged.get("keptFrom"),
+    }
+
+
+def _format_validation_failure(errors: list[str], *, limit: int = 8) -> str:
+    cleaned = [str(e).strip() for e in errors if str(e).strip()]
+    if not cleaned:
+        return "ReportSpec failed validation after repair"
+    head = cleaned[:limit]
+    msg = "ReportSpec failed validation after repair: " + "; ".join(head)
+    remaining = len(cleaned) - len(head)
+    if remaining > 0:
+        msg += f" (+{remaining} more)"
+    return msg
 
 
 def _parse_plan_reply(raw: dict[str, Any]) -> _PlanReply:

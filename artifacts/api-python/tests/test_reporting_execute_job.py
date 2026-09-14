@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, inspect
+from sqlalchemy import create_engine, event, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -136,6 +136,39 @@ def test_execute_job_202_worker_hydrates(client: TestClient, golden: Session) ->
     # Also ensure we did not create a sneaky table
     tables = set(Base.metadata.tables.keys())
     assert "report_runs" not in tables
+
+
+def test_execute_job_preview_does_not_persist_report(
+    client: TestClient, golden: Session
+) -> None:
+    before = len(golden.scalars(select(Report)).all())
+    spec = json.loads(_GOLDEN.read_text(encoding="utf-8"))
+    resp = client.post(
+        "/api/jobs",
+        json={
+            "type": "execute",
+            "studyId": STUDY_ID,
+            "payload": {
+                "spec": spec,
+                "window": {"preset": "execution_date", "executionDate": EXECUTION_DATE},
+                "preview": True,
+            },
+        },
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["jobId"]
+    assert worker.run_claimed(golden, limit=1) == 1
+
+    hydrated = client.get(f"/api/jobs/{job_id}")
+    assert hydrated.status_code == 200
+    body = hydrated.json()
+    assert body["status"] == "completed"
+    assert body["result"]["preview"] is True
+    assert "reportId" not in body["result"]
+    assert body["result"]["sections"]
+
+    after = golden.scalars(select(Report)).all()
+    assert len(after) == before
 
 
 def test_routers_do_not_import_query_engine_run() -> None:

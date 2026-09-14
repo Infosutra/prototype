@@ -38,6 +38,9 @@ def _execute_handler(db: Session, job: Job) -> Any:
     window = payload.get("window")
     if not window:
         raise ValueError("execute job payload requires window")
+    # Authoring / demo preview: run queries but do not create a Reports-tab row.
+    preview = bool(payload.get("preview"))
+    persist = False if preview else bool(payload.get("persist", True))
     result = execute_report(
         db,
         study_id=job.study_id,
@@ -45,9 +48,15 @@ def _execute_handler(db: Session, job: Job) -> Any:
         spec=payload.get("spec"),
         template_id=payload.get("templateId"),
         title=payload.get("title"),
+        persist=persist,
     )
     recipients = payload.get("emailRecipients")
-    if recipients and isinstance(recipients, list) and result.get("reportId"):
+    if (
+        persist
+        and recipients
+        and isinstance(recipients, list)
+        and result.get("reportId")
+    ):
         job_store.enqueue(
             db,
             job_type="email",

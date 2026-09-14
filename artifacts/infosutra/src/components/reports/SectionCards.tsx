@@ -30,6 +30,9 @@ type SpecComponent = {
   id?: string;
   type?: string;
   query?: SpecQuery;
+  display?: {
+    items?: Array<{ label?: string; query?: SpecQuery; field?: string }>;
+  };
 };
 
 type SpecSection = {
@@ -64,12 +67,17 @@ export async function createPlanJob(
 
 export async function pollPlanJob(
   jobId: string,
-  opts: { signal?: AbortSignal; intervalMs?: number } = {},
+  opts: { signal?: AbortSignal; intervalMs?: number; timeoutMs?: number } = {},
 ): Promise<PlanResult> {
   const interval = opts.intervalMs ?? 800;
+  const timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
+  const started = Date.now();
   for (;;) {
     if (opts.signal?.aborted) {
       throw new Error("Planning cancelled");
+    }
+    if (Date.now() - started > timeoutMs) {
+      throw new Error("Timed out waiting for the plan job to finish");
     }
     const resp = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
       signal: opts.signal,
@@ -105,6 +113,23 @@ function querySummary(query: SpecQuery | undefined): string {
     parts.push(query.measures.map((m) => m.fn || "measure").join("+"));
   }
   return parts.join(" · ") || "query";
+}
+
+function componentSummary(comp: SpecComponent | undefined): string {
+  if (!comp) return "empty";
+  if (comp.type === "kpi_group") {
+    const items = comp.display?.items ?? [];
+    const perItem = items.filter((item) => item.query);
+    if (perItem.length > 0) {
+      return perItem
+        .map((item) => {
+          const q = querySummary(item.query);
+          return item.label ? `${item.label}: ${q}` : q;
+        })
+        .join(" · ");
+    }
+  }
+  return querySummary(comp.query);
 }
 
 export function SectionCards({
@@ -161,7 +186,7 @@ export function SectionCards({
             const components = section.components ?? [];
             const primary = components[0];
             const type = primary?.type || "section";
-            const summary = querySummary(primary?.query);
+            const summary = componentSummary(primary);
             return (
               <div
                 key={section.id || `section-${idx}`}

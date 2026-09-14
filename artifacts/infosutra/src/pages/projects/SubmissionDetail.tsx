@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, AlertCircle } from "lucide-react";
+import { useStudy } from "@/components/study/StudyProvider";
 
 function leafName(key: string): string {
   return key.split("/").filter(Boolean).pop() || key;
@@ -170,6 +171,7 @@ function fieldRowClass(severity?: "red" | "amber"): string {
 
 export default function SubmissionDetail() {
   const [, params] = useRoute("/submissions/:id");
+  const { activeStudyId } = useStudy();
   const submissionId = params?.id ? decodeURIComponent(params.id) : "";
   const submissionQuery = useGetSubmission(submissionId);
   const submission = submissionQuery.data;
@@ -180,6 +182,14 @@ export default function SubmissionDetail() {
   const formFieldsQuery = useGetProjectFormFields(submission?.projectId ?? "", {
     query: { enabled: Boolean(submission?.projectId) } as never,
   });
+
+  const dataExplorerHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (submission?.projectId) params.set("projectId", submission.projectId);
+    if (activeStudyId) params.set("study", activeStudyId);
+    const qs = params.toString();
+    return qs ? `/data?${qs}` : "/data";
+  }, [submission?.projectId, activeStudyId]);
 
   const fieldCatalog = useMemo(
     () => buildFieldCatalog(formFieldsQuery.data ?? []),
@@ -326,10 +336,10 @@ export default function SubmissionDetail() {
         title={submission.displayId}
         description={submission.projectName}
         action={
-          <Link href={`/forms/${submission.projectId}`}>
+          <Link href={dataExplorerHref}>
             <Button variant="outline" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Form details
+              Data Explorer
             </Button>
           </Link>
         }

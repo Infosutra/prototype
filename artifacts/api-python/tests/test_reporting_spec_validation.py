@@ -90,3 +90,93 @@ def test_section_count_knob() -> None:
 def test_raise_on_error() -> None:
     with pytest.raises(SpecValidationError):
         validate_report_spec({"specVersion": "1.0", "title": "x", "bogus": 1}, raise_on_error=True)
+
+
+def test_kpi_group_per_item_queries_validate() -> None:
+    spec = {
+        "specVersion": "1.0",
+        "title": "Glance",
+        "sections": [
+            {
+                "id": "s1",
+                "title": "Today",
+                "components": [
+                    {
+                        "id": "glance",
+                        "type": "kpi_group",
+                        "display": {
+                            "items": [
+                                {
+                                    "label": "Submissions today",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "execution_date",
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                },
+                                {
+                                    "label": "Cumulative",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "study_to_date",
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                },
+                                {
+                                    "label": "RED open",
+                                    "query": {
+                                        "entity": "flag",
+                                        "window": "study_to_date",
+                                        "measures": [
+                                            {
+                                                "id": "value",
+                                                "fn": "countWhere",
+                                                "field": "severity",
+                                                "eq": "red",
+                                            }
+                                        ],
+                                    },
+                                },
+                            ]
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    assert validate_report_spec(spec) == []
+    ReportSpec.model_validate(spec)
+
+
+def test_kpi_group_per_item_rejects_groupby() -> None:
+    spec = {
+        "specVersion": "1.0",
+        "title": "Bad glance",
+        "sections": [
+            {
+                "id": "s1",
+                "title": "Today",
+                "components": [
+                    {
+                        "id": "glance",
+                        "type": "kpi_group",
+                        "display": {
+                            "items": [
+                                {
+                                    "label": "By tool",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "execution_date",
+                                        "groupBy": ["toolCode"],
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    errors = validate_report_spec(spec)
+    assert any("groupBy" in e for e in errors)

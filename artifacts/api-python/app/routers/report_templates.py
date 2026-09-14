@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,8 @@ from app.domain.reporting.catalog import (
 from app.domain.reporting.spec import ComponentType, ReportSpec
 from app.schemas.common import OkResponse
 from app.schemas.report_templates import (
+    AuthorTurnInput,
+    CreateDraftTemplateInput,
     CreateReportTemplateInput,
     ReportTemplateDetailOut,
     ReportTemplateMetaInput,
@@ -143,7 +146,9 @@ def _detail_out(db: Session, template: ReportTemplate) -> ReportTemplateDetailOu
     )
     return ReportTemplateDetailOut(
         **base.model_dump(by_alias=False),
-        spec=(versions[0].spec_json or {}) if versions else {},
+        spec=(versions[0].spec_json or {}) if versions else (template.working_spec_json or {}),
+        working_spec=template.working_spec_json,
+        authoring=template.authoring_json,
         versions=[_version_out(db, version, with_changes=True) for version in versions],
     )
 
@@ -201,6 +206,72 @@ def list_templates(
     if report_kind:
         statement = statement.where(ReportTemplate.report_kind == _kind(report_kind))
     return [_summary_out(db, row) for row in db.scalars(statement).all()]
+
+
+@router.post("/draft", response_model=ReportTemplateDetailOut, operation_id="createReportTemplateDraft")
+def create_draft(
+    payload: CreateDraftTemplateInput,
+    db: Session = Depends(get_db),
+) -> ReportTemplateDetailOut:
+    study = _resolve_study(db, payload.study_id)
+    kind = _kind(payload.report_kind)
+    try:
+        template = templates_service.create_draft(
+            db,
+            study_id=study.id,
+            name=payload.name,
+            description=payload.description,
+            report_kind=kind,
+        )
+    except templates_service.TemplateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _detail_out(db, template)
+
+
+@router.post(
+    "/{template_id}/author/stream",
+    operation_id="authorReportTemplateStream",
+    response_model=None,
+)
+def author_template_stream(
+    template_id: str,
+    payload: AuthorTurnInput,
+    db: Session = Depends(get_db),
+):
+    template = _template_or_404(db, template_id)
+    from app.services.reporting.authoring import author_turn
+
+    def event_gen():
+        import json
+
+        try:
+            answer = None
+            if payload.question_id or payload.value:
+                answer = {
+                    "questionId": payload.question_id or "",
+                    "value": payload.value or payload.message,
+                }
+            for event in author_turn(
+                db,
+                template,
+                message=payload.message,
+                answer=answer,
+            ):
+                name = str(event.get("event") or "message")
+                data = {k: v for k, v in event.items() if k != "event"}
+                yield f"event: {name}\ndata: {json.dumps(data, default=str)}\n\n"
+        except Exception as exc:  # noqa: BLE001
+            yield f"event: error\ndata: {json.dumps({'message': str(exc), 'code': 'stream_error'})}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _spec_issues(issues: list) -> list[SpecIssueOut]:
@@ -330,7 +401,8 @@ def update_template_prompt(
         )
 
     try:
-        templates_service.add_version(
+        before_id = template.current_version_id
+        version = templates_service.add_version(
             db,
             template,
             spec=payload.spec,
@@ -342,9 +414,15 @@ def update_template_prompt(
             status="invalid", reason=str(exc), errors=_spec_issues(exc.issues)
         )
 
-    template.default_execution_date = _default_execution_date_for_prompt(
-        db, payload.prompt, template.study_id
-    )
+    unchanged = before_id is not None and version.id == before_id
+
+    if template.status == "draft" and not unchanged:
+        template.status = "active"
+
+    if not unchanged:
+        template.default_execution_date = _default_execution_date_for_prompt(
+            db, payload.prompt, template.study_id
+        )
     db.commit()
     db.refresh(template)
 
@@ -352,7 +430,11 @@ def update_template_prompt(
         status="ok",
         template=_detail_out(db, template),
         spec=payload.spec,
-        summary="Template version saved.",
+        summary=(
+            "No changes since the current version."
+            if unchanged
+            else "Template version saved."
+        ),
     )
 
 

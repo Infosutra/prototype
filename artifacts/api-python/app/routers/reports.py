@@ -20,7 +20,7 @@ from app.schemas.misc import (
     ShareReportInput,
 )
 from app.services.jobs import store as job_store
-from app.services.report_storage import docx_path_for, pdf_path_for
+from app.services.report_storage import docx_path_for, pdf_path_for, read_report_result
 from app.services.reporting.schedule_email import enqueue_execute
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -178,26 +178,53 @@ def get_report(report_id: str, db: Session = Depends(get_db)) -> ReportOut:
 
 
 @router.get(
+    "/{report_id}/result",
+    operation_id="getReportResult",
+)
+def get_report_result(report_id: str, db: Session = Depends(get_db)) -> dict:
+    """Return the stored ExecuteResult JSON for an in-app web preview."""
+    row = db.get(Report, report_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if not row.result_ref:
+        raise HTTPException(status_code=404, detail="Report result not available")
+    try:
+        payload = read_report_result(row.result_ref)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail="Report result file missing — regenerate the report"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500, detail="Report result could not be loaded"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=500, detail="Report result is invalid")
+    return payload
+
+
+@router.get(
     "/{report_id}/preview",
     response_class=HTMLResponse,
     responses={200: {"content": {"text/html": {}}}},
     operation_id="previewReport",
 )
 def preview_report(report_id: str, db: Session = Depends(get_db)) -> HTMLResponse:
+    """Legacy HTML stub. Prefer the SPA route ``/reports/{id}/preview``."""
     row = db.get(Report, report_id)
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
-    html_body = "<p>No HTML preview available.</p>"
-    if row.result_ref:
-        try:
-            from app.services.jobs import artifacts as job_artifacts
-
-            payload = job_artifacts.read_job_result(row.result_ref)
-            if isinstance(payload, dict):
-                html_body = payload.get("html") or html_body
-        except Exception:
-            html_body = "<p>Report result could not be loaded.</p>"
-    return HTMLResponse(content=html_body)
+    title = (row.title or "Report").replace("<", "&lt;").replace(">", "&gt;")
+    return HTMLResponse(
+        content=(
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            f"<title>{title}</title></head><body style='font-family:system-ui;padding:2rem'>"
+            f"<h1>{title}</h1>"
+            "<p>Open this report in the Infosutra app for the full web preview:</p>"
+            f"<p><a href='/reports/{report_id}/preview'>/reports/{report_id}/preview</a></p>"
+            "</body></html>"
+        )
+    )
 
 
 @router.get(

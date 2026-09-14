@@ -171,7 +171,8 @@ def _compile(
     for f in query.filters:
         use_field(f.field)
 
-    if query.sort is not None:
+    measure_ids = {m.id for m in (measures or [])}
+    if query.sort is not None and query.sort.field not in measure_ids:
         use_field(query.sort.field)
 
     # Base FROM + study + calendar_day window
@@ -238,8 +239,18 @@ def _compile(
             stmt = stmt.group_by(*[field_refs[n].column for n in group_by])
 
     if query.sort is not None:
-        sort_ref = field_refs[query.sort.field]
-        order = sort_ref.column.asc() if query.sort.dir == "asc" else sort_ref.column.desc()
+        sort_key = query.sort.field
+        if sort_key in field_refs:
+            sort_col = field_refs[sort_key].column
+        elif measures and any(m.id == sort_key for m in measures):
+            measure = next(m for m in measures if m.id == sort_key)
+            sort_col = _measure_expr(measure, field_refs)
+        else:
+            raise QueryError(
+                f"Unknown sort field '{sort_key}' "
+                f"(not a catalog field or measure id)"
+            )
+        order = sort_col.asc() if query.sort.dir == "asc" else sort_col.desc()
         stmt = stmt.order_by(order)
     elif group_by:
         stmt = stmt.order_by(*[field_refs[n].column.asc() for n in group_by])

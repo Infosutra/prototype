@@ -116,6 +116,10 @@ class ReportTemplate(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="active")
     # Denormalized pointer to the version currently used by execution.
     current_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Working spec while chatting; published versions stay append-only.
+    working_spec_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # {status, messages[], pendingQuestions[], promptText}
+    authoring_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # When the prompt names a calendar day, preview/execute default to that ISO date.
     # Specs still use "today" sources; that day becomes the execution date.
     default_execution_date: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.models import Report
 from app.domain.reporting.spec import ReportSpec
-from app.services.reporting.execute import NARRATIVE_STUB_TEXT, execute_report
+from app.services.reporting.execute import execute_report
 from app.services.reporting.render_pdf import render_pdf
 from tests.helpers.reporting_fixture import (
     EXECUTION_DATE,
@@ -76,7 +76,13 @@ def test_execute_golden_counts(golden: Session) -> None:
     )
     kpis = _by_id(result, "s1c1")
     assert kpis.get("error") is None
-    assert kpis["data"] == {"total": 25, "clean": 20, "flagged": 5}
+    assert kpis["data"] == {
+        "items": [
+            {"label": "Total", "value": 25},
+            {"label": "Clean", "value": 20},
+            {"label": "Flagged", "value": 5},
+        ]
+    }
 
     table = _by_id(result, "s2c1")
     assert isinstance(table["data"], list)
@@ -91,7 +97,10 @@ def test_execute_golden_counts(golden: Session) -> None:
     assert all(r["enumerator"] == "Arun" for r in flags["data"])
 
     narrative = _by_id(result, "s3c2")
-    assert narrative["data"]["text"] == NARRATIVE_STUB_TEXT
+    text = narrative["data"]["text"]
+    assert isinstance(text, str) and text.strip()
+    assert "Phase 3 narrative stub" not in text
+    assert "Arun" in text or "row" in text.lower() or "flag" in text.lower()
 
     assert result["window"] == {"from": EXECUTION_DATE, "to": EXECUTION_DATE}
     assert result["artifacts"].get("pdf")
@@ -123,7 +132,7 @@ def test_bad_query_component_errors_others_ok(golden: Session) -> None:
             window_input={"preset": "execution_date", "executionDate": EXECUTION_DATE},
         )
 
-    assert _by_id(result, "s1c1")["data"]["total"] == 25
+    assert _by_id(result, "s1c1")["data"]["items"][0]["value"] == 25
     bad = _by_id(result, "s2c1")
     assert bad.get("error")
     assert "data" not in bad or bad.get("error")
@@ -154,8 +163,82 @@ def test_absolute_from_to_same_day(golden: Session) -> None:
         spec=_load_spec(),
         window_input={"from": EXECUTION_DATE, "to": EXECUTION_DATE},
     )
-    assert _by_id(result, "s1c1")["data"] == {"total": 25, "clean": 20, "flagged": 5}
+    assert _by_id(result, "s1c1")["data"] == {
+        "items": [
+            {"label": "Total", "value": 25},
+            {"label": "Clean", "value": 20},
+            {"label": "Flagged", "value": 5},
+        ]
+    }
     assert result["window"] == {"from": EXECUTION_DATE, "to": EXECUTION_DATE}
+
+
+def test_execute_kpi_group_per_item_mixed_windows(golden: Session) -> None:
+    """Glance cards with different windows/entities run as separate queries."""
+    spec = {
+        "specVersion": "1.0",
+        "title": "Today at a Glance",
+        "sections": [
+            {
+                "id": "s1",
+                "title": "Glance",
+                "components": [
+                    {
+                        "id": "glance",
+                        "type": "kpi_group",
+                        "display": {
+                            "items": [
+                                {
+                                    "label": "Submissions today",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "execution_date",
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                },
+                                {
+                                    "label": "Cumulative submissions",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "study_to_date",
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                },
+                                {
+                                    "label": "RED flags open",
+                                    "query": {
+                                        "entity": "flag",
+                                        "window": "study_to_date",
+                                        "measures": [
+                                            {
+                                                "id": "value",
+                                                "fn": "countWhere",
+                                                "field": "severity",
+                                                "eq": "red",
+                                            }
+                                        ],
+                                    },
+                                },
+                            ]
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    result = execute_report(
+        golden,
+        study_id=STUDY_ID,
+        spec=spec,
+        window_input={"preset": "execution_date", "executionDate": EXECUTION_DATE},
+    )
+    glance = _by_id(result, "glance")
+    assert glance.get("error") is None
+    items = {row["label"]: row["value"] for row in glance["data"]["items"]}
+    assert items["Submissions today"] == 25
+    # Fixture also has older-day rows → cumulative >= today
+    assert items["Cumulative submissions"] >= 25
+    assert items["RED flags open"] == 3
 
 
 def test_report_spec_parses_golden() -> None:

@@ -141,8 +141,23 @@ def _render_data(
         return out
 
     if ctype == "kpi_group" and isinstance(data, dict):
-        rows = [["Metric", "Value"]] + [[str(k), str(v)] for k, v in data.items()]
-        out.append(_table(rows, Table, TableStyle, colors))
+        items = data.get("items")
+        if isinstance(items, list):
+            rows = [["Metric", "Value"]]
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                label = str(item.get("label") or "")
+                if item.get("error"):
+                    rows.append([label, f"error: {item.get('error')}"])
+                else:
+                    rows.append([label, str(item.get("value", ""))])
+            out.append(_table(rows, Table, TableStyle, colors))
+        else:
+            rows = [["Metric", "Value"]] + [
+                [str(k), str(v)] for k, v in data.items() if k != "items"
+            ]
+            out.append(_table(rows, Table, TableStyle, colors))
         out.append(Spacer(1, 4))
         return out
 

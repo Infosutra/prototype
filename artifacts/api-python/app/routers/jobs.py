@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.models import Study
 from app.db.session import get_db
 from app.schemas.jobs import JobCreate, JobCreated, JobStatusOut
 from app.services.jobs import store
+from app.services.jobs import worker as jobs_worker
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -19,7 +20,11 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
     status_code=status.HTTP_202_ACCEPTED,
     operation_id="createJob",
 )
-def create_job(payload: JobCreate, db: Session = Depends(get_db)) -> JobCreated:
+def create_job(
+    payload: JobCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> JobCreated:
     if payload.study_id is not None and db.get(Study, payload.study_id) is None:
         raise HTTPException(status_code=404, detail="Study not found")
     job = store.enqueue(
@@ -28,6 +33,8 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)) -> JobCreated:
         payload=payload.payload or {},
         study_id=payload.study_id,
     )
+    # Start work immediately — do not wait for the 30s scheduler tick.
+    background_tasks.add_task(jobs_worker.kick_own_session, limit=2)
     return JobCreated(job_id=job.id)
 
 

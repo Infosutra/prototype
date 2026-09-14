@@ -10,7 +10,8 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import DqaFlag, Project, Submission
+from app.db.models import DqaFlag, Project, Study, Submission
+from app.domain.time_window import resolve_optional_submitted_at_bounds
 from app.services import dqa_engine
 from app.services.form_labels import (
     META_TYPES,
@@ -178,7 +179,14 @@ def _flag_ref(flag: DqaFlag) -> dict[str, Any]:
     }
 
 
-def _row_filter(project_id: str, severity: str | None, enumerator: str | None):
+def _row_filter(
+    project_id: str,
+    severity: str | None,
+    enumerator: str | None,
+    *,
+    submitted_after: Any | None = None,
+    submitted_before: Any | None = None,
+):
     conditions: list[Any] = [Submission.project_id == project_id]
     flagged_ids = select(DqaFlag.submission_id).where(DqaFlag.project_id == project_id)
     sev = (severity or "").strip().lower()
@@ -192,7 +200,20 @@ def _row_filter(project_id: str, severity: str | None, enumerator: str | None):
         conditions.append(~Submission.id.in_(flagged_ids))
     if enumerator and enumerator.strip():
         conditions.append(Submission.enumerator.ilike(f"%{enumerator.strip()}%"))
+    if submitted_after is not None:
+        conditions.append(Submission.submitted_at >= submitted_after)
+    if submitted_before is not None:
+        conditions.append(Submission.submitted_at < submitted_before)
     return and_(*conditions)
+
+
+def _project_timezone(db: Session, project: Project) -> str:
+    if project.study_id:
+        study = db.get(Study, project.study_id)
+        tz = ((study.timezone if study else None) or "UTC").strip()
+        if tz:
+            return tz
+    return "UTC"
 
 
 def build_submission_grid(
@@ -203,6 +224,8 @@ def build_submission_grid(
     limit: int = DEFAULT_LIMIT,
     severity: str | None = None,
     enumerator: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> dict[str, Any]:
     limit = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
     page = max(1, int(page or 1))
@@ -211,7 +234,16 @@ def build_submission_grid(
     )
     language = resolve_label_language(project.label_language, form_definition)
 
-    where = _row_filter(project.id, severity, enumerator)
+    start, finish = resolve_optional_submitted_at_bounds(
+        date_from, date_to, timezone=_project_timezone(db, project)
+    )
+    where = _row_filter(
+        project.id,
+        severity,
+        enumerator,
+        submitted_after=start,
+        submitted_before=finish,
+    )
     total = db.scalar(select(func.count()).select_from(Submission).where(where)) or 0
     submissions = list(
         db.scalars(

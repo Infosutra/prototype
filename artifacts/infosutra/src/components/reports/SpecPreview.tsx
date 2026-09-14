@@ -193,21 +193,32 @@ function ComponentView({
   }
 
   if (type === "kpi_group") {
-    const items = Array.isArray(component.items) ? (component.items as Json[]) : [];
+    const fromData = Array.isArray(record.items) ? (record.items as Json[]) : null;
+    const items = fromData
+      ?? (Array.isArray(component.items) ? (component.items as Json[]) : []);
     return (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {items.map((item) => (
-          <Card key={String(item.field || item.label)}>
-            <CardContent className="p-4">
-              <p className="text-2xl font-semibold tabular-nums">
-                {formatValue(record[String(item.field)], String(item.format || ""))}
-              </p>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                {String(item.label || item.field)}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+        {items.map((item, index) => {
+          const label = String(item.label || item.field || index);
+          const value =
+            item.value !== undefined
+              ? item.value
+              : record[String(item.field)];
+          return (
+            <Card key={label}>
+              <CardContent className="p-4">
+                <p className="text-2xl font-semibold tabular-nums">
+                  {item.error != null
+                    ? "—"
+                    : formatValue(value, String(item.format || ""))}
+                </p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     );
   }

@@ -1,5 +1,5 @@
 export function reportPreviewUrl(id: string): string {
-  return `/api/reports/${encodeURIComponent(id)}/preview`;
+  return `/reports/${encodeURIComponent(id)}/preview`;
 }
 
 export function reportDownloadUrl(id: string, format: "pdf" | "docx" = "pdf"): string {

@@ -167,6 +167,40 @@ def create_template(
     return template, version
 
 
+def create_draft(
+    db: Session,
+    *,
+    study_id: str,
+    name: str = "Untitled template",
+    description: str = "",
+    report_kind: ReportKind = "adhoc",
+    commit: bool = True,
+) -> ReportTemplate:
+    """Create a template with no published version — authoring starts in chat."""
+    if not study_id:
+        raise TemplateError("study_id is required for report templates.")
+    from app.services.reporting.authoring import default_authoring
+
+    template = ReportTemplate(
+        id=str(uuid.uuid4()),
+        name=(name or "").strip() or "Untitled template",
+        description=description,
+        study_id=study_id,
+        report_kind=report_kind,
+        status="draft",
+        working_spec_json=None,
+        authoring_json=default_authoring(),
+        created_at=_now(),
+        updated_at=_now(),
+    )
+    db.add(template)
+    db.flush()
+    if commit:
+        db.commit()
+        db.refresh(template)
+    return template
+
+
 def add_version(
     db: Session,
     template: ReportTemplate,
@@ -179,13 +213,23 @@ def add_version(
     notes: str = "",
     commit: bool = True,
 ) -> ReportTemplateVersion:
-    """Append a new version. Earlier versions are never modified or removed."""
+    """Append a new version. Earlier versions are never modified or removed.
+
+    If the latest version already has the same specification, return it unchanged
+    so re-saving does not bump the version number.
+    """
     spec_json, spec_version = parse_and_validate_spec(spec)
     latest = db.scalars(
         select(ReportTemplateVersion)
         .where(ReportTemplateVersion.template_id == template.id)
         .order_by(ReportTemplateVersion.version.desc())
     ).first()
+    if (
+        source == "template"
+        and latest is not None
+        and (latest.spec_json or {}) == spec_json
+    ):
+        return latest
     next_number = (latest.version + 1) if latest else 1
     version = _append_version(
         db,

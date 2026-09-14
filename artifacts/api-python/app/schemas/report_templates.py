@@ -65,7 +65,22 @@ class ReportTemplateVersionOut(CamelModel):
 
 class ReportTemplateDetailOut(ReportTemplateOut):
     spec: dict[str, Any] = {}
+    working_spec: dict[str, Any] | None = None
+    authoring: dict[str, Any] | None = None
     versions: list[ReportTemplateVersionOut] = []
+
+
+class CreateDraftTemplateInput(CamelModel):
+    study_id: str | None = None
+    name: str = "Untitled template"
+    description: str = ""
+    report_kind: str = "adhoc"
+
+
+class AuthorTurnInput(CamelModel):
+    message: str = ""
+    question_id: str | None = None
+    value: str | None = None
 
 
 class CreateReportTemplateInput(CamelModel):

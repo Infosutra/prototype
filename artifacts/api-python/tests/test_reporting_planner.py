@@ -125,6 +125,18 @@ def test_mock_llm_golden_spec_validates(golden: Session) -> None:
     assert result["judgement"]["faithful"] is True
 
 
+def test_llm_catalog_uses_query_ir_keys(golden: Session) -> None:
+    from app.services.reporting.catalog_for_llm import catalog_for_llm
+
+    catalog = catalog_for_llm(golden, STUDY_ID)
+    assert catalog["query"]["required"] == ["entity", "window"]
+    submission = catalog["entities"]["submission"]
+    assert "groupByFields" in submission
+    assert "dimensions" not in submission
+    assert "dimensions" not in catalog["entities"]["flag"]
+    assert "groupBy" in catalog["query"]["properties"]
+
+
 def test_slack_delivery_goes_to_unmapped(golden: Session) -> None:
     spec = _golden_spec()
     llm = _scripted_llm(
@@ -167,6 +179,146 @@ def test_invalid_then_repair_still_invalid_fails(golden: Session) -> None:
             instructions="anything",
             llm=llm,
         )
+
+
+def test_plan_compiles_analytics_query_without_repair(golden: Session) -> None:
+    """LLM copied catalog 'dimensions' and omitted entity/window — compile, don't repair."""
+    spec = {
+        "specVersion": "1.0",
+        "title": "DQA Daily Report",
+        "sections": [
+            {
+                "id": "s1",
+                "title": "Intake",
+                "components": [
+                    {
+                        "id": "kpi",
+                        "type": "kpi_group",
+                        "query": {"measures": [{"id": "total", "fn": "count"}]},
+                        "display": {"items": [{"label": "Total", "field": "total"}]},
+                    },
+                    {
+                        "id": "by_tool",
+                        "type": "table",
+                        "query": {
+                            "dimensions": ["toolCode"],
+                            "measures": [{"id": "n", "fn": "count"}],
+                        },
+                        "display": {"columns": ["toolCode", "n"]},
+                    },
+                    {
+                        "id": "headline",
+                        "type": "narrative",
+                        "uses": ["kpi"],
+                        "query": {},
+                        "display": {
+                            "role": "insight",
+                            "instruction": "Summarize today's intake.",
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+    seen: list[str] = []
+
+    def _llm(*, system: str, user: str, purpose: str) -> dict[str, Any]:
+        seen.append(purpose)
+        if purpose == "plan":
+            return {"spec": spec, "unmapped": []}
+        if purpose == "repair":
+            raise AssertionError("repair should not run after compile")
+        return {"faithful": True, "issues": []}
+
+    result = plan_report(
+        golden,
+        study_id=STUDY_ID,
+        instructions="Daily DQA",
+        llm=_llm,
+    )
+    assert seen == ["plan", "judge"]
+    assert validate_report_spec(result["spec"]) == []
+    by_tool = result["spec"]["sections"][0]["components"][1]["query"]
+    assert by_tool["groupBy"] == ["toolCode"]
+    assert by_tool["entity"] == "submission"
+    assert by_tool["window"] == "execution_date"
+    assert "dimensions" not in by_tool
+
+
+def test_plan_accepts_kpi_group_per_item_queries(golden: Session) -> None:
+    spec = {
+        "specVersion": "1.0",
+        "title": "DQA Daily Report",
+        "sections": [
+            {
+                "id": "s1",
+                "title": "Today at a Glance",
+                "components": [
+                    {
+                        "id": "glance",
+                        "type": "kpi_group",
+                        "display": {
+                            "items": [
+                                {
+                                    "label": "Submissions today",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "execution_date",
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                },
+                                {
+                                    "label": "Cumulative submissions",
+                                    "query": {
+                                        "entity": "submission",
+                                        "window": "study_to_date",
+                                        "measures": [{"id": "value", "fn": "count"}],
+                                    },
+                                },
+                                {
+                                    "label": "RED flags open",
+                                    "query": {
+                                        "entity": "flag",
+                                        "window": "study_to_date",
+                                        "measures": [
+                                            {
+                                                "id": "value",
+                                                "fn": "countWhere",
+                                                "field": "severity",
+                                                "eq": "red",
+                                            }
+                                        ],
+                                    },
+                                },
+                            ]
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    llm = _scripted_llm(
+        [
+            {"spec": spec, "unmapped": []},
+            {"faithful": True, "issues": []},
+        ]
+    )
+    result = plan_report(
+        golden,
+        study_id=STUDY_ID,
+        instructions=(
+            "Title: DQA Daily Report. Open with today's intake as KPI cards: "
+            "submissions received today, cumulative submissions, and open RED flags."
+        ),
+        llm=llm,
+    )
+    assert validate_report_spec(result["spec"]) == []
+    glance = result["spec"]["sections"][0]["components"][0]
+    assert glance["type"] == "kpi_group"
+    assert "query" not in glance or glance.get("query") is None
+    windows = [item["query"]["window"] for item in glance["display"]["items"]]
+    assert "execution_date" in windows
+    assert "study_to_date" in windows
 
 
 def test_legacy_data_source_fails_validation(golden: Session) -> None:

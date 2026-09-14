@@ -52,13 +52,32 @@ class MetricDisplay(_ForbidCamel):
 
 
 class KpiItem(_ForbidCamel):
+    """One glance card.
+
+    Prefer ``query`` (own entity/window). Legacy same-window groups still use
+    ``field`` against the component-level query.
+    """
+
     label: str
-    field: str
+    field: str | None = None
+    query: Query | None = None
     format: str | None = None
+
+    @model_validator(mode="after")
+    def _binding(self) -> KpiItem:
+        if self.query is None and not (self.field and str(self.field).strip()):
+            raise ValueError("kpi item requires query or field")
+        return self
 
 
 class KpiGroupDisplay(_ForbidCamel):
     items: list[KpiItem]
+
+    @model_validator(mode="after")
+    def _nonempty(self) -> KpiGroupDisplay:
+        if not self.items:
+            raise ValueError("kpi_group display.items must be non-empty")
+        return self
 
 
 class TableDisplay(_ForbidCamel):
@@ -128,6 +147,24 @@ class Component(_ForbidCamel):
         if self.type == "narrative":
             if self.query is None and not self.uses:
                 raise ValueError("narrative requires query or uses")
+            return self
+
+        if self.type == "kpi_group":
+            items = (self.display or {}).get("items") or []
+            per_item = any(
+                isinstance(item, dict) and item.get("query") is not None for item in items
+            )
+            if per_item:
+                for i, item in enumerate(items):
+                    if not isinstance(item, dict) or item.get("query") is None:
+                        raise ValueError(
+                            f"kpi_group item[{i}] requires query when any item has a query"
+                        )
+                return self
+            if self.query is None:
+                raise ValueError(
+                    "kpi_group requires a component query when items use field bindings"
+                )
             return self
 
         if self.query is None:

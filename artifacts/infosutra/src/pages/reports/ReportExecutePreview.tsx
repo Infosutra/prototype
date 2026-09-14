@@ -87,6 +87,7 @@ async function createExecuteJob(studyId: string, executionDate: string): Promise
       payload: {
         spec: GOLDEN_SPEC,
         window: { preset: "execution_date", executionDate },
+        preview: true,
       },
     }),
   });
@@ -120,7 +121,33 @@ function ComponentView({
   }
   const data = component.data;
   if (component.type === "kpi_group" && data && typeof data === "object" && !Array.isArray(data)) {
-    const entries = Object.entries(data as Record<string, unknown>);
+    const record = data as Record<string, unknown>;
+    const items = Array.isArray(record.items)
+      ? (record.items as Array<Record<string, unknown>>)
+      : null;
+    if (items) {
+      return (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {items.map((item, index) => (
+            <div
+              key={String(item.label ?? index)}
+              className="border-r border-border/60 last:border-r-0 pr-3 last:pr-0"
+            >
+              <p className="text-2xl font-semibold tabular-nums tracking-tight">
+                {item.error != null ? "—" : String(item.value ?? "")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {String(item.label ?? "")}
+              </p>
+              {item.error != null ? (
+                <p className="text-[10px] text-destructive mt-1">{String(item.error)}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    const entries = Object.entries(record);
     return (
       <table className="w-full text-sm border-collapse">
         <thead>

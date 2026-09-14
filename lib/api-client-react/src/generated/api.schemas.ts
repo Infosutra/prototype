@@ -1270,6 +1270,8 @@ page?: number;
 limit?: number;
 severity?: string | null;
 enumerator?: string | null;
+dateFrom?: string | null;
+dateTo?: string | null;
 };
 
 export type GetSubmissionsParams = {

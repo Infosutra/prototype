@@ -763,6 +763,22 @@ paths:
           - type: string
           - type: 'null'
           title: Enumerator
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Datefrom
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dateto
       responses:
         '200':
           description: Successful Response

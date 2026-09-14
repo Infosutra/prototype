@@ -16,8 +16,8 @@ import AiInsights from './pages/ai/AiInsights';
 import PromptTemplates from './pages/prompts/PromptTemplates';
 import Reports from './pages/reports/Reports';
 import ReportTemplates from './pages/reports/ReportTemplates';
-import ReportComposer from './pages/reports/ReportComposer';
 import ReportExecutePreview from './pages/reports/ReportExecutePreview';
+import ReportPreview from './pages/reports/ReportPreview';
 import Settings from './pages/settings/Settings';
 import DqaDashboard from './pages/dqa/DqaDashboard';
 import RulePackEditor from './pages/dqa/RulePackEditor';
@@ -75,10 +75,9 @@ function Router() {
       <Route path="/recordings" component={Recordings} />
       <Route path="/prompts" component={PromptTemplates} />
       <Route path="/reports/execute-preview" component={ReportExecutePreview} />
+      <Route path="/reports/:reportId/preview" component={ReportPreview} />
       <Route path="/reports" component={Reports} />
       <Route path="/report-templates" component={ReportTemplates} />
-      <Route path="/report-composer/:id" component={ReportComposer} />
-      <Route path="/report-composer" component={ReportComposer} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
